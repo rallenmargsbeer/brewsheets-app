@@ -161,32 +161,46 @@ export default function RecipeEditPage() {
     setRecipe({ ...recipe, [key]: value })
   }
 
+  // blank string inputs ("") aren't valid values for numeric/integer database
+  // columns — convert them to null before anything gets sent to Supabase.
+  function cleanBlanks(obj) {
+    const out = { ...obj }
+    for (const k of Object.keys(out)) {
+      if (out[k] === '') out[k] = null
+    }
+    return out
+  }
+
   async function save() {
     setSaving(true)
     setError(null)
     try {
-      const payload = { ...recipe }
+      const payload = cleanBlanks(recipe)
       if (isNew) delete payload.id
-      // blank strings -> null for numeric fields
-      for (const k of Object.keys(payload)) {
-        if (payload[k] === '') payload[k] = null
-      }
       const saved = await upsertRecipe(payload)
       await replaceGristItems(
         saved.id,
-        grist.filter((g) => g.ingredient_name).map(({ id: _i, recipe_id: _r, ...g }) => g)
+        grist
+          .filter((g) => g.ingredient_name)
+          .map(({ id: _i, recipe_id: _r, ...g }) => cleanBlanks(g))
       )
       await replaceWaterAdditions(
         saved.id,
-        water.filter((w) => w.additive_name).map(({ id: _i, recipe_id: _r, ...w }) => w)
+        water
+          .filter((w) => w.additive_name)
+          .map(({ id: _i, recipe_id: _r, ...w }) => cleanBlanks(w))
       )
       await replaceKettleAdditions(
         saved.id,
-        kettle.filter((k) => k.item_name).map(({ id: _i, recipe_id: _r, ...k }) => k)
+        kettle
+          .filter((k) => k.item_name)
+          .map(({ id: _i, recipe_id: _r, ...k }) => cleanBlanks(k))
       )
       await replaceFermenterAdditions(
         saved.id,
-        fermenter.filter((f) => f.item_name).map(({ id: _i, recipe_id: _r, ...f }) => f)
+        fermenter
+          .filter((f) => f.item_name)
+          .map(({ id: _i, recipe_id: _r, ...f }) => cleanBlanks(f))
       )
       navigate('/recipes')
     } catch (e) {
