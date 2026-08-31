@@ -15,7 +15,7 @@ export async function getRecipe(id) {
   const { data, error } = await supabase
     .from('recipes')
     .select(
-      '*, recipe_grist_items(*), recipe_water_additions(*), recipe_hop_additions(*)'
+      '*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_fermenter_additions(*)'
     )
     .eq('id', id)
     .single()
@@ -59,13 +59,25 @@ export async function replaceWaterAdditions(recipeId, items) {
   if (error) throw error
 }
 
-export async function replaceHopAdditions(recipeId, items) {
+export async function replaceKettleAdditions(recipeId, items) {
   await supabase
-    .from('recipe_hop_additions')
+    .from('recipe_kettle_additions')
     .delete()
     .eq('recipe_id', recipeId)
   if (items.length === 0) return
-  const { error } = await supabase.from('recipe_hop_additions').insert(
+  const { error } = await supabase.from('recipe_kettle_additions').insert(
+    items.map((it, i) => ({ ...it, recipe_id: recipeId, sort_order: i }))
+  )
+  if (error) throw error
+}
+
+export async function replaceFermenterAdditions(recipeId, items) {
+  await supabase
+    .from('recipe_fermenter_additions')
+    .delete()
+    .eq('recipe_id', recipeId)
+  if (items.length === 0) return
+  const { error } = await supabase.from('recipe_fermenter_additions').insert(
     items.map((it, i) => ({ ...it, recipe_id: recipeId, sort_order: i }))
   )
   if (error) throw error
