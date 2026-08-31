@@ -116,7 +116,7 @@ export async function getBatch(id) {
   const { data, error } = await supabase
     .from('batches')
     .select(
-      '*, recipes(*), tanks(*), brew_runs(*), fermentation_readings(*), cellar_tasks(*)'
+      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_fermenter_additions(*)), tanks(*), brew_runs(*), fermentation_readings(*), cellar_tasks(*)'
     )
     .eq('id', id)
     .single()
