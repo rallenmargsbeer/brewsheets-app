@@ -5,7 +5,8 @@ import {
   upsertRecipe,
   replaceGristItems,
   replaceWaterAdditions,
-  replaceHopAdditions,
+  replaceKettleAdditions,
+  replaceFermenterAdditions,
   deleteRecipe,
 } from '../lib/api'
 
@@ -20,15 +21,48 @@ const emptyRecipe = {
   mash_step_2_temp: '',
   mash_step_3_temp: '',
   mash_out_temp: '',
-  yeast_type: '',
-  yeast_nutrient_qty_kg: '',
-  whirlfloc_qty_kg: '',
   biofine_qty_l: '',
   filter_micron: '',
   notes: '',
 }
 
-function LineItemsEditor({ title, items, setItems, fields }) {
+function Section({ title, subtitle, children }) {
+  return (
+    <div
+      style={{
+        marginBottom: '1.5rem',
+        padding: '1rem',
+        background: '#fff',
+        border: '1px solid #ddd',
+        borderRadius: 6,
+      }}
+    >
+      <h3 style={{ marginTop: 0 }}>{title}</h3>
+      {subtitle && (
+        <p style={{ marginTop: '-0.5rem', marginBottom: '1rem', color: '#666', fontSize: '0.85rem' }}>
+          {subtitle}
+        </p>
+      )}
+      {children}
+    </div>
+  )
+}
+
+function Field({ label, value, onChange, type = 'text', width }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <div style={{ fontSize: '0.85rem', color: '#444' }}>{label}</div>
+      <input
+        type={type}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        style={width ? { width } : undefined}
+      />
+    </label>
+  )
+}
+
+function LineItemsEditor({ title, subtitle, items, setItems, fields }) {
   function update(i, key, value) {
     const next = [...items]
     next[i] = { ...next[i], [key]: value }
@@ -42,8 +76,7 @@ function LineItemsEditor({ title, items, setItems, fields }) {
   }
 
   return (
-    <div style={{ marginBottom: '1.5rem' }}>
-      <h3>{title}</h3>
+    <Section title={title} subtitle={subtitle}>
       <table>
         <thead>
           <tr>
@@ -92,7 +125,7 @@ function LineItemsEditor({ title, items, setItems, fields }) {
       <button className="secondary" onClick={add} style={{ marginTop: '0.5rem' }}>
         + Add row
       </button>
-    </div>
+    </Section>
   )
 }
 
@@ -104,7 +137,8 @@ export default function RecipeEditPage() {
   const [recipe, setRecipe] = useState(emptyRecipe)
   const [grist, setGrist] = useState([])
   const [water, setWater] = useState([])
-  const [hops, setHops] = useState([])
+  const [kettle, setKettle] = useState([])
+  const [fermenter, setFermenter] = useState([])
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -116,7 +150,8 @@ export default function RecipeEditPage() {
         setRecipe(r)
         setGrist(r.recipe_grist_items ?? [])
         setWater(r.recipe_water_additions ?? [])
-        setHops(r.recipe_hop_additions ?? [])
+        setKettle(r.recipe_kettle_additions ?? [])
+        setFermenter(r.recipe_fermenter_additions ?? [])
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -145,9 +180,13 @@ export default function RecipeEditPage() {
         saved.id,
         water.filter((w) => w.additive_name).map(({ id: _i, recipe_id: _r, ...w }) => w)
       )
-      await replaceHopAdditions(
+      await replaceKettleAdditions(
         saved.id,
-        hops.filter((h) => h.hop_name).map(({ id: _i, recipe_id: _r, ...h }) => h)
+        kettle.filter((k) => k.item_name).map(({ id: _i, recipe_id: _r, ...k }) => k)
+      )
+      await replaceFermenterAdditions(
+        saved.id,
+        fermenter.filter((f) => f.item_name).map(({ id: _i, recipe_id: _r, ...f }) => f)
       )
       navigate('/recipes')
     } catch (e) {
@@ -170,100 +209,34 @@ export default function RecipeEditPage() {
       <h1>{isNew ? 'New Recipe' : `Edit: ${recipe.name}`}</h1>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        <label>
-          Name
-          <br />
-          <input value={recipe.name ?? ''} onChange={(e) => updateField('name', e.target.value)} />
-        </label>
-        <label>
-          Style
-          <br />
-          <input value={recipe.style ?? ''} onChange={(e) => updateField('style', e.target.value)} />
-        </label>
-        <label>
-          Core range?
-          <br />
-          <select
-            value={recipe.is_core_range ? 'yes' : 'no'}
-            onChange={(e) => updateField('is_core_range', e.target.value === 'yes')}
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No (seasonal/one-off)</option>
-          </select>
-        </label>
-        <label>
-          Target OG
-          <br />
-          <input value={recipe.target_og ?? ''} onChange={(e) => updateField('target_og', e.target.value)} />
-        </label>
-        <label>
-          Target FG
-          <br />
-          <input value={recipe.target_fg ?? ''} onChange={(e) => updateField('target_fg', e.target.value)} />
-        </label>
-        <label>
-          KO Temp
-          <br />
-          <input value={recipe.ko_temp ?? ''} onChange={(e) => updateField('ko_temp', e.target.value)} />
-        </label>
-        <label>
-          Mash step 1 (0-20) temp
-          <br />
-          <input value={recipe.mash_step_1_temp ?? ''} onChange={(e) => updateField('mash_step_1_temp', e.target.value)} />
-        </label>
-        <label>
-          Mash step 2 (20-40) temp
-          <br />
-          <input value={recipe.mash_step_2_temp ?? ''} onChange={(e) => updateField('mash_step_2_temp', e.target.value)} />
-        </label>
-        <label>
-          Mash step 3 (40-60) temp
-          <br />
-          <input value={recipe.mash_step_3_temp ?? ''} onChange={(e) => updateField('mash_step_3_temp', e.target.value)} />
-        </label>
-        <label>
-          Mash out temp
-          <br />
-          <input value={recipe.mash_out_temp ?? ''} onChange={(e) => updateField('mash_out_temp', e.target.value)} />
-        </label>
-        <label>
-          Yeast
-          <br />
-          <input value={recipe.yeast_type ?? ''} onChange={(e) => updateField('yeast_type', e.target.value)} />
-        </label>
-        <label>
-          Yeast nutrient (kg)
-          <br />
-          <input value={recipe.yeast_nutrient_qty_kg ?? ''} onChange={(e) => updateField('yeast_nutrient_qty_kg', e.target.value)} />
-        </label>
-        <label>
-          Whirlfloc (kg)
-          <br />
-          <input value={recipe.whirlfloc_qty_kg ?? ''} onChange={(e) => updateField('whirlfloc_qty_kg', e.target.value)} />
-        </label>
-        <label>
-          Biofine (L)
-          <br />
-          <input value={recipe.biofine_qty_l ?? ''} onChange={(e) => updateField('biofine_qty_l', e.target.value)} />
-        </label>
-        <label>
-          Filter
-          <br />
-          <input value={recipe.filter_micron ?? ''} onChange={(e) => updateField('filter_micron', e.target.value)} />
-        </label>
-      </div>
+      <Section title="Basic Info">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+          <Field label="Name" value={recipe.name} onChange={(v) => updateField('name', v)} />
+          <Field label="Style" value={recipe.style} onChange={(v) => updateField('style', v)} />
+          <label style={{ display: 'block' }}>
+            <div style={{ fontSize: '0.85rem', color: '#444' }}>Core range?</div>
+            <select
+              value={recipe.is_core_range ? 'yes' : 'no'}
+              onChange={(e) => updateField('is_core_range', e.target.value === 'yes')}
+            >
+              <option value="yes">Yes</option>
+              <option value="no">No (seasonal/one-off)</option>
+            </select>
+          </label>
+          <Field label="Target OG" value={recipe.target_og} onChange={(v) => updateField('target_og', v)} />
+          <Field label="Target FG" value={recipe.target_fg} onChange={(v) => updateField('target_fg', v)} />
+        </div>
+      </Section>
 
-      <label style={{ display: 'block', marginBottom: '1.5rem' }}>
-        Notes
-        <br />
-        <textarea
-          value={recipe.notes ?? ''}
-          onChange={(e) => updateField('notes', e.target.value)}
-          rows={3}
-          style={{ width: '100%' }}
-        />
-      </label>
+      <Section title="Mash Schedule">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+          <Field label="Step 1 (0-20) temp" value={recipe.mash_step_1_temp} onChange={(v) => updateField('mash_step_1_temp', v)} />
+          <Field label="Step 2 (20-40) temp" value={recipe.mash_step_2_temp} onChange={(v) => updateField('mash_step_2_temp', v)} />
+          <Field label="Step 3 (40-60) temp" value={recipe.mash_step_3_temp} onChange={(v) => updateField('mash_step_3_temp', v)} />
+          <Field label="Mash out temp" value={recipe.mash_out_temp} onChange={(v) => updateField('mash_out_temp', v)} />
+          <Field label="KO temp" value={recipe.ko_temp} onChange={(v) => updateField('ko_temp', v)} />
+        </div>
+      </Section>
 
       <LineItemsEditor
         title="Grist / Malt Bill"
@@ -292,18 +265,36 @@ export default function RecipeEditPage() {
       />
 
       <LineItemsEditor
-        title="Hop Schedule"
-        items={hops}
-        setItems={setHops}
+        title="Kettle Additions"
+        subtitle="Everything added during the boil/whirlpool — hops, whirlfloc, yeast nutrient."
+        items={kettle}
+        setItems={setKettle}
         fields={[
-          { key: 'hop_name', label: 'Hop', width: 180 },
+          { key: 'item_name', label: 'Item', width: 180 },
           {
             key: 'addition_type',
             label: 'Type',
             type: 'select',
-            options: ['boil', 'whirlpool', 'dry_hop'],
+            options: ['boil', 'whirlpool', 'whirlfloc', 'yeast_nutrient'],
           },
-          { key: 'boil_time_min', label: 'Boil time (min)', type: 'number', width: 90 },
+          { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
+          { key: 'qty_kg', label: 'Qty (kg)', type: 'number', width: 90 },
+        ]}
+      />
+
+      <LineItemsEditor
+        title="Fermenter Additions"
+        subtitle="Everything added to the fermenter — pitched yeast, dry hops."
+        items={fermenter}
+        setItems={setFermenter}
+        fields={[
+          { key: 'item_name', label: 'Item', width: 180 },
+          {
+            key: 'addition_type',
+            label: 'Type',
+            type: 'select',
+            options: ['yeast', 'dry_hop', 'other'],
+          },
           { key: 'qty_kg', label: 'Qty (kg)', type: 'number', width: 90 },
           { key: 'dry_hop_batches', label: 'Dry hop batches', type: 'number', width: 90 },
           {
@@ -312,8 +303,25 @@ export default function RecipeEditPage() {
             type: 'number',
             width: 90,
           },
+          { key: 'timing_notes', label: 'Timing (e.g. "day 3")', width: 140 },
         ]}
       />
+
+      <Section title="Fining &amp; Filtration" subtitle="Brite tank stage — after fermentation, before packaging.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+          <Field label="Biofine (L)" value={recipe.biofine_qty_l} onChange={(v) => updateField('biofine_qty_l', v)} />
+          <Field label="Filter" value={recipe.filter_micron} onChange={(v) => updateField('filter_micron', v)} />
+        </div>
+      </Section>
+
+      <Section title="Notes">
+        <textarea
+          value={recipe.notes ?? ''}
+          onChange={(e) => updateField('notes', e.target.value)}
+          rows={3}
+          style={{ width: '100%' }}
+        />
+      </Section>
 
       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
         <button onClick={save} disabled={saving}>
