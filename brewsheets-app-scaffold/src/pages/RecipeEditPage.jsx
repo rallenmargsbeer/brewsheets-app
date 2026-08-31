@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   getRecipe,
@@ -8,6 +8,7 @@ import {
   replaceKettleAdditions,
   replaceFermenterAdditions,
   deleteRecipe,
+  listIngredients,
 } from '../lib/api'
 
 const emptyRecipe = {
@@ -75,6 +76,12 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields }) {
     setItems(items.filter((_, idx) => idx !== i))
   }
 
+  // Stable per-field id for the shared <datalist> a field's inputs point at
+  // via list={...} — only fields with datalistOptions get one.
+  function datalistId(key) {
+    return `dl-${title}-${key}`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  }
+
   return (
     <Section title={title} subtitle={subtitle}>
       <table>
@@ -109,6 +116,8 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields }) {
                       value={item[f.key] ?? ''}
                       onChange={(e) => update(i, f.key, e.target.value)}
                       style={{ width: f.width ?? 100 }}
+                      list={f.datalistOptions ? datalistId(f.key) : undefined}
+                      autoComplete="off"
                     />
                   )}
                 </td>
@@ -125,6 +134,15 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields }) {
       <button className="secondary" onClick={add} style={{ marginTop: '0.5rem' }}>
         + Add row
       </button>
+      {fields
+        .filter((f) => f.datalistOptions)
+        .map((f) => (
+          <datalist key={f.key} id={datalistId(f.key)}>
+            {f.datalistOptions.map((o) => (
+              <option key={o} value={o} />
+            ))}
+          </datalist>
+        ))}
     </Section>
   )
 }
@@ -142,6 +160,26 @@ export default function RecipeEditPage() {
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [ingredients, setIngredients] = useState([])
+
+  // Powers the autocomplete suggestions on each Item/Ingredient field —
+  // imported on the Ingredients page (from an Unleashed CSV export) and
+  // categorized to match the section it should show up in.
+  useEffect(() => {
+    listIngredients()
+      .then(setIngredients)
+      .catch(() => {
+        /* suggestions are a convenience, not required — fail quietly */
+      })
+  }, [])
+
+  const ingredientNamesByCategory = useMemo(() => {
+    const byCategory = { grist: [], water: [], kettle: [], fermenter: [] }
+    for (const ing of ingredients) {
+      if (byCategory[ing.category]) byCategory[ing.category].push(ing.name)
+    }
+    return byCategory
+  }, [ingredients])
 
   useEffect(() => {
     if (isNew) return
@@ -323,7 +361,7 @@ export default function RecipeEditPage() {
         items={grist}
         setItems={setGrist}
         fields={[
-          { key: 'ingredient_name', label: 'Ingredient', width: 200 },
+          { key: 'ingredient_name', label: 'Ingredient', width: 200, datalistOptions: ingredientNamesByCategory.grist },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
         ]}
       />
@@ -333,7 +371,7 @@ export default function RecipeEditPage() {
         items={water}
         setItems={setWater}
         fields={[
-          { key: 'additive_name', label: 'Additive', width: 200 },
+          { key: 'additive_name', label: 'Additive', width: 200, datalistOptions: ingredientNamesByCategory.water },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
           {
             key: 'addition_stage',
@@ -350,7 +388,7 @@ export default function RecipeEditPage() {
         items={kettle}
         setItems={setKettle}
         fields={[
-          { key: 'item_name', label: 'Item', width: 180 },
+          { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.kettle },
           { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
         ]}
@@ -362,7 +400,7 @@ export default function RecipeEditPage() {
         items={fermenter}
         setItems={setFermenter}
         fields={[
-          { key: 'item_name', label: 'Item', width: 180 },
+          { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.fermenter },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
           { key: 'timing_notes', label: 'Timing (e.g. "day 3")', width: 140 },
         ]}
