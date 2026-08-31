@@ -21,7 +21,7 @@ const emptyRecipe = {
   mash_step_2_temp: '',
   mash_step_3_temp: '',
   mash_out_temp: '',
-  biofine_qty_l: '',
+  biofine_ml_per_l: '',
   filter_micron: '',
   notes: '',
 }
@@ -207,6 +207,11 @@ export default function RecipeEditPage() {
   return (
     <div>
       <h1>{isNew ? 'New Recipe' : `Edit: ${recipe.name}`}</h1>
+      <p style={{ color: '#666', marginTop: '-0.5rem' }}>
+        All quantities below (grist, water chemistry, kettle &amp; fermenter additions, biofine) are
+        <strong> per litre of finished beer</strong> — enter this recipe as if it were for 1L, and
+        scale it up to any batch size when you plan an actual batch.
+      </p>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <Section title="Basic Info">
@@ -244,7 +249,7 @@ export default function RecipeEditPage() {
         setItems={setGrist}
         fields={[
           { key: 'ingredient_name', label: 'Ingredient', width: 200 },
-          { key: 'qty_kg', label: 'Qty (kg)', type: 'number' },
+          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
         ]}
       />
 
@@ -254,7 +259,7 @@ export default function RecipeEditPage() {
         setItems={setWater}
         fields={[
           { key: 'additive_name', label: 'Additive', width: 200 },
-          { key: 'qty_kg', label: 'Qty (kg)', type: 'number' },
+          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
           {
             key: 'addition_stage',
             label: 'Stage',
@@ -278,7 +283,7 @@ export default function RecipeEditPage() {
             options: ['boil', 'whirlpool', 'whirlfloc', 'yeast_nutrient'],
           },
           { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
-          { key: 'qty_kg', label: 'Qty (kg)', type: 'number', width: 90 },
+          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
         ]}
       />
 
@@ -295,11 +300,11 @@ export default function RecipeEditPage() {
             type: 'select',
             options: ['yeast', 'dry_hop', 'other'],
           },
-          { key: 'qty_kg', label: 'Qty (kg)', type: 'number', width: 90 },
+          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
           { key: 'dry_hop_batches', label: 'Dry hop batches', type: 'number', width: 90 },
           {
-            key: 'dry_hop_qty_per_batch_kg',
-            label: 'Dry hop qty/batch (kg)',
+            key: 'dry_hop_qty_per_batch_g_per_l',
+            label: 'Dry hop qty/batch (g/L)',
             type: 'number',
             width: 90,
           },
@@ -309,7 +314,7 @@ export default function RecipeEditPage() {
 
       <Section title="Fining &amp; Filtration" subtitle="Brite tank stage — after fermentation, before packaging.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
-          <Field label="Biofine (L)" value={recipe.biofine_qty_l} onChange={(v) => updateField('biofine_qty_l', v)} />
+          <Field label="Biofine (mL/L)" value={recipe.biofine_ml_per_l} onChange={(v) => updateField('biofine_ml_per_l', v)} />
           <Field label="Filter" value={recipe.filter_micron} onChange={(v) => updateField('filter_micron', v)} />
         </div>
       </Section>
