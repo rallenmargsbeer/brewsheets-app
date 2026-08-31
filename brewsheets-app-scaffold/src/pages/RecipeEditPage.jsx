@@ -358,19 +358,12 @@ export default function RecipeEditPage() {
 
       <LineItemsEditor
         title="Fermenter Additions"
-        subtitle="Everything added to the fermenter — pitched yeast, dry hops."
+        subtitle='Everything added to the fermenter — pitched yeast, dry hops. Add one row per addition (e.g. two dry hop rows for a two-stage dry hop).'
         items={fermenter}
         setItems={setFermenter}
         fields={[
           { key: 'item_name', label: 'Item', width: 180 },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
-          { key: 'dry_hop_batches', label: 'Dry hop batches', type: 'number', width: 90 },
-          {
-            key: 'dry_hop_qty_per_batch_g_per_l',
-            label: 'Dry hop qty/batch (g/L)',
-            type: 'number',
-            width: 90,
-          },
           { key: 'timing_notes', label: 'Timing (e.g. "day 3")', width: 140 },
         ]}
       />
