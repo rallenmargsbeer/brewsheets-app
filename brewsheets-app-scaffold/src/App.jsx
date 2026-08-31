@@ -4,6 +4,7 @@ import RecipeEditPage from './pages/RecipeEditPage.jsx'
 import BatchesPage from './pages/BatchesPage.jsx'
 import BatchDetailPage from './pages/BatchDetailPage.jsx'
 import TanksPage from './pages/TanksPage.jsx'
+import IngredientsPage from './pages/IngredientsPage.jsx'
 
 const navStyle = ({ isActive }) => ({
   padding: '0.5rem 1rem',
@@ -38,6 +39,9 @@ export default function App() {
           <NavLink to="/tanks" style={navStyle}>
             Tanks
           </NavLink>
+          <NavLink to="/ingredients" style={navStyle}>
+            Ingredients
+          </NavLink>
         </nav>
       </header>
       <main style={{ padding: '1.5rem', maxWidth: 1100, margin: '0 auto' }}>
@@ -49,6 +53,7 @@ export default function App() {
           <Route path="/batches" element={<BatchesPage />} />
           <Route path="/batches/:id" element={<BatchDetailPage />} />
           <Route path="/tanks" element={<TanksPage />} />
+          <Route path="/ingredients" element={<IngredientsPage />} />
         </Routes>
       </main>
     </div>
