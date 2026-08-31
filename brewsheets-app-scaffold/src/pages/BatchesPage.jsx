@@ -7,7 +7,7 @@ export default function BatchesPage() {
   const [recipes, setRecipes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
-  const [newBatch, setNewBatch] = useState({ recipe_id: '', batch_number: '' })
+  const [newBatch, setNewBatch] = useState({ recipe_id: '', batch_number: '', target_volume_l: '' })
   const navigate = useNavigate()
 
   function refresh() {
@@ -29,6 +29,7 @@ export default function BatchesPage() {
       batch_number: newBatch.batch_number,
       beer_style: recipe?.name,
       status: 'planned',
+      target_volume_l: newBatch.target_volume_l || null,
     })
     navigate(`/batches/${batch.id}`)
   }
@@ -65,6 +66,16 @@ export default function BatchesPage() {
               onChange={(e) => setNewBatch({ ...newBatch, batch_number: e.target.value })}
             />
           </label>
+          <label>
+            Target volume (L)
+            <br />
+            <input
+              type="number"
+              value={newBatch.target_volume_l}
+              onChange={(e) => setNewBatch({ ...newBatch, target_volume_l: e.target.value })}
+              style={{ width: 120 }}
+            />
+          </label>
           <button onClick={createBatch}>Create</button>
         </div>
       )}
@@ -79,6 +90,7 @@ export default function BatchesPage() {
               <th>Recipe</th>
               <th>Status</th>
               <th>Tank</th>
+              <th>Target Vol (L)</th>
               <th>Date Brewed</th>
               <th>Package Date</th>
             </tr>
@@ -92,13 +104,14 @@ export default function BatchesPage() {
                 <td>{b.recipes?.name}</td>
                 <td>{b.status}</td>
                 <td>{b.tanks?.name ?? '—'}</td>
+                <td>{b.target_volume_l ?? '—'}</td>
                 <td>{b.date_brewed ?? '—'}</td>
                 <td>{b.package_date ?? '—'}</td>
               </tr>
             ))}
             {batches.length === 0 && (
               <tr>
-                <td colSpan={6}>No batches yet.</td>
+                <td colSpan={7}>No batches yet.</td>
               </tr>
             )}
           </tbody>
