@@ -320,6 +320,65 @@ function CellarTasks({ batchId, tasks, onChange }) {
   )
 }
 
+function formatMass(gPerL, volumeL) {
+  if (gPerL == null || volumeL == null) return null
+  const totalG = gPerL * volumeL
+  return totalG >= 1000 ? `${(totalG / 1000).toFixed(2)} kg` : `${totalG.toFixed(1)} g`
+}
+
+function ScaledIngredients({ recipe, volumeL }) {
+  if (!recipe) return null
+
+  if (!volumeL) {
+    return (
+      <div>
+        <h3>Scaled Ingredients</h3>
+        <p style={{ color: '#666' }}>
+          Set a target volume above to see this recipe's ingredient amounts scaled up for this
+          batch (the recipe is stored per litre).
+        </p>
+      </div>
+    )
+  }
+
+  const groups = [
+    { title: 'Grist / Malt Bill', items: recipe.recipe_grist_items ?? [], nameKey: 'ingredient_name' },
+    { title: 'Water Chemistry', items: recipe.recipe_water_additions ?? [], nameKey: 'additive_name' },
+    { title: 'Kettle Additions', items: recipe.recipe_kettle_additions ?? [], nameKey: 'item_name' },
+    { title: 'Fermenter Additions', items: recipe.recipe_fermenter_additions ?? [], nameKey: 'item_name' },
+  ]
+
+  return (
+    <div>
+      <h3>Scaled Ingredients <span style={{ fontWeight: 400, fontSize: '0.9rem', color: '#666' }}>(for {volumeL}L)</span></h3>
+      {groups.map((g) => (
+        <div key={g.title} style={{ marginBottom: '1rem' }}>
+          <strong>{g.title}</strong>
+          {g.items.length === 0 ? (
+            <p style={{ color: '#666', margin: '0.25rem 0' }}>None on this recipe.</p>
+          ) : (
+            <table>
+              <tbody>
+                {g.items.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item[g.nameKey]}</td>
+                    <td>{formatMass(item.qty_g_per_l, volumeL) ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+      {recipe.biofine_ml_per_l != null && (
+        <p>
+          <strong>Biofine:</strong> {(recipe.biofine_ml_per_l * volumeL).toFixed(0)} mL
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function BatchDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -366,6 +425,7 @@ export default function BatchDetailPage() {
         ready_for_excise: batch.ready_for_excise,
         brewhouse_yield_l: batch.brewhouse_yield_l,
         fv_to_bbt_l: batch.fv_to_bbt_l,
+        target_volume_l: batch.target_volume_l,
         notes: batch.notes,
       })
       await upsertBatch(payload)
@@ -432,6 +492,11 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
           <input type="date" value={batch.package_date ?? ''} onChange={(e) => set('package_date', e.target.value)} />
         </label>
         <label>
+          Target Volume (L)
+          <br />
+          <input type="number" value={batch.target_volume_l ?? ''} onChange={(e) => set('target_volume_l', e.target.value)} />
+        </label>
+        <label>
           Approved By
           <br />
           <input value={batch.approved_by ?? ''} onChange={(e) => set('approved_by', e.target.value)} />
@@ -491,6 +556,10 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
         <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Batch'}</button>
         <button className="secondary" onClick={remove}>Delete Batch</button>
+      </div>
+
+      <div style={{ marginBottom: '2rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
+        <ScaledIngredients recipe={batch.recipes} volumeL={batch.target_volume_l} />
       </div>
 
       <h2>Brew Runs <span style={{ fontWeight: 400, fontSize: '0.9rem', color: '#666' }}>(1–4 brewhouse turns per batch)</span></h2>
