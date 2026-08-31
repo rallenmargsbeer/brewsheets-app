@@ -171,7 +171,31 @@ export default function RecipeEditPage() {
     return out
   }
 
+  // Catches missing required fields before they ever reach the database, so
+  // Ryan sees a plain-language message instead of a raw Postgres
+  // not-null-constraint error. Only checks fields the database actually
+  // requires (not_null columns) — everything else stays optional.
+  function validateLineItems() {
+    const errors = []
+    for (const g of grist) {
+      if (g.ingredient_name && g.qty_g_per_l === '') {
+        errors.push(`Grist item "${g.ingredient_name}" needs a Qty (g/L) value.`)
+      }
+    }
+    for (const w of water) {
+      if (w.additive_name && w.qty_g_per_l === '') {
+        errors.push(`Water addition "${w.additive_name}" needs a Qty (g/L) value.`)
+      }
+    }
+    return errors
+  }
+
   async function save() {
+    const validationErrors = validateLineItems()
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join(' '))
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -220,7 +244,13 @@ export default function RecipeEditPage() {
       )
       navigate('/recipes')
     } catch (e) {
-      setError(e.message)
+      // Fallback for any required-field gap validateLineItems() doesn't cover
+      // — surfaces a plain-language message instead of raw Postgres text.
+      if (e.code === '23502') {
+        setError(`A required field is missing (${e.message}). Check every row has its required fields filled in.`)
+      } else {
+        setError(e.message)
+      }
     } finally {
       setSaving(false)
     }
@@ -321,12 +351,6 @@ export default function RecipeEditPage() {
         setItems={setKettle}
         fields={[
           { key: 'item_name', label: 'Item', width: 180 },
-          {
-            key: 'addition_type',
-            label: 'Type',
-            type: 'select',
-            options: ['boil', 'whirlpool', 'whirlfloc', 'yeast_nutrient'],
-          },
           { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
         ]}
@@ -339,12 +363,6 @@ export default function RecipeEditPage() {
         setItems={setFermenter}
         fields={[
           { key: 'item_name', label: 'Item', width: 180 },
-          {
-            key: 'addition_type',
-            label: 'Type',
-            type: 'select',
-            options: ['yeast', 'dry_hop', 'other'],
-          },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
           { key: 'dry_hop_batches', label: 'Dry hop batches', type: 'number', width: 90 },
           {
