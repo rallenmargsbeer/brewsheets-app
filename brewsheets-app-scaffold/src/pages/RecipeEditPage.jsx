@@ -175,7 +175,23 @@ export default function RecipeEditPage() {
     setSaving(true)
     setError(null)
     try {
-      const payload = cleanBlanks(recipe)
+      // recipe (when editing an existing one) carries the nested arrays that
+      // getRecipe()'s embedded select attaches — recipe_grist_items,
+      // recipe_water_additions, recipe_kettle_additions,
+      // recipe_fermenter_additions. Those aren't real columns on `recipes`,
+      // so they must be stripped before upserting or PostgREST rejects the
+      // request ("Could not find the 'recipe_fermenter_additions' column of
+      // 'recipes' in the schema cache"). New recipes start from emptyRecipe
+      // and never had these keys, which is why this only shows up editing an
+      // existing recipe.
+      const {
+        recipe_grist_items: _rgi,
+        recipe_water_additions: _rwa,
+        recipe_kettle_additions: _rka,
+        recipe_fermenter_additions: _rfa,
+        ...recipeFields
+      } = recipe
+      const payload = cleanBlanks(recipeFields)
       if (isNew) delete payload.id
       const saved = await upsertRecipe(payload)
       await replaceGristItems(
