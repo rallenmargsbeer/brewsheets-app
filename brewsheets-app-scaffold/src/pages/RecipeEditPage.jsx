@@ -212,8 +212,23 @@ export default function RecipeEditPage() {
 
   async function remove() {
     if (!confirm(`Delete recipe "${recipe.name}"? This cannot be undone.`)) return
-    await deleteRecipe(id)
-    navigate('/recipes')
+    setError(null)
+    try {
+      await deleteRecipe(id)
+      navigate('/recipes')
+    } catch (e) {
+      // Postgres foreign-key violation — a batch was brewed from this recipe,
+      // so the database correctly refuses to delete it (batches.recipe_id
+      // points at it). Previously this error was silently swallowed and the
+      // page just sat there with nothing appearing to happen.
+      if (e.code === '23503') {
+        setError(
+          `Can't delete "${recipe.name}" — one or more batches were brewed from this recipe. Delete or reassign those batches first.`
+        )
+      } else {
+        setError(e.message)
+      }
+    }
   }
 
   if (loading) return <p>Loading…</p>
