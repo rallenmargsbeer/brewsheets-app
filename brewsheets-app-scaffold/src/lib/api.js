@@ -83,6 +83,52 @@ export async function replaceFermenterAdditions(recipeId, items) {
   if (error) throw error
 }
 
+// ---- Ingredients (imported from Unleashed) ----
+
+export async function listIngredients() {
+  const { data, error } = await supabase
+    .from('ingredients')
+    .select('*')
+    .order('name')
+  if (error) throw error
+  return data
+}
+
+// rows: [{ unleashed_code, name, category, base_unit }]. Upserts by
+// unleashed_code so re-importing an updated export updates existing
+// ingredients instead of creating duplicates. Returns { inserted, updated }
+// counts by diffing against the codes that already existed before the call.
+export async function importIngredients(rows) {
+  if (rows.length === 0) return { inserted: 0, updated: 0 }
+  // Fetch all existing codes unfiltered rather than a big `.in()` list — an
+  // ingredient list is a few hundred rows at most, and this avoids building
+  // a huge query-string for a large CSV import.
+  const { data: existing, error: existingErr } = await supabase
+    .from('ingredients')
+    .select('unleashed_code')
+  if (existingErr) throw existingErr
+  const existingCodes = new Set(existing.map((r) => r.unleashed_code))
+
+  const { error } = await supabase
+    .from('ingredients')
+    .upsert(rows, { onConflict: 'unleashed_code' })
+  if (error) throw error
+
+  const updated = rows.filter((r) => existingCodes.has(r.unleashed_code)).length
+  return { inserted: rows.length - updated, updated }
+}
+
+export async function updateIngredientCategory(id, category) {
+  const { data, error } = await supabase
+    .from('ingredients')
+    .update({ category })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 // ---- Tanks ----
 
 export async function listTanks() {
