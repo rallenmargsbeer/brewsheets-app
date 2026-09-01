@@ -29,6 +29,12 @@ function blankToNull(obj) {
   return out
 }
 
+// One tank (100HL) can hold up to 4 turns total for a batch, accumulated
+// across separate brew days if needed — a single brew day itself never
+// creates more than 3 at once (see MAX_TURNS_PER_DAY in AddBrewPage.jsx). This
+// is the cap "+ Add another turn" below stops at.
+const MAX_TURNS_PER_TANK = 4
+
 const RUN_TIME_FIELDS = [
   'mash_in_time',
   'mash_end_time',
@@ -605,7 +611,7 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
 
   async function addAnotherTurn() {
     const nextNumber = turnCount + 1
-    if (nextNumber > 4) return
+    if (nextNumber > MAX_TURNS_PER_TANK) return
     await upsertBrewRun({ batch_id: batch.id, run_number: nextNumber })
     if (!batch.turn_quantity || batch.turn_quantity < nextNumber) {
       await upsertBatch({ id: batch.id, turn_quantity: nextNumber })
@@ -639,12 +645,17 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
             </button>
           )
         })}
-        {turnCount < 4 && (
+        {turnCount < MAX_TURNS_PER_TANK && (
           <button className="secondary" onClick={addAnotherTurn}>
-            + Add another turn
+            + Add another turn ({turnCount}/{MAX_TURNS_PER_TANK} used)
           </button>
         )}
       </div>
+      {turnCount >= MAX_TURNS_PER_TANK && (
+        <p style={{ color: '#666', fontSize: '0.85rem', marginTop: '-0.5rem' }}>
+          This tank is at its 4-turn maximum.
+        </p>
+      )}
 
       {turnNumbers.map((n) => (
         <div key={n} style={{ display: activeTurn === n ? 'block' : 'none', marginBottom: '2rem' }}>
