@@ -1,27 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listIngredients, importIngredients, updateIngredientCategory } from '../lib/api'
+import { listIngredients, importIngredients, updateIngredientSections } from '../lib/api'
 
-const CATEGORY_LABELS = {
+// Recipe-flow order — also used for the default sort/grouping below.
+const SECTION_ORDER = ['grist', 'water', 'kettle', 'fermenter']
+const SECTION_LABELS = {
   grist: 'Grist / Malt Bill',
   water: 'Water Chemistry',
   kettle: 'Kettle Additions',
   fermenter: 'Fermenter Additions',
-  uncategorized: 'Uncategorized',
 }
-const CATEGORY_OPTIONS = ['grist', 'water', 'kettle', 'fermenter', 'uncategorized']
 
-// Unleashed's own "Product Group" only maps cleanly onto three of our recipe
-// sections — everything else (mostly "Other Raw Material", a mixed bucket of
-// whirlfloc, yeast nutrient, CIP chemicals, fruit purees, etc.) needs a human
-// to sort it, so it lands in "uncategorized" and stays out of every recipe
-// section's suggestions until assigned here.
-function mapProductGroupToCategory(group) {
+// Unleashed's own "Product Group" is the stable classification of what an
+// ingredient IS (kept as-is in unleashed_group, below) — but an ingredient can
+// be USED in more than one recipe section, so this maps a group to the *set*
+// of sections it should default into. Hops go in both Kettle Additions
+// (boil/whirlpool) and Fermenter Additions (dry hop); Salt (which covers
+// things like Lactic Acid in Ryan's Unleashed data) covers both Water
+// Chemistry and kettle-stage acid/salt additions. "Other Raw Material" is too
+// mixed a bucket (whirlfloc, yeast nutrient, CIP chemicals, purees, ...) to
+// default anywhere — those start unassigned and get sorted by hand below.
+function mapUnleashedGroupToSections(group) {
   const g = (group || '').trim().toLowerCase()
-  if (g === 'hops') return 'kettle'
-  if (g === 'malt') return 'grist'
-  if (g === 'yeast') return 'fermenter'
-  if (g === 'salt') return 'water'
-  return 'uncategorized'
+  if (g === 'hops') return ['kettle', 'fermenter']
+  if (g === 'malt') return ['grist']
+  if (g === 'yeast') return ['fermenter']
+  if (g === 'salt') return ['water', 'kettle']
+  return []
 }
 
 // Minimal RFC4180-ish CSV parser: handles quoted fields, commas and
@@ -107,16 +111,24 @@ function parseUnleashedCsv(text) {
     // quoted CSV field — collapse that (and any other stray whitespace) to a
     // single space so it doesn't show an embedded line break in the app.
     const name = (row[nameIdx] || '').replace(/\s+/g, ' ').trim() || code
-    const group = groupIdx === -1 ? '' : row[groupIdx]
+    const group = groupIdx === -1 ? '' : (row[groupIdx] || '').trim()
     const baseUnit = unitIdx === -1 ? '' : (row[unitIdx] || '').trim()
     byCode.set(code, {
       unleashed_code: code,
       name,
-      category: mapProductGroupToCategory(group),
+      unleashed_group: group || null,
+      sections: mapUnleashedGroupToSections(group),
       base_unit: baseUnit || null,
     })
   }
   return Array.from(byCode.values())
+}
+
+// For sorting/grouping only — an ingredient can belong to several sections,
+// so this just picks the earliest one in recipe-flow order to group it
+// under. It's still suggested everywhere it's actually assigned.
+function primarySection(sections) {
+  return SECTION_ORDER.find((s) => sections.includes(s)) ?? null
 }
 
 export default function IngredientsPage() {
@@ -126,7 +138,7 @@ export default function IngredientsPage() {
   const [importResult, setImportResult] = useState(null)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
+  const [sectionFilter, setSectionFilter] = useState('')
   const fileInputRef = useRef(null)
 
   function refresh() {
@@ -153,7 +165,7 @@ export default function IngredientsPage() {
       }
       const result = await importIngredients(parsedRows)
       setImportResult(
-        `Imported ${parsedRows.length} ingredients from the file — ${result.inserted} new, ${result.updated} updated.`
+        `Imported ${parsedRows.length} ingredients from the file — ${result.inserted} new, ${result.updated} updated. Section assignments on ingredients you'd already reviewed were left untouched.`
       )
       refresh()
     } catch (err) {
@@ -163,28 +175,35 @@ export default function IngredientsPage() {
     }
   }
 
-  async function changeCategory(ingredient, category) {
-    const updated = await updateIngredientCategory(ingredient.id, category)
+  async function toggleSection(ingredient, section) {
+    const has = ingredient.sections.includes(section)
+    const nextSections = has
+      ? ingredient.sections.filter((s) => s !== section)
+      : [...ingredient.sections, section]
+    const updated = await updateIngredientSections(ingredient.id, nextSections)
     setIngredients((prev) => prev.map((i) => (i.id === ingredient.id ? updated : i)))
   }
 
-  const uncategorizedCount = useMemo(
-    () => ingredients.filter((i) => i.category === 'uncategorized').length,
+  const unassignedCount = useMemo(
+    () => ingredients.filter((i) => i.sections.length === 0).length,
     [ingredients]
   )
 
-  // Default sort: grouped by category in recipe-flow order (Grist, Water,
-  // Kettle, Fermenter, then Uncategorized last), alphabetical by name within
-  // each group — makes a ~300-row list actually navigable.
+  // Default sort: grouped by primary section in recipe-flow order (Grist,
+  // Water, Kettle, Fermenter, then Unassigned last), alphabetical by name
+  // within each group — an ingredient assigned to more than one section is
+  // still fully usable in all of them, this just picks where it sorts.
   const filtered = ingredients
     .filter((i) => {
-      if (categoryFilter && i.category !== categoryFilter) return false
+      if (sectionFilter && !i.sections.includes(sectionFilter)) return false
       if (search && !i.name.toLowerCase().includes(search.toLowerCase())) return false
       return true
     })
     .sort((a, b) => {
-      const categoryDiff = CATEGORY_OPTIONS.indexOf(a.category) - CATEGORY_OPTIONS.indexOf(b.category)
-      if (categoryDiff !== 0) return categoryDiff
+      const aIdx = SECTION_ORDER.indexOf(primarySection(a.sections))
+      const bIdx = SECTION_ORDER.indexOf(primarySection(b.sections))
+      const orderDiff = (aIdx === -1 ? SECTION_ORDER.length : aIdx) - (bIdx === -1 ? SECTION_ORDER.length : bIdx)
+      if (orderDiff !== 0) return orderDiff
       return a.name.localeCompare(b.name)
     })
 
@@ -208,18 +227,21 @@ export default function IngredientsPage() {
 
       <p style={{ color: '#666', marginTop: '-0.5rem' }}>
         Imported ingredients power the suggestions that pop up while typing an Item/Ingredient
-        name on the recipe form — you can still type anything not on this list. Export a "Product
-        List" CSV from Unleashed and import it here; re-importing later updates existing
-        ingredients (matched by Unleashed's Product Code) instead of duplicating them.
+        name on the recipe form — you can still type anything not on this list. An ingredient can
+        be checked into more than one section (e.g. Hops into both Kettle and Fermenter
+        Additions). "Unleashed Group" is Unleashed's own classification, kept as-is for reference.
+        Export a "Product List" CSV from Unleashed and import it here; re-importing later updates
+        names/units (matched by Unleashed's Product Code) without touching section assignments
+        you've already set.
       </p>
 
       {importResult && <p style={{ color: '#1a7a1a' }}>{importResult}</p>}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      {!loading && uncategorizedCount > 0 && (
+      {!loading && unassignedCount > 0 && (
         <p style={{ color: '#a66a00' }}>
-          {uncategorizedCount} ingredient{uncategorizedCount === 1 ? '' : 's'} still{' '}
-          <strong>Uncategorized</strong> — they won't show up as suggestions anywhere on the
-          recipe form until you assign them a category below.
+          {unassignedCount} ingredient{unassignedCount === 1 ? '' : 's'} not assigned to any
+          section yet — they won't show up as suggestions anywhere on the recipe form until you
+          check at least one section for them below.
         </p>
       )}
 
@@ -234,11 +256,11 @@ export default function IngredientsPage() {
               onChange={(e) => setSearch(e.target.value)}
               style={{ width: 240 }}
             />
-            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-              <option value="">All categories</option>
-              {CATEGORY_OPTIONS.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABELS[c]}
+            <select value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value)}>
+              <option value="">All sections</option>
+              {SECTION_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {SECTION_LABELS[s]}
                 </option>
               ))}
             </select>
@@ -248,7 +270,10 @@ export default function IngredientsPage() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Category</th>
+                <th>Unleashed Group</th>
+                {SECTION_ORDER.map((s) => (
+                  <th key={s}>{SECTION_LABELS[s]}</th>
+                ))}
                 <th>Unit</th>
                 <th>Unleashed Code</th>
               </tr>
@@ -257,22 +282,23 @@ export default function IngredientsPage() {
               {filtered.map((i) => (
                 <tr key={i.id}>
                   <td>{i.name}</td>
-                  <td>
-                    <select value={i.category} onChange={(e) => changeCategory(i, e.target.value)}>
-                      {CATEGORY_OPTIONS.map((c) => (
-                        <option key={c} value={c}>
-                          {CATEGORY_LABELS[c]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
+                  <td style={{ color: '#666' }}>{i.unleashed_group ?? '—'}</td>
+                  {SECTION_ORDER.map((s) => (
+                    <td key={s} style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={i.sections.includes(s)}
+                        onChange={() => toggleSection(i, s)}
+                      />
+                    </td>
+                  ))}
                   <td>{i.base_unit ?? '—'}</td>
                   <td style={{ color: '#666', fontSize: '0.85rem' }}>{i.unleashed_code}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4}>
+                  <td colSpan={3 + SECTION_ORDER.length}>
                     {ingredients.length === 0
                       ? 'No ingredients imported yet — import a CSV from Unleashed to get started.'
                       : 'No ingredients match your search/filter.'}
