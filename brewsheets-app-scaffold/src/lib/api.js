@@ -94,34 +94,43 @@ export async function listIngredients() {
   return data
 }
 
-// rows: [{ unleashed_code, name, category, base_unit }]. Upserts by
-// unleashed_code so re-importing an updated export updates existing
-// ingredients instead of creating duplicates. Returns { inserted, updated }
-// counts by diffing against the codes that already existed before the call.
+// rows: [{ unleashed_code, name, unleashed_group, sections, base_unit }].
+// Upserts by unleashed_code so re-importing an updated export updates
+// existing ingredients instead of creating duplicates. `sections` is
+// preserved for any ingredient that already exists — re-importing refreshes
+// name/unleashed_group/base_unit from Unleashed but never overwrites Ryan's
+// own section assignments (whether they're the computed default or a manual
+// edit). Only brand-new ingredients get the computed default sections.
+// Returns { inserted, updated } counts.
 export async function importIngredients(rows) {
   if (rows.length === 0) return { inserted: 0, updated: 0 }
-  // Fetch all existing codes unfiltered rather than a big `.in()` list — an
+  // Fetch all existing rows unfiltered rather than a big `.in()` list — an
   // ingredient list is a few hundred rows at most, and this avoids building
   // a huge query-string for a large CSV import.
   const { data: existing, error: existingErr } = await supabase
     .from('ingredients')
-    .select('unleashed_code')
+    .select('unleashed_code, sections')
   if (existingErr) throw existingErr
-  const existingCodes = new Set(existing.map((r) => r.unleashed_code))
+  const existingSectionsByCode = new Map(existing.map((r) => [r.unleashed_code, r.sections]))
+
+  const rowsToUpsert = rows.map((r) => {
+    const existingSections = existingSectionsByCode.get(r.unleashed_code)
+    return existingSections !== undefined ? { ...r, sections: existingSections } : r
+  })
 
   const { error } = await supabase
     .from('ingredients')
-    .upsert(rows, { onConflict: 'unleashed_code' })
+    .upsert(rowsToUpsert, { onConflict: 'unleashed_code' })
   if (error) throw error
 
-  const updated = rows.filter((r) => existingCodes.has(r.unleashed_code)).length
+  const updated = rows.filter((r) => existingSectionsByCode.has(r.unleashed_code)).length
   return { inserted: rows.length - updated, updated }
 }
 
-export async function updateIngredientCategory(id, category) {
+export async function updateIngredientSections(id, sections) {
   const { data, error } = await supabase
     .from('ingredients')
-    .update({ category })
+    .update({ sections })
     .eq('id', id)
     .select()
     .single()
