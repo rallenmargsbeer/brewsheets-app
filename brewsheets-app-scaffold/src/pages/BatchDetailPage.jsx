@@ -6,10 +6,8 @@ import {
   deleteBatch,
   listTanks,
   upsertBrewRun,
-  upsertFermentationReading,
-  deleteFermentationReading,
-  upsertCellarTask,
-  deleteCellarTask,
+  snapshotBrewRunIngredients,
+  updateBrewRunIngredient,
 } from '../lib/api'
 
 function toLocalInput(iso) {
@@ -29,96 +27,22 @@ function blankToNull(obj) {
   return out
 }
 
-// One tank (100HL) can hold up to 4 turns total for a batch, accumulated
-// across separate brew days if needed — a single brew day itself never
-// creates more than 3 at once (see MAX_TURNS_PER_DAY in AddBrewPage.jsx). This
-// is the cap "+ Add another turn" below stops at.
+// One tank (100HL) can hold up to 4 turns total for a batch — this is the cap
+// "+ Add another turn" below stops at (matches MAX_TURNS_PER_TANK in
+// AddBrewPage.jsx, which now also offers all 4 turns from the wizard itself).
 const MAX_TURNS_PER_TANK = 4
 
-const RUN_TIME_FIELDS = [
-  'mash_in_time',
-  'mash_end_time',
-  'vorlauf_start_time',
-  'lauter_start_time',
-  'lauter_end_time',
-  'boil_start_time',
-  'boil_end_time',
-  'transfer_start_time',
-  'transfer_end_time',
-  'ko_start_time',
-  'ko_end_time',
-]
-
-// The 5 gated brew-day stages, in order. Each one's confirmedField is a
+// The 4 gated brew-day stages, in order. Each one's confirmedField is a
 // brew_runs timestamp column — set it and the stage locks (read-only) and the
 // next stage unlocks; null it out again ("Reopen") and it's editable again.
-// Field groupings match exactly what the old flat BrewRunForm already had.
+// Unlike the old version, this is metadata only — every stage now has its own
+// hand-written block below (targets, time buttons, ingredient tables differ
+// too much per stage for one generic field-list renderer to cover cleanly).
 const STAGES = [
-  {
-    key: 'mash',
-    confirmedField: 'mash_confirmed_at',
-    label: 'Mash',
-    fields: [
-      ['strike_temp', 'Strike Temp', 'number', 110],
-      ['mash_water_l', 'Mash H2O (L)', 'number', 120],
-      ['mash_temp', 'Mash Temp', 'number', 110],
-      ['mash_ph', 'Mash pH', 'number', 100],
-      ['flowmeter_target_l', 'Flowmeter Target (L)', 'number', 140],
-      ['flowmeter_actual_l', 'Flowmeter Actual (L)', 'number', 140],
-      ['mash_in_time', 'Mash In', 'datetime-local', 190],
-      ['mash_end_time', 'Mash End', 'datetime-local', 190],
-    ],
-  },
-  {
-    key: 'lauter',
-    confirmedField: 'lauter_confirmed_at',
-    label: 'Lauter / Vorlauf',
-    fields: [
-      ['vorlauf_start_time', 'Vorlauf Start', 'datetime-local', 190],
-      ['lauter_start_time', 'Lauter Start', 'datetime-local', 190],
-      ['lauter_end_time', 'Lauter End', 'datetime-local', 190],
-      ['first_runnings_gravity', '1st Runnings Grav.', 'number', 140],
-      ['last_runnings_gravity', 'Last Runnings Grav.', 'number', 140],
-      ['total_kettle_acid_ml', 'Total Kettle Acid (mL)', 'number', 150],
-    ],
-  },
-  {
-    key: 'boil',
-    confirmedField: 'boil_confirmed_at',
-    label: 'Boil',
-    fields: [
-      ['target_preboil_gravity', 'Target Pre-Boil Grav.', 'number', 150],
-      ['boil_start_time', 'Boil Start', 'datetime-local', 190],
-      ['boil_end_time', 'Boil End', 'datetime-local', 190],
-      ['preboil_volume_l', 'Pre-Boil Vol (L)', 'number', 130],
-      ['preboil_gravity', 'Pre-Boil Grav.', 'number', 120],
-      ['postboil_volume_l', 'Post-Boil Vol (L)', 'number', 130],
-      ['postboil_gravity', 'Post-Boil Grav.', 'number', 120],
-    ],
-  },
-  {
-    key: 'transfer',
-    confirmedField: 'transfer_confirmed_at',
-    label: 'Transfer / Knockout',
-    fields: [
-      ['transfer_start_time', 'Transfer Start', 'datetime-local', 190],
-      ['transfer_end_time', 'Transfer End', 'datetime-local', 190],
-      ['ko_start_time', 'KO Start', 'datetime-local', 190],
-      ['ko_end_time', 'KO End', 'datetime-local', 190],
-      ['ko_flowmeter_l', 'Flowmeter (L)', 'number', 120],
-      ['correction_l', 'Correction (L)', 'number', 120],
-    ],
-  },
-  {
-    key: 'whirlpool',
-    confirmedField: 'whirlpool_confirmed_at',
-    label: 'Whirlpool',
-    fields: [
-      ['whirlpool_gravity', 'Gravity', 'number', 110],
-      ['whirlpool_ph', 'pH', 'number', 100],
-      ['brewhouse_efficiency', 'Brewhouse Efficiency %', 'number', 160],
-    ],
-  },
+  { key: 'mash', confirmedField: 'mash_confirmed_at', label: 'Mash' },
+  { key: 'lauter', confirmedField: 'lauter_confirmed_at', label: 'Lauter / Vorlauf' },
+  { key: 'boil', confirmedField: 'boil_confirmed_at', label: 'Boil' },
+  { key: 'knockout', confirmedField: 'knockout_confirmed_at', label: 'Knockout' },
 ]
 
 function seedForm(batchId, runNumber, run) {
@@ -126,20 +50,187 @@ function seedForm(batchId, runNumber, run) {
     run_number: runNumber,
     batch_id: batchId,
     ...run,
-    ...Object.fromEntries(RUN_TIME_FIELDS.map((f) => [f, toLocalInput(run?.[f])])),
   }
 }
 
-function TurnStepper({ batchId, runNumber, run, onSaved }) {
+// Small read-only "aim for X" display, pulled straight from the recipe —
+// never editable here, the recipe screen is where targets get set.
+function TargetValue({ label, value, unit }) {
+  return (
+    <div>
+      <div style={{ fontSize: '0.75rem', color: '#888' }}>{label}</div>
+      <div style={{ fontWeight: 600 }}>
+        {value != null && value !== '' ? `${value}${unit ? ' ' + unit : ''}` : '—'}
+      </div>
+    </div>
+  )
+}
+
+// Replaces the old "type a timestamp" datetime-local inputs. Unset: a single
+// tap stamps now() (and, when this button is paired with an end field via
+// autoFillKey/durationMin, pre-fills that end field off the recipe's stage
+// duration too). Set: shows the formatted time — click it to reveal a normal
+// datetime-local input for a correction. Every press/edit saves immediately
+// (a single-field partial update through upsertBrewRun, which routes to a
+// real .update() so it's safe even mid-brew) rather than waiting for
+// "Confirm & Continue", so a dropped connection never loses the stamp — and
+// it stays editable even after its stage is confirmed/locked, since a brewer
+// may need to correct a time after the fact.
+function TimeButton({ runId, fieldKey, label, value, onSaved, autoFillKey, durationMin }) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function stamp() {
+    setSaving(true)
+    try {
+      const nowIso = new Date().toISOString()
+      const payload = { id: runId, [fieldKey]: nowIso }
+      if (autoFillKey && durationMin != null) {
+        payload[autoFillKey] = new Date(Date.now() + durationMin * 60000).toISOString()
+      }
+      onSaved(await upsertBrewRun(payload))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveEdited(localValue) {
+    setSaving(true)
+    try {
+      onSaved(await upsertBrewRun({ id: runId, [fieldKey]: fromLocalInput(localValue) }))
+    } finally {
+      setSaving(false)
+      setEditing(false)
+    }
+  }
+
+  const display = value
+    ? new Date(value).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : null
+
+  return (
+    <label style={{ display: 'inline-block', marginRight: '0.75rem', marginBottom: '0.5rem' }}>
+      <div style={{ fontSize: '0.8rem', color: '#555' }}>{label}</div>
+      {editing ? (
+        <input
+          type="datetime-local"
+          defaultValue={toLocalInput(value)}
+          autoFocus
+          onBlur={(e) => saveEdited(e.target.value)}
+          style={{ width: 190 }}
+        />
+      ) : value ? (
+        <button className="secondary" onClick={() => setEditing(true)} disabled={saving}>
+          {display}
+        </button>
+      ) : (
+        <button onClick={stamp} disabled={saving || !runId}>
+          {saving ? '…' : 'Tap to stamp'}
+        </button>
+      )}
+    </label>
+  )
+}
+
+// Formats an already-computed absolute gram amount from brew_run_ingredients
+// (planned_qty/actual_qty) — distinct from formatMass below, which multiplies
+// a per-litre recipe rate by a volume first.
+function formatQty(qty) {
+  if (qty == null) return '—'
+  return qty >= 1000 ? `${(qty / 1000).toFixed(2)} kg` : `${qty.toFixed(1)} g`
+}
+
+// The per-turn planned/actual ingredient list a brewer actually works from.
+// planned_qty is a fixed snapshot from the recipe (never edited here); name
+// and actual_qty are editable on the fly for a substitution or a shortage.
+// Always editable regardless of whether the stage it's shown under is
+// confirmed/locked — ingredient edits are deliberately decoupled from stage
+// gating. Saves trigger a full page refresh (onSaved) rather than local
+// state patching, same as everywhere else on this page.
+function IngredientList({ title, items, onSaved }) {
+  if (!items || items.length === 0) return null
+  return (
+    <div style={{ marginTop: '0.75rem' }}>
+      {title && (
+        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#333', marginBottom: '0.25rem' }}>{title}</div>
+      )}
+      <table>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left' }}>Item</th>
+            <th style={{ textAlign: 'left' }}>When</th>
+            <th style={{ textAlign: 'left' }}>Planned</th>
+            <th style={{ textAlign: 'left' }}>Actual</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <IngredientRow key={item.id} item={item} onSaved={onSaved} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function IngredientRow({ item, onSaved }) {
+  const [name, setName] = useState(item.item_name)
+  const [actual, setActual] = useState(item.actual_qty ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function saveName() {
+    if (name === item.item_name) return
+    setSaving(true)
+    try {
+      await updateBrewRunIngredient(item.id, { item_name: name })
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveActual() {
+    const value = actual === '' ? null : Number(actual)
+    if (value === item.actual_qty) return
+    setSaving(true)
+    try {
+      await updateBrewRunIngredient(item.id, { actual_qty: value })
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const changed = item.actual_qty !== item.planned_qty
+
+  return (
+    <tr>
+      <td>
+        <input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} style={{ width: 160 }} disabled={saving} />
+      </td>
+      <td style={{ color: '#666', fontSize: '0.85rem' }}>{item.timing_note ?? '—'}</td>
+      <td style={{ color: '#666' }}>{formatQty(item.planned_qty)}</td>
+      <td>
+        <input
+          type="number"
+          value={actual}
+          onChange={(e) => setActual(e.target.value)}
+          onBlur={saveActual}
+          style={{ width: 90, ...(changed ? { borderColor: '#a66a00' } : {}) }}
+          disabled={saving}
+        />
+      </td>
+    </tr>
+  )
+}
+
+function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) {
   const [form, setForm] = useState(() => seedForm(batchId, runNumber, run))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
   function applySaved(saved) {
-    setForm({
-      ...saved,
-      ...Object.fromEntries(RUN_TIME_FIELDS.map((f) => [f, toLocalInput(saved[f])])),
-    })
+    setForm((f) => ({ ...f, ...saved }))
     onSaved(saved)
   }
 
@@ -153,14 +244,14 @@ function TurnStepper({ batchId, runNumber, run, onSaved }) {
   const activeIndex = STAGES.findIndex((s) => !form[s.confirmedField])
   const allConfirmed = activeIndex === -1
 
-  async function confirmStage(stage) {
+  async function confirmStage(stage, fieldKeys) {
     setSaving(true)
     setError(null)
     try {
-      const payload = blankToNull({ ...form })
-      delete payload.created_at
-      delete payload.updated_at
-      for (const f of RUN_TIME_FIELDS) payload[f] = fromLocalInput(form[f])
+      const payload = blankToNull({
+        id: form.id,
+        ...Object.fromEntries(fieldKeys.map((k) => [k, form[k]])),
+      })
       payload[stage.confirmedField] = new Date().toISOString()
       const saved = await upsertBrewRun(payload)
       applySaved(saved)
@@ -208,6 +299,23 @@ function TurnStepper({ batchId, runNumber, run, onSaved }) {
     </label>
   )
 
+  // This turn's snapshotted ingredient lines, split out by where each one
+  // belongs on the brew sheet.
+  const ingredients = form.brew_run_ingredients ?? []
+  const gristItems = ingredients.filter((i) => i.section === 'grist')
+  const mashWaterItems = ingredients.filter((i) => i.section === 'water' && i.addition_stage === 'mash')
+  const kettleItems = ingredients.filter((i) => i.section === 'kettle')
+  const kettleWaterItems = ingredients.filter((i) => i.section === 'water' && i.addition_stage === 'kettle')
+  const whirlpoolItems = ingredients.filter((i) => i.section === 'whirlpool')
+  const fermenterItems = ingredients.filter((i) => i.section === 'fermenter')
+
+  // Target Strike Volume isn't a stored number — it's the grist bill for
+  // this turn (already snapshotted at turn volume) times the recipe's own
+  // liquor:grist ratio (defaults to 3:1, editable per recipe).
+  const gristKg = gristItems.reduce((sum, i) => sum + (i.planned_qty ?? 0), 0) / 1000
+  const strikeVolumeL =
+    recipe?.liquor_grist_ratio != null && gristKg > 0 ? gristKg * recipe.liquor_grist_ratio : null
+
   return (
     <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
@@ -246,6 +354,16 @@ function TurnStepper({ batchId, runNumber, run, onSaved }) {
         const isActive = i === activeIndex
         if (!confirmed && !isActive) return null // not reached yet — stays hidden/locked
 
+        const fld = (key, label, type = 'text', width = 110) =>
+          confirmed ? (
+            <span key={key} style={{ display: 'inline-block', marginRight: '1.25rem', marginBottom: '0.5rem' }}>
+              <div style={{ fontSize: '0.8rem', color: '#555' }}>{label}</div>
+              <div>{form[key] || '—'}</div>
+            </span>
+          ) : (
+            <span key={key}>{field(key, label, type, width)}</span>
+          )
+
         return (
           <div key={s.key} style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #eee' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -256,48 +374,210 @@ function TurnStepper({ batchId, runNumber, run, onSaved }) {
                 </button>
               )}
             </div>
+
             <div style={{ marginTop: '0.5rem' }}>
-              {s.fields.map(([key, label, type, width]) =>
-                confirmed ? (
-                  <span key={key} style={{ display: 'inline-block', marginRight: '1.25rem', marginBottom: '0.5rem' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#555' }}>{label}</div>
-                    <div>{form[key] || '—'}</div>
-                  </span>
-                ) : (
-                  <span key={key}>{field(key, label, type, width)}</span>
-                )
+              {s.key === 'mash' && (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '1.5rem',
+                      flexWrap: 'wrap',
+                      marginBottom: '0.75rem',
+                      padding: '0.6rem 0.75rem',
+                      background: '#f7f6f3',
+                      borderRadius: 4,
+                    }}
+                  >
+                    <TargetValue label="Target Strike Temp" value={recipe?.target_strike_temp} unit="°C" />
+                    <TargetValue
+                      label="Target Strike Volume"
+                      value={strikeVolumeL != null ? strikeVolumeL.toFixed(0) : null}
+                      unit="L"
+                    />
+                    <TargetValue label="Mash Step 1" value={recipe?.mash_step_1_temp} unit="°C" />
+                    <TargetValue label="Mash Step 2" value={recipe?.mash_step_2_temp} unit="°C" />
+                    <TargetValue label="Mash Step 3" value={recipe?.mash_step_3_temp} unit="°C" />
+                    <TargetValue label="Mash Out" value={recipe?.mash_out_temp} unit="°C" />
+                  </div>
+                  {fld('strike_temp', 'Strike Temp', 'number', 110)}
+                  {fld('mash_water_l', 'Mash H2O (L)', 'number', 120)}
+                  {fld('mash_temp', 'Mash Temp', 'number', 110)}
+                  {fld('mash_ph', 'Mash pH', 'number', 100)}
+                  {fld('flowmeter_target_l', 'Flowmeter Target (L)', 'number', 140)}
+                  {fld('flowmeter_actual_l', 'Flowmeter Actual (L)', 'number', 140)}
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="mash_in_time"
+                      label="Mash In"
+                      value={form.mash_in_time}
+                      onSaved={applySaved}
+                      autoFillKey="mash_end_time"
+                      durationMin={recipe?.mash_duration_min}
+                    />
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="mash_end_time"
+                      label="Mash End"
+                      value={form.mash_end_time}
+                      onSaved={applySaved}
+                    />
+                  </div>
+                  <IngredientList title="Grist" items={gristItems} onSaved={onSaved} />
+                  <IngredientList title="Water (Mash)" items={mashWaterItems} onSaved={onSaved} />
+                </>
               )}
-              {s.key === 'whirlpool' && (
-                <label style={{ display: 'inline-block', marginRight: '0.75rem' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#555' }}>O2 Check</div>
-                  {confirmed ? (
-                    <div>
-                      {form.whirlpool_o2_check === true
-                        ? 'Yes'
-                        : form.whirlpool_o2_check === false
-                        ? 'No'
-                        : '—'}
+
+              {s.key === 'lauter' && (
+                <>
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="vorlauf_start_time"
+                      label="Vorlauf Start"
+                      value={form.vorlauf_start_time}
+                      onSaved={applySaved}
+                    />
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="lauter_start_time"
+                      label="Lauter Start"
+                      value={form.lauter_start_time}
+                      onSaved={applySaved}
+                      autoFillKey="lauter_end_time"
+                      durationMin={recipe?.lauter_duration_min}
+                    />
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="lauter_end_time"
+                      label="Lauter End"
+                      value={form.lauter_end_time}
+                      onSaved={applySaved}
+                    />
+                  </div>
+                  {fld('first_runnings_gravity', '1st Runnings Grav.', 'number', 140)}
+                  {fld('last_runnings_gravity', 'Last Runnings Grav.', 'number', 140)}
+                </>
+              )}
+
+              {s.key === 'boil' && (
+                <>
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <TargetValue label="Target Pre-Boil Gravity" value={recipe?.target_preboil_gravity} unit="" />
+                  </div>
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="boil_start_time"
+                      label="Boil Start"
+                      value={form.boil_start_time}
+                      onSaved={applySaved}
+                      autoFillKey="boil_end_time"
+                      durationMin={recipe?.boil_duration_min}
+                    />
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="boil_end_time"
+                      label="Boil End"
+                      value={form.boil_end_time}
+                      onSaved={applySaved}
+                    />
+                  </div>
+                  {fld('preboil_volume_l', 'Pre-Boil Vol (L)', 'number', 130)}
+                  {fld('preboil_gravity', 'Pre-Boil Grav. (actual)', 'number', 130)}
+                  {fld('postboil_volume_l', 'Post-Boil Vol (L)', 'number', 130)}
+                  {fld('postboil_gravity', 'Post-Boil Grav.', 'number', 120)}
+                  <IngredientList title="Kettle" items={kettleItems} onSaved={onSaved} />
+                  <IngredientList title="Water (Kettle)" items={kettleWaterItems} onSaved={onSaved} />
+                </>
+              )}
+
+              {s.key === 'knockout' && (
+                <>
+                  {recipe?.ko_temp != null && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <TargetValue label="Target KO Temp" value={recipe.ko_temp} unit="°C" />
                     </div>
-                  ) : (
-                    <select
-                      value={form.whirlpool_o2_check === true ? 'yes' : form.whirlpool_o2_check === false ? 'no' : ''}
-                      onChange={(e) =>
-                        set(
-                          'whirlpool_o2_check',
-                          e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null
-                        )
-                      }
-                    >
-                      <option value="">—</option>
-                      <option value="yes">Yes</option>
-                      <option value="no">No</option>
-                    </select>
                   )}
-                </label>
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="ko_start_time"
+                      label="KO Start"
+                      value={form.ko_start_time}
+                      onSaved={applySaved}
+                      autoFillKey="ko_end_time"
+                      durationMin={recipe?.knockout_duration_min}
+                    />
+                    <TimeButton
+                      runId={form.id}
+                      fieldKey="ko_end_time"
+                      label="KO End"
+                      value={form.ko_end_time}
+                      onSaved={applySaved}
+                    />
+                  </div>
+                  {fld('ko_flowmeter_l', 'Flowmeter (L)', 'number', 120)}
+                  {fld('correction_l', 'Correction (L)', 'number', 120)}
+                  {fld('whirlpool_gravity', 'Gravity', 'number', 110)}
+                  {fld('whirlpool_ph', 'pH', 'number', 100)}
+                  {fld('brewhouse_efficiency', 'Brewhouse Efficiency %', 'number', 160)}
+                  <label style={{ display: 'inline-block', marginRight: '0.75rem' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#555' }}>O2 Check</div>
+                    {confirmed ? (
+                      <div>
+                        {form.whirlpool_o2_check === true
+                          ? 'Yes'
+                          : form.whirlpool_o2_check === false
+                          ? 'No'
+                          : '—'}
+                      </div>
+                    ) : (
+                      <select
+                        value={form.whirlpool_o2_check === true ? 'yes' : form.whirlpool_o2_check === false ? 'no' : ''}
+                        onChange={(e) =>
+                          set(
+                            'whirlpool_o2_check',
+                            e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null
+                          )
+                        }
+                      >
+                        <option value="">—</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    )}
+                  </label>
+                  <IngredientList title="Whirlpool Additions" items={whirlpoolItems} onSaved={onSaved} />
+                </>
               )}
             </div>
+
             {!confirmed && (
-              <button onClick={() => confirmStage(s)} disabled={saving} style={{ marginTop: '0.5rem' }}>
+              <button
+                onClick={() =>
+                  confirmStage(
+                    s,
+                    s.key === 'mash'
+                      ? ['strike_temp', 'mash_water_l', 'mash_temp', 'mash_ph', 'flowmeter_target_l', 'flowmeter_actual_l']
+                      : s.key === 'lauter'
+                      ? ['first_runnings_gravity', 'last_runnings_gravity']
+                      : s.key === 'boil'
+                      ? ['preboil_volume_l', 'preboil_gravity', 'postboil_volume_l', 'postboil_gravity']
+                      : [
+                          'ko_flowmeter_l',
+                          'correction_l',
+                          'whirlpool_gravity',
+                          'whirlpool_ph',
+                          'brewhouse_efficiency',
+                          'whirlpool_o2_check',
+                        ]
+                  )
+                }
+                disabled={saving}
+                style={{ marginTop: '0.5rem' }}
+              >
                 {saving ? 'Saving…' : `Confirm ${s.label} & Continue`}
               </button>
             )}
@@ -306,6 +586,18 @@ function TurnStepper({ batchId, runNumber, run, onSaved }) {
       })}
 
       {allConfirmed && <p style={{ color: '#1a7a1a', fontWeight: 600 }}>✓ Turn {runNumber} complete</p>}
+
+      {/* Not gated to a stage — fermentation isn't time-tracked on this sheet, but
+          pitching/dry-hopping happens right around knockout so it's worth showing here. */}
+      {fermenterItems.length > 0 && (
+        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
+          <strong>Fermenter Additions</strong>
+          <p style={{ color: '#666', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
+            Not gated to a stage — visible any time so you can see what's coming, or confirm what got pitched.
+          </p>
+          <IngredientList items={fermenterItems} onSaved={onSaved} />
+        </div>
+      )}
 
       <label style={{ display: 'block', marginTop: '0.5rem' }}>
         Notes
@@ -322,159 +614,15 @@ function TurnStepper({ batchId, runNumber, run, onSaved }) {
   )
 }
 
-function FermentationLog({ batchId, readings, onChange }) {
-  const [form, setForm] = useState({ reading_date: '', fermentation_day: '' })
-
-  async function addReading() {
-    if (!form.reading_date) return
-    await upsertFermentationReading(blankToNull({ ...form, batch_id: batchId }))
-    setForm({ reading_date: '', fermentation_day: '' })
-    onChange()
-  }
-
-  async function remove(id) {
-    await deleteFermentationReading(id)
-    onChange()
-  }
-
-  return (
-    <div>
-      <h3>Fermentation / Cellar Log</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Day</th>
-            <th>Temp</th>
-            <th>Gravity (P)</th>
-            <th>pH</th>
-            <th>Tank Pressure</th>
-            <th>CO2 tank</th>
-            <th>O2 tank</th>
-            <th>Sensory OK?</th>
-            <th>Initials</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {readings
-            .sort((a, b) => (a.reading_date > b.reading_date ? 1 : -1))
-            .map((r) => (
-              <tr key={r.id}>
-                <td>{r.reading_date}</td>
-                <td>{r.fermentation_day ?? '—'}</td>
-                <td>{r.temp_panel ?? '—'}</td>
-                <td>{r.gravity_plato ?? '—'}</td>
-                <td>{r.ph ?? '—'}</td>
-                <td>{r.tank_pressure ?? '—'}</td>
-                <td>{r.co2_in_tank ?? '—'}</td>
-                <td>{r.o2_in_tank ?? '—'}</td>
-                <td>{r.sensory_check === true ? 'Yes' : r.sensory_check === false ? 'No' : '—'}</td>
-                <td>{r.initials ?? '—'}</td>
-                <td>
-                  <button className="secondary" onClick={() => remove(r.id)}>
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end', marginTop: '0.75rem', padding: '0.75rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6 }}>
-        {[
-          ['reading_date', 'Date', 'date'],
-          ['fermentation_day', 'Day', 'number'],
-          ['temp_panel', 'Temp', 'number'],
-          ['gravity_plato', 'Gravity (P)', 'number'],
-          ['ph', 'pH', 'number'],
-          ['tank_pressure', 'Tank Pressure', 'number'],
-          ['co2_in_tank', 'CO2 tank', 'number'],
-          ['o2_in_tank', 'O2 tank', 'number'],
-          ['initials', 'Initials', 'text'],
-        ].map(([key, label, type]) => (
-          <label key={key}>
-            <div style={{ fontSize: '0.8rem', color: '#555' }}>{label}</div>
-            <input
-              type={type}
-              value={form[key] ?? ''}
-              onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-              style={{ width: 100 }}
-            />
-          </label>
-        ))}
-        <label>
-          <div style={{ fontSize: '0.8rem', color: '#555' }}>Sensory OK?</div>
-          <select
-            value={form.sensory_check ?? ''}
-            onChange={(e) => setForm({ ...form, sensory_check: e.target.value === 'true' ? true : e.target.value === 'false' ? false : '' })}
-          >
-            <option value="">—</option>
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </select>
-        </label>
-        <button onClick={addReading}>+ Add reading</button>
-      </div>
-    </div>
-  )
-}
-
-function CellarTasks({ batchId, tasks, onChange }) {
-  const [desc, setDesc] = useState('')
-  const [date, setDate] = useState('')
-
-  async function add() {
-    if (!desc) return
-    await upsertCellarTask({ batch_id: batchId, task_description: desc, scheduled_date: date || null })
-    setDesc('')
-    setDate('')
-    onChange()
-  }
-  async function remove(id) {
-    await deleteCellarTask(id)
-    onChange()
-  }
-  async function toggleDone(task) {
-    await upsertCellarTask({
-      ...task,
-      condition_status: task.condition_status === 'done' ? null : 'done',
-      completed_at: task.condition_status === 'done' ? null : new Date().toISOString(),
-    })
-    onChange()
-  }
-
-  return (
-    <div>
-      <h3>Cellar Tasks</h3>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {tasks.map((t) => (
-          <li key={t.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.25rem 0' }}>
-            <input type="checkbox" checked={t.condition_status === 'done'} onChange={() => toggleDone(t)} />
-            <span style={{ textDecoration: t.condition_status === 'done' ? 'line-through' : 'none' }}>
-              {t.task_description} {t.scheduled_date ? `(${t.scheduled_date})` : ''}
-            </span>
-            <button className="secondary" onClick={() => remove(t.id)}>
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <input placeholder="Task description" value={desc} onChange={(e) => setDesc(e.target.value)} style={{ flex: 1 }} />
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button onClick={add}>+ Add task</button>
-      </div>
-    </div>
-  )
-}
-
 function formatMass(gPerL, volumeL) {
   if (gPerL == null || volumeL == null) return null
   const totalG = gPerL * volumeL
   return totalG >= 1000 ? `${(totalG / 1000).toFixed(2)} kg` : `${totalG.toFixed(1)} g`
 }
 
+// Whole-batch (all turns combined) ingredient reference — kept as-is,
+// unchanged, alongside the new per-turn view above: still useful for
+// procurement/prep at a glance, distinct from the per-turn editable list.
 function ScaledIngredients({ recipe, volumeL }) {
   if (!recipe) return null
 
@@ -612,7 +760,13 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
   async function addAnotherTurn() {
     const nextNumber = turnCount + 1
     if (nextNumber > MAX_TURNS_PER_TANK) return
-    await upsertBrewRun({ batch_id: batch.id, run_number: nextNumber })
+    const newRun = await upsertBrewRun({ batch_id: batch.id, run_number: nextNumber })
+    // Snapshot this new turn's planned ingredients from the recipe too, same as
+    // the Add Brew wizard does — otherwise a manually-added turn would show no
+    // ingredient list at all.
+    if (batch.recipes && batch.turn_volume_l) {
+      await snapshotBrewRunIngredients(newRun.id, batch.recipes, batch.turn_volume_l)
+    }
     if (!batch.turn_quantity || batch.turn_quantity < nextNumber) {
       await upsertBatch({ id: batch.id, turn_quantity: nextNumber })
     }
@@ -659,7 +813,14 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
 
       {turnNumbers.map((n) => (
         <div key={n} style={{ display: activeTurn === n ? 'block' : 'none', marginBottom: '2rem' }}>
-          <TurnStepper batchId={batch.id} runNumber={n} run={runsByNumber[n]} onSaved={refresh} />
+          <TurnStepper
+            batchId={batch.id}
+            runNumber={n}
+            run={runsByNumber[n]}
+            recipe={batch.recipes}
+            turnVolumeL={batch.turn_volume_l}
+            onSaved={refresh}
+          />
         </div>
       ))}
 
@@ -778,14 +939,6 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
 
       <div style={{ marginBottom: '2rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
         <ScaledIngredients recipe={batch.recipes} volumeL={batch.target_volume_l} />
-      </div>
-
-      <div style={{ marginTop: '2rem' }}>
-        <FermentationLog batchId={batch.id} readings={batch.fermentation_readings ?? []} onChange={refresh} />
-      </div>
-
-      <div style={{ marginTop: '2rem' }}>
-        <CellarTasks batchId={batch.id} tasks={batch.cellar_tasks ?? []} onChange={refresh} />
       </div>
     </div>
   )
