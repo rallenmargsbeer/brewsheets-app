@@ -19,10 +19,17 @@ const emptyRecipe = {
   target_og: '',
   target_fg: '',
   ko_temp: '',
+  target_strike_temp: '',
+  liquor_grist_ratio: 3.0,
   mash_step_1_temp: '',
   mash_step_2_temp: '',
   mash_step_3_temp: '',
   mash_out_temp: '',
+  mash_duration_min: 60,
+  lauter_duration_min: 45,
+  target_preboil_gravity: '',
+  boil_duration_min: 60,
+  knockout_duration_min: 20,
   biofine_ml_per_l: '',
   filter_micron: '',
   notes: '',
@@ -361,13 +368,25 @@ export default function RecipeEditPage() {
         </div>
       </Section>
 
-      <Section title="Mash Schedule">
+      <Section title="Mash Schedule" subtitle="These show up as targets on the Brew Day sheet, next to what actually happened.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+          <Field label="Target Strike Temp" value={recipe.target_strike_temp} onChange={(v) => updateField('target_strike_temp', v)} />
+          <Field label="Liquor:Grist Ratio (L/kg)" value={recipe.liquor_grist_ratio} onChange={(v) => updateField('liquor_grist_ratio', v)} />
+          <Field label="Mash Duration (min)" value={recipe.mash_duration_min} onChange={(v) => updateField('mash_duration_min', v)} />
           <Field label="Step 1 (0-20) temp" value={recipe.mash_step_1_temp} onChange={(v) => updateField('mash_step_1_temp', v)} />
           <Field label="Step 2 (20-40) temp" value={recipe.mash_step_2_temp} onChange={(v) => updateField('mash_step_2_temp', v)} />
           <Field label="Step 3 (40-60) temp" value={recipe.mash_step_3_temp} onChange={(v) => updateField('mash_step_3_temp', v)} />
           <Field label="Mash out temp" value={recipe.mash_out_temp} onChange={(v) => updateField('mash_out_temp', v)} />
           <Field label="KO temp" value={recipe.ko_temp} onChange={(v) => updateField('ko_temp', v)} />
+        </div>
+      </Section>
+
+      <Section title="Lauter, Boil &amp; Knockout Targets" subtitle="Also shown on the Brew Day sheet as targets/auto-timing.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+          <Field label="Lauter Duration (min)" value={recipe.lauter_duration_min} onChange={(v) => updateField('lauter_duration_min', v)} />
+          <Field label="Target Pre-Boil Gravity" value={recipe.target_preboil_gravity} onChange={(v) => updateField('target_preboil_gravity', v)} />
+          <Field label="Boil Duration (min)" value={recipe.boil_duration_min} onChange={(v) => updateField('boil_duration_min', v)} />
+          <Field label="Knockout Duration (min)" value={recipe.knockout_duration_min} onChange={(v) => updateField('knockout_duration_min', v)} />
         </div>
       </Section>
 
