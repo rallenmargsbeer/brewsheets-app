@@ -15,7 +15,7 @@ export async function getRecipe(id) {
   const { data, error } = await supabase
     .from('recipes')
     .select(
-      '*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_fermenter_additions(*)'
+      '*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*)'
     )
     .eq('id', id)
     .single()
@@ -66,6 +66,18 @@ export async function replaceKettleAdditions(recipeId, items) {
     .eq('recipe_id', recipeId)
   if (items.length === 0) return
   const { error } = await supabase.from('recipe_kettle_additions').insert(
+    items.map((it, i) => ({ ...it, recipe_id: recipeId, sort_order: i }))
+  )
+  if (error) throw error
+}
+
+export async function replaceWhirlpoolAdditions(recipeId, items) {
+  await supabase
+    .from('recipe_whirlpool_additions')
+    .delete()
+    .eq('recipe_id', recipeId)
+  if (items.length === 0) return
+  const { error } = await supabase.from('recipe_whirlpool_additions').insert(
     items.map((it, i) => ({ ...it, recipe_id: recipeId, sort_order: i }))
   )
   if (error) throw error
@@ -171,7 +183,7 @@ export async function getBatch(id) {
   const { data, error } = await supabase
     .from('batches')
     .select(
-      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_fermenter_additions(*)), tanks(*), brew_runs(*), fermentation_readings(*), cellar_tasks(*)'
+      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*)), tanks(*), brew_runs(*), fermentation_readings(*), cellar_tasks(*)'
     )
     .eq('id', id)
     .single()
