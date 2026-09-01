@@ -208,6 +208,18 @@ export async function deleteBatch(id) {
 
 // ---- Brew runs ----
 
+// Creates `turnQuantity` blank brew_runs rows (run_number 1..N) in one go, right
+// after a batch is created by the Add Brew wizard — one row per brewhouse turn,
+// ready for each turn's step-gated stages to be filled in independently.
+export async function initializeBrewRuns(batchId, turnQuantity) {
+  const rows = Array.from({ length: turnQuantity }, (_, i) => ({
+    batch_id: batchId,
+    run_number: i + 1,
+  }))
+  const { error } = await supabase.from('brew_runs').insert(rows)
+  if (error) throw error
+}
+
 export async function upsertBrewRun(run) {
   const { data, error } = await supabase
     .from('brew_runs')
