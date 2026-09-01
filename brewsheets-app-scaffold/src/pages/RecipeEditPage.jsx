@@ -173,10 +173,15 @@ export default function RecipeEditPage() {
       })
   }, [])
 
+  // An ingredient can belong to more than one section (e.g. Hops is both
+  // kettle and fermenter — see the Ingredients page), so this groups by
+  // membership rather than a single category.
   const ingredientNamesByCategory = useMemo(() => {
     const byCategory = { grist: [], water: [], kettle: [], fermenter: [] }
     for (const ing of ingredients) {
-      if (byCategory[ing.category]) byCategory[ing.category].push(ing.name)
+      for (const section of ing.sections ?? []) {
+        if (byCategory[section]) byCategory[section].push(ing.name)
+      }
     }
     return byCategory
   }, [ingredients])
