@@ -9,7 +9,12 @@ const TURN_VOLUMES = [
   { label: '25HL', litres: 2500 },
 ]
 
-const TURN_QUANTITIES = [1, 2, 3]
+// Two separate limits: a single brew day never runs more than 3 turns, but one
+// tank (100HL) can hold up to 4 turns total across separate brew days — see
+// MAX_TURNS_PER_TANK in BatchDetailPage.jsx, where "+ Add another turn" lets
+// you top a batch up to that 4-turn ceiling on a later day.
+const MAX_TURNS_PER_DAY = 3
+const TURN_QUANTITIES = Array.from({ length: MAX_TURNS_PER_DAY }, (_, i) => i + 1)
 
 function StepCard({ number, title, done, active, children }) {
   return (
@@ -147,7 +152,9 @@ export default function AddBrewPage() {
         {turnVolumeL != null && (
           <p style={{ color: '#666', fontSize: '0.85rem', marginTop: '0.5rem', marginBottom: 0 }}>
             {TURN_VOLUMES.find((v) => v.litres === turnVolumeL)?.label} per turn — total batch
-            volume is calculated automatically once you pick how many turns.
+            volume is calculated automatically once you pick how many turns. Topping this tank up
+            with a 4th turn on a different day? Create the batch here first, then use
+            "+ Add another turn" on its Brew Day page.
           </p>
         )}
       </StepCard>
