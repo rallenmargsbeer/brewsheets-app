@@ -10,6 +10,17 @@ const SECTION_LABELS = {
   fermenter: 'Fermenter Additions',
 }
 
+// Keeps the header row visible while scrolling through a ~300-row list.
+// Matches the page background (#f7f5f2, from index.css) so rows scrolling
+// underneath don't show through, plus a shadow so it reads as "on top."
+const stickyHeaderCellStyle = {
+  position: 'sticky',
+  top: 0,
+  background: '#f7f5f2',
+  boxShadow: '0 1px 0 #ddd',
+  zIndex: 1,
+}
+
 // Unleashed's own "Product Group" is the stable classification of what an
 // ingredient IS (kept as-is in unleashed_group, below) — but an ingredient can
 // be USED in more than one recipe section, so this maps a group to the *set*
@@ -269,13 +280,15 @@ export default function IngredientsPage() {
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Unleashed Group</th>
+                <th style={stickyHeaderCellStyle}>Name</th>
+                <th style={stickyHeaderCellStyle}>Unleashed Group</th>
                 {SECTION_ORDER.map((s) => (
-                  <th key={s}>{SECTION_LABELS[s]}</th>
+                  <th key={s} style={stickyHeaderCellStyle}>
+                    {SECTION_LABELS[s]}
+                  </th>
                 ))}
-                <th>Unit</th>
-                <th>Unleashed Code</th>
+                <th style={stickyHeaderCellStyle}>Unit</th>
+                <th style={stickyHeaderCellStyle}>Unleashed Code</th>
               </tr>
             </thead>
             <tbody>
