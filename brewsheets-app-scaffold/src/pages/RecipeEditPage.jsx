@@ -6,6 +6,7 @@ import {
   replaceGristItems,
   replaceWaterAdditions,
   replaceKettleAdditions,
+  replaceWhirlpoolAdditions,
   replaceFermenterAdditions,
   deleteRecipe,
   listIngredients,
@@ -156,6 +157,7 @@ export default function RecipeEditPage() {
   const [grist, setGrist] = useState([])
   const [water, setWater] = useState([])
   const [kettle, setKettle] = useState([])
+  const [whirlpool, setWhirlpool] = useState([])
   const [fermenter, setFermenter] = useState([])
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
@@ -177,7 +179,7 @@ export default function RecipeEditPage() {
   // kettle and fermenter — see the Ingredients page), so this groups by
   // membership rather than a single category.
   const ingredientNamesByCategory = useMemo(() => {
-    const byCategory = { grist: [], water: [], kettle: [], fermenter: [] }
+    const byCategory = { grist: [], water: [], kettle: [], whirlpool: [], fermenter: [] }
     for (const ing of ingredients) {
       for (const section of ing.sections ?? []) {
         if (byCategory[section]) byCategory[section].push(ing.name)
@@ -194,6 +196,7 @@ export default function RecipeEditPage() {
         setGrist(r.recipe_grist_items ?? [])
         setWater(r.recipe_water_additions ?? [])
         setKettle(r.recipe_kettle_additions ?? [])
+        setWhirlpool(r.recipe_whirlpool_additions ?? [])
         setFermenter(r.recipe_fermenter_additions ?? [])
       })
       .catch((e) => setError(e.message))
@@ -245,16 +248,17 @@ export default function RecipeEditPage() {
       // recipe (when editing an existing one) carries the nested arrays that
       // getRecipe()'s embedded select attaches — recipe_grist_items,
       // recipe_water_additions, recipe_kettle_additions,
-      // recipe_fermenter_additions. Those aren't real columns on `recipes`,
-      // so they must be stripped before upserting or PostgREST rejects the
-      // request ("Could not find the 'recipe_fermenter_additions' column of
-      // 'recipes' in the schema cache"). New recipes start from emptyRecipe
-      // and never had these keys, which is why this only shows up editing an
-      // existing recipe.
+      // recipe_whirlpool_additions, recipe_fermenter_additions. Those aren't
+      // real columns on `recipes`, so they must be stripped before upserting
+      // or PostgREST rejects the request ("Could not find the
+      // 'recipe_fermenter_additions' column of 'recipes' in the schema
+      // cache"). New recipes start from emptyRecipe and never had these
+      // keys, which is why this only shows up editing an existing recipe.
       const {
         recipe_grist_items: _rgi,
         recipe_water_additions: _rwa,
         recipe_kettle_additions: _rka,
+        recipe_whirlpool_additions: _rwpa,
         recipe_fermenter_additions: _rfa,
         ...recipeFields
       } = recipe
@@ -278,6 +282,12 @@ export default function RecipeEditPage() {
         kettle
           .filter((k) => k.item_name)
           .map(({ id: _i, recipe_id: _r, ...k }) => cleanBlanks(k))
+      )
+      await replaceWhirlpoolAdditions(
+        saved.id,
+        whirlpool
+          .filter((wp) => wp.item_name)
+          .map(({ id: _i, recipe_id: _r, ...wp }) => cleanBlanks(wp))
       )
       await replaceFermenterAdditions(
         saved.id,
@@ -389,12 +399,24 @@ export default function RecipeEditPage() {
 
       <LineItemsEditor
         title="Kettle Additions"
-        subtitle="Everything added during the boil/whirlpool — hops, whirlfloc, yeast nutrient."
+        subtitle="Everything added during the boil — hops, whirlfloc, yeast nutrient."
         items={kettle}
         setItems={setKettle}
         fields={[
           { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.kettle },
           { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
+          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
+        ]}
+      />
+
+      <LineItemsEditor
+        title="Whirlpool Additions"
+        subtitle="Everything added at knockout/whirlpool — late hop additions, whirlpool-timed items."
+        items={whirlpool}
+        setItems={setWhirlpool}
+        fields={[
+          { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.whirlpool },
+          { key: 'stand_time_min', label: 'Stand time (min)', type: 'number', width: 90 },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
         ]}
       />
