@@ -183,7 +183,7 @@ export async function getBatch(id) {
   const { data, error } = await supabase
     .from('batches')
     .select(
-      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*)), tanks(*), brew_runs(*), fermentation_readings(*), cellar_tasks(*)'
+      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*)), tanks(*), brew_runs(*, brew_run_ingredients(*)), fermentation_readings(*), cellar_tasks(*)'
     )
     .eq('id', id)
     .single()
@@ -222,16 +222,77 @@ export async function deleteBatch(id) {
 
 // ---- Brew runs ----
 
+// Builds this turn's planned/actual ingredient list from the recipe, scaled to this
+// turn's own volume (not the whole batch) — one row per grist/water/kettle/whirlpool/
+// fermenter line. Snapshotted at turn-creation time so a later recipe edit never
+// silently rewrites what a past brew day says it used; actual_qty starts equal to
+// planned_qty and is what the brewer edits for a shortage or substitution.
+function ingredientTimingNote(section, item) {
+  if (section === 'kettle' && item.boil_time_min != null) return `${item.boil_time_min} min`
+  if (section === 'whirlpool' && item.stand_time_min != null) return `${item.stand_time_min} min stand`
+  if (section === 'fermenter' && item.timing_notes) return item.timing_notes
+  return null
+}
+
+export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL) {
+  const sections = [
+    ['grist', recipe.recipe_grist_items ?? [], 'ingredient_name'],
+    ['water', recipe.recipe_water_additions ?? [], 'additive_name'],
+    ['kettle', recipe.recipe_kettle_additions ?? [], 'item_name'],
+    ['whirlpool', recipe.recipe_whirlpool_additions ?? [], 'item_name'],
+    ['fermenter', recipe.recipe_fermenter_additions ?? [], 'item_name'],
+  ]
+  const rows = []
+  let sortOrder = 0
+  for (const [section, items, nameKey] of sections) {
+    for (const item of items) {
+      const qty = item.qty_g_per_l != null ? item.qty_g_per_l * turnVolumeL : null
+      rows.push({
+        brew_run_id: brewRunId,
+        section,
+        addition_stage: section === 'water' ? item.addition_stage ?? null : null,
+        timing_note: ingredientTimingNote(section, item),
+        item_name: item[nameKey],
+        planned_qty: qty,
+        actual_qty: qty,
+        sort_order: sortOrder++,
+      })
+    }
+  }
+  if (rows.length === 0) return
+  const { error } = await supabase.from('brew_run_ingredients').insert(rows)
+  if (error) throw error
+}
+
+// Edits a single planned/actual ingredient row — item_name (substitution), actual_qty
+// (shortage/overage), or extra_notes. Plain .update(), never touches planned_qty.
+export async function updateBrewRunIngredient(id, fields) {
+  const { data, error } = await supabase
+    .from('brew_run_ingredients')
+    .update(fields)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 // Creates `turnQuantity` blank brew_runs rows (run_number 1..N) in one go, right
-// after a batch is created by the Add Brew wizard — one row per brewhouse turn,
-// ready for each turn's step-gated stages to be filled in independently.
-export async function initializeBrewRuns(batchId, turnQuantity) {
+// after a batch is created by the Add Brew wizard — one row per brewhouse turn — then
+// snapshots each turn's ingredient list from the recipe. `recipe` must be the FULL
+// recipe (from getRecipe, with its nested ingredient arrays), not the bare listRecipes()
+// shape.
+export async function initializeBrewRuns(batchId, turnQuantity, recipe, turnVolumeL) {
   const rows = Array.from({ length: turnQuantity }, (_, i) => ({
     batch_id: batchId,
     run_number: i + 1,
   }))
-  const { error } = await supabase.from('brew_runs').insert(rows)
+  const { data: runs, error } = await supabase.from('brew_runs').insert(rows).select()
   if (error) throw error
+  for (const run of runs) {
+    await snapshotBrewRunIngredients(run.id, recipe, turnVolumeL)
+  }
+  return runs
 }
 
 // Same reasoning as upsertBatch above — routes to a real .update() when `id`
