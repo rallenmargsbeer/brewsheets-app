@@ -345,6 +345,7 @@ function ScaledIngredients({ recipe, volumeL }) {
     { title: 'Grist / Malt Bill', items: recipe.recipe_grist_items ?? [], nameKey: 'ingredient_name' },
     { title: 'Water Chemistry', items: recipe.recipe_water_additions ?? [], nameKey: 'additive_name' },
     { title: 'Kettle Additions', items: recipe.recipe_kettle_additions ?? [], nameKey: 'item_name' },
+    { title: 'Whirlpool Additions', items: recipe.recipe_whirlpool_additions ?? [], nameKey: 'item_name' },
     { title: 'Fermenter Additions', items: recipe.recipe_fermenter_additions ?? [], nameKey: 'item_name' },
   ]
 
