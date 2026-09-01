@@ -173,11 +173,20 @@ export default function IngredientsPage() {
     [ingredients]
   )
 
-  const filtered = ingredients.filter((i) => {
-    if (categoryFilter && i.category !== categoryFilter) return false
-    if (search && !i.name.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
+  // Default sort: grouped by category in recipe-flow order (Grist, Water,
+  // Kettle, Fermenter, then Uncategorized last), alphabetical by name within
+  // each group — makes a ~300-row list actually navigable.
+  const filtered = ingredients
+    .filter((i) => {
+      if (categoryFilter && i.category !== categoryFilter) return false
+      if (search && !i.name.toLowerCase().includes(search.toLowerCase())) return false
+      return true
+    })
+    .sort((a, b) => {
+      const categoryDiff = CATEGORY_OPTIONS.indexOf(a.category) - CATEGORY_OPTIONS.indexOf(b.category)
+      if (categoryDiff !== 0) return categoryDiff
+      return a.name.localeCompare(b.name)
+    })
 
   return (
     <div>
