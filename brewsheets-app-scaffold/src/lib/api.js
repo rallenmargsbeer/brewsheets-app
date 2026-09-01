@@ -191,12 +191,26 @@ export async function getBatch(id) {
   return data
 }
 
+// Not a plain .upsert() on purpose: Postgres validates NOT NULL constraints
+// against the *proposed insert row* of an upsert before it ever gets to the
+// ON CONFLICT DO UPDATE path — so a partial payload like { id, turn_quantity }
+// (e.g. bumping just one field on an existing batch) fails with "null value in
+// column ... violates not-null constraint" even though it's really just an
+// update. Routing to a real .update() when `id` is present avoids that
+// entirely, while still supporting a plain .insert() for brand-new rows.
 export async function upsertBatch(batch) {
-  const { data, error } = await supabase
-    .from('batches')
-    .upsert(batch)
-    .select()
-    .single()
+  if (batch.id) {
+    const { id, ...fields } = batch
+    const { data, error } = await supabase
+      .from('batches')
+      .update(fields)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  }
+  const { data, error } = await supabase.from('batches').insert(batch).select().single()
   if (error) throw error
   return data
 }
@@ -220,12 +234,22 @@ export async function initializeBrewRuns(batchId, turnQuantity) {
   if (error) throw error
 }
 
+// Same reasoning as upsertBatch above — routes to a real .update() when `id`
+// is present so a partial payload (e.g. reopenStage's { id, mash_confirmed_at:
+// null }) doesn't trip brew_runs' batch_id/run_number NOT NULL constraints.
 export async function upsertBrewRun(run) {
-  const { data, error } = await supabase
-    .from('brew_runs')
-    .upsert(run)
-    .select()
-    .single()
+  if (run.id) {
+    const { id, ...fields } = run
+    const { data, error } = await supabase
+      .from('brew_runs')
+      .update(fields)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  }
+  const { data, error } = await supabase.from('brew_runs').insert(run).select().single()
   if (error) throw error
   return data
 }
