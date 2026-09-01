@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { listIngredients, importIngredients, updateIngredientSections } from '../lib/api'
 
 // Recipe-flow order — also used for the default sort/grouping below.
-const SECTION_ORDER = ['grist', 'water', 'kettle', 'fermenter']
+const SECTION_ORDER = ['grist', 'water', 'kettle', 'whirlpool', 'fermenter']
 const SECTION_LABELS = {
   grist: 'Grist / Malt Bill',
   water: 'Water Chemistry',
   kettle: 'Kettle Additions',
+  whirlpool: 'Whirlpool Additions',
   fermenter: 'Fermenter Additions',
 }
 
@@ -24,15 +25,16 @@ const stickyHeaderCellStyle = {
 // Unleashed's own "Product Group" is the stable classification of what an
 // ingredient IS (kept as-is in unleashed_group, below) — but an ingredient can
 // be USED in more than one recipe section, so this maps a group to the *set*
-// of sections it should default into. Hops go in both Kettle Additions
-// (boil/whirlpool) and Fermenter Additions (dry hop); Salt (which covers
-// things like Lactic Acid in Ryan's Unleashed data) covers both Water
-// Chemistry and kettle-stage acid/salt additions. "Other Raw Material" is too
-// mixed a bucket (whirlfloc, yeast nutrient, CIP chemicals, purees, ...) to
-// default anywhere — those start unassigned and get sorted by hand below.
+// of sections it should default into. Hops go in Kettle Additions (boil),
+// Whirlpool Additions (knockout/late additions), and Fermenter Additions (dry
+// hop); Salt (which covers things like Lactic Acid in Ryan's Unleashed data)
+// covers both Water Chemistry and kettle-stage acid/salt additions. "Other Raw
+// Material" is too mixed a bucket (whirlfloc, yeast nutrient, CIP chemicals,
+// purees, ...) to default anywhere — those start unassigned and get sorted by
+// hand below.
 function mapUnleashedGroupToSections(group) {
   const g = (group || '').trim().toLowerCase()
-  if (g === 'hops') return ['kettle', 'fermenter']
+  if (g === 'hops') return ['kettle', 'whirlpool', 'fermenter']
   if (g === 'malt') return ['grist']
   if (g === 'yeast') return ['fermenter']
   if (g === 'salt') return ['water', 'kettle']
