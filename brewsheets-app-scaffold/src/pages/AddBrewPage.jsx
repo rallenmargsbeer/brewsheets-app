@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listRecipes, listBatches, upsertBatch, initializeBrewRuns } from '../lib/api'
+import { listRecipes, getRecipe, listBatches, upsertBatch, initializeBrewRuns } from '../lib/api'
 
 // Fixed brewhouse turn sizes — tell me the values to use if this ever changes.
 const TURN_VOLUMES = [
@@ -82,6 +82,10 @@ export default function AddBrewPage() {
     try {
       const batchNumber = await suggestNextBatchNumber()
       const recipe = recipes.find((r) => r.id === recipeId)
+      // Full recipe (with its nested grist/water/kettle/whirlpool/fermenter arrays) is
+      // needed to snapshot each turn's planned ingredient amounts — listRecipes() above
+      // only has the bare name/style fields used for the dropdown.
+      const fullRecipe = await getRecipe(recipeId)
       const batch = await upsertBatch({
         recipe_id: recipeId,
         batch_number: batchNumber,
@@ -92,7 +96,7 @@ export default function AddBrewPage() {
         turn_quantity: turnQuantity,
         target_volume_l: turnVolumeL * turnQuantity,
       })
-      await initializeBrewRuns(batch.id, turnQuantity)
+      await initializeBrewRuns(batch.id, turnQuantity, fullRecipe, turnVolumeL)
       navigate(`/batches/${batch.id}`)
     } catch (e) {
       setError(e.message)
