@@ -138,10 +138,11 @@ export async function importIngredients(rows) {
   const updated = rows.filter((r) => existingSectionsByCode.has(r.unleashed_code)).length
   return { inserted: rows.length - updated, updated }
 }
-export async function updateIngredientPotentialPpg(id, potentialPpg) {
+
+export async function updateIngredientAlphaAcid(id, alphaAcidPct) {
   const { data, error } = await supabase
     .from('ingredients')
-    .update({ potential_ppg: potentialPpg })
+    .update({ alpha_acid_pct: alphaAcidPct })
     .eq('id', id)
     .select()
     .single()
@@ -278,7 +279,6 @@ export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL,
         planned_qty: qty,
         actual_qty: qty,
         bag_count: bagCount,
-        alpha_acid_pct: (section === 'kettle' || section === 'whirlpool') ? item.alpha_acid_pct ?? null : null,
         time_min: timeMin,
         sort_order: sortOrder++,
       })
