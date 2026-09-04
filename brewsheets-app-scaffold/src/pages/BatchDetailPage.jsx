@@ -68,22 +68,24 @@ function calcMashEfficiency(gristItems, potentialPpgByName, preboilGravity, preb
   return (actualPoints / potentialPoints) * 100
 }
 
-// Tinseth IBU estimate. hopItems is kettle + whirlpool brew_run_ingredients rows — each one
-// only contributes if it was actually given an Alpha Acid % on the recipe (Irish
-// Moss/whirlfloc-type rows are left blank there and are correctly skipped here). Whirlpool
-// hops use the same formula with their (shorter) stand time in the boil-time factor, which is
-// what gives them reduced utilization relative to a full boil — no separate whirlpool-specific
-// temperature model, per how this was scoped with Ryan.
-function calcIBU(hopItems, boilGravity, batchVolumeL) {
+// Tinseth IBU estimate. hopItems is kettle + whirlpool brew_run_ingredients rows; alphaAcidByName
+// maps an ingredient's name (as entered on the recipe line) to the Alpha Acid % set for it on
+// the Ingredients page — only items with a match contribute (Irish Moss/whirlfloc-type rows
+// have no Alpha Acid % on file and are correctly skipped). Whirlpool hops use the same formula
+// with their (shorter) stand time in the boil-time factor, which is what gives them reduced
+// utilization relative to a full boil — no separate whirlpool-specific temperature model, per
+// how this was scoped with Ryan.
+function calcIBU(hopItems, alphaAcidByName, boilGravity, batchVolumeL) {
   if (boilGravity == null || boilGravity === '' || !batchVolumeL) return null
   const volumeGal = Number(batchVolumeL) * L_TO_GAL
   let total = 0
   let matchedAny = false
   for (const item of hopItems) {
     const weightG = item.actual_qty ?? item.planned_qty
-    if (!weightG || !item.alpha_acid_pct || item.time_min == null) continue
+    const alphaAcidPct = alphaAcidByName.get(item.item_name)
+    if (!weightG || alphaAcidPct == null || item.time_min == null) continue
     const weightOz = (weightG / 1000) * KG_TO_LB * 16
-    const aaDecimal = item.alpha_acid_pct / 100
+    const aaDecimal = alphaAcidPct / 100
     const bignessFactor = 1.65 * Math.pow(0.000125, Number(boilGravity) - 1)
     const boilTimeFactor = (1 - Math.exp(-0.04 * Number(item.time_min))) / 4.15
     const utilization = bignessFactor * boilTimeFactor
@@ -456,8 +458,10 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
   const mashEfficiencyPct = calcMashEfficiency(gristItems, potentialPpgByName, form.preboil_gravity, form.preboil_volume_l)
 
   // IBU (Tinseth estimate): kettle + whirlpool hops, using post-boil gravity/volume as the
-  // batch reference point.
-  const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], form.postboil_gravity, form.postboil_volume_l)
+  // batch reference point. Alpha Acid % is looked up live from the Ingredients master list,
+  // same as Potential PPG above — it's an ingredient property, not a recipe-line one.
+  const alphaAcidByName = new Map(masterIngredients.map((i) => [i.name, i.alpha_acid_pct]).filter(([, aa]) => aa != null))
+  const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], alphaAcidByName, form.postboil_gravity, form.postboil_volume_l)
 
   return (
     <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
