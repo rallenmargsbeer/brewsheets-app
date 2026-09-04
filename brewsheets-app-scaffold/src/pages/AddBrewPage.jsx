@@ -64,11 +64,90 @@ async function suggestNextBatchNumber() {
   return String(next)
 }
 
+// Spreads `totalBags` (rounded to the nearest whole bag) as evenly as possible across
+// `turnQuantity` turns — just a starting point for the Allocate Grist Bags grid below,
+// not a rule; every cell stays freely editable to match how bags actually get split.
+function evenBagSplit(totalBags, turnQuantity) {
+  const whole = Math.max(0, Math.round(totalBags))
+  const base = Math.floor(whole / turnQuantity)
+  const remainder = whole - base * turnQuantity
+  return Array.from({ length: turnQuantity }, (_, i) => base + (i < remainder ? 1 : 0))
+}
+
+// One row per bagged grist item (pack_size_kg set), one column per turn. Shown only when
+// the recipe has at least one such item — otherwise Add Brew behaves exactly as before.
+function BagAllocationStep({ items, turnVolumeL, turnQuantity, allocations, setAllocations, onCreate, creating }) {
+  function setCount(itemId, turnIndex, value) {
+    setAllocations((prev) => {
+      const row = prev[itemId] ? [...prev[itemId]] : Array(turnQuantity).fill(0)
+      row[turnIndex] = value === '' ? 0 : Number(value)
+      return { ...prev, [itemId]: row }
+    })
+  }
+
+  return (
+    <div>
+      <p style={{ color: '#666', fontSize: '0.85rem', marginTop: 0 }}>
+        These ingredients are bought by the bag — say how many bags of each go in every turn. The
+        even split below is just a starting point; edit any cell to match how you're actually
+        splitting them. Small mismatches against "needed" are fine — Actual on the brew day itself
+        is where that gets reconciled.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left' }}>Ingredient</th>
+            <th style={{ textAlign: 'left' }}>Allocated / Needed</th>
+            {Array.from({ length: turnQuantity }, (_, i) => (
+              <th key={i}>Turn {i + 1}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const totalKg = ((item.qty_g_per_l ?? 0) * turnVolumeL * turnQuantity) / 1000
+            const bagsNeeded = item.pack_size_kg ? totalKg / item.pack_size_kg : 0
+            const row = allocations[item.id] ?? Array(turnQuantity).fill(0)
+            const allocated = row.reduce((sum, v) => sum + (Number(v) || 0), 0)
+            const matches = Math.round(allocated) === Math.round(bagsNeeded)
+            return (
+              <tr key={item.id}>
+                <td>{item.ingredient_name}</td>
+                <td style={{ color: matches ? '#1a7a1a' : '#a66a00' }}>
+                  {allocated} / {bagsNeeded.toFixed(1)} bags
+                </td>
+                {row.map((count, i) => (
+                  <td key={i}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={count}
+                      onChange={(e) => setCount(item.id, i, e.target.value)}
+                      style={{ width: 60 }}
+                    />
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <button onClick={onCreate} disabled={creating} style={{ marginTop: '0.75rem' }}>
+        {creating ? '…' : 'Create Brew'}
+      </button>
+    </div>
+  )
+}
+
 export default function AddBrewPage() {
   const navigate = useNavigate()
   const [recipes, setRecipes] = useState([])
   const [recipeId, setRecipeId] = useState('')
+  const [fullRecipe, setFullRecipe] = useState(null)
   const [turnVolumeL, setTurnVolumeL] = useState(null)
+  const [turnQuantity, setTurnQuantity] = useState(null)
+  const [allocations, setAllocations] = useState({})
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
 
@@ -76,16 +155,26 @@ export default function AddBrewPage() {
     listRecipes().then(setRecipes).catch((e) => setError(e.message))
   }, [])
 
-  async function pickTurnQuantity(turnQuantity) {
+  // Full recipe (with nested grist/water/kettle/whirlpool/fermenter arrays) is needed as
+  // soon as a recipe is picked — both to snapshot ingredients at creation time and, now,
+  // to know upfront whether any grist line has a pack size (which decides whether the
+  // Allocate Grist Bags step appears at all).
+  useEffect(() => {
+    if (!recipeId) {
+      setFullRecipe(null)
+      return
+    }
+    getRecipe(recipeId).then(setFullRecipe).catch((e) => setError(e.message))
+  }, [recipeId])
+
+  const baggedGristItems = (fullRecipe?.recipe_grist_items ?? []).filter((g) => g.pack_size_kg > 0)
+
+  async function createBrew(quantity, bagAllocations) {
     setCreating(true)
     setError(null)
     try {
       const batchNumber = await suggestNextBatchNumber()
       const recipe = recipes.find((r) => r.id === recipeId)
-      // Full recipe (with its nested grist/water/kettle/whirlpool/fermenter arrays) is
-      // needed to snapshot each turn's planned ingredient amounts — listRecipes() above
-      // only has the bare name/style fields used for the dropdown.
-      const fullRecipe = await getRecipe(recipeId)
       const batch = await upsertBatch({
         recipe_id: recipeId,
         batch_number: batchNumber,
@@ -93,15 +182,34 @@ export default function AddBrewPage() {
         status: 'brewing',
         date_brewed: new Date().toISOString().slice(0, 10),
         turn_volume_l: turnVolumeL,
-        turn_quantity: turnQuantity,
-        target_volume_l: turnVolumeL * turnQuantity,
+        turn_quantity: quantity,
+        target_volume_l: turnVolumeL * quantity,
       })
-      await initializeBrewRuns(batch.id, turnQuantity, fullRecipe, turnVolumeL)
+      await initializeBrewRuns(batch.id, quantity, fullRecipe, turnVolumeL, bagAllocations)
       navigate(`/batches/${batch.id}`)
     } catch (e) {
       setError(e.message)
       setCreating(false)
     }
+  }
+
+  // Picking a turn quantity no longer creates the batch straight away — if the recipe has
+  // bagged grist items, an Allocate Grist Bags step comes first. Otherwise this behaves
+  // exactly as before.
+  function pickTurnQuantity(quantity) {
+    setTurnQuantity(quantity)
+    if (baggedGristItems.length === 0) {
+      createBrew(quantity, {})
+      return
+    }
+    const seeded = Object.fromEntries(
+      baggedGristItems.map((item) => {
+        const totalKg = ((item.qty_g_per_l ?? 0) * turnVolumeL * quantity) / 1000
+        const bagsNeeded = item.pack_size_kg ? totalKg / item.pack_size_kg : 0
+        return [item.id, evenBagSplit(bagsNeeded, quantity)]
+      })
+    )
+    setAllocations(seeded)
   }
 
   return (
@@ -119,6 +227,8 @@ export default function AddBrewPage() {
           onChange={(e) => {
             setRecipeId(e.target.value)
             setTurnVolumeL(null)
+            setTurnQuantity(null)
+            setAllocations({})
           }}
           style={{ width: '100%' }}
         >
@@ -137,7 +247,11 @@ export default function AddBrewPage() {
             <button
               key={v.label}
               className={turnVolumeL === v.litres ? '' : 'secondary'}
-              onClick={() => setTurnVolumeL(v.litres)}
+              onClick={() => {
+                setTurnVolumeL(v.litres)
+                setTurnQuantity(null)
+                setAllocations({})
+              }}
             >
               {v.label}
             </button>
@@ -160,6 +274,20 @@ export default function AddBrewPage() {
           </p>
         )}
       </StepCard>
+
+      {turnQuantity != null && baggedGristItems.length > 0 && (
+        <StepCard number={4} title="Allocate Grist Bags" active>
+          <BagAllocationStep
+            items={baggedGristItems}
+            turnVolumeL={turnVolumeL}
+            turnQuantity={turnQuantity}
+            allocations={allocations}
+            setAllocations={setAllocations}
+            onCreate={() => createBrew(turnQuantity, allocations)}
+            creating={creating}
+          />
+        </StepCard>
+      )}
     </div>
   )
 }
