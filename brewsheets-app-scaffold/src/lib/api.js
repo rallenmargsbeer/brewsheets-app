@@ -138,7 +138,16 @@ export async function importIngredients(rows) {
   const updated = rows.filter((r) => existingSectionsByCode.has(r.unleashed_code)).length
   return { inserted: rows.length - updated, updated }
 }
-
+export async function updateIngredientPotentialPpg(id, potentialPpg) {
+  const { data, error } = await supabase
+    .from('ingredients')
+    .update({ potential_ppg: potentialPpg })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
 export async function updateIngredientSections(id, sections) {
   const { data, error } = await supabase
     .from('ingredients')
@@ -258,6 +267,8 @@ export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL,
         bagCount = bagCounts[item.id]
         qty = bagCount * item.pack_size_kg * 1000
       }
+      const timeMin =
+        section === 'kettle' ? item.boil_time_min ?? null : section === 'whirlpool' ? item.stand_time_min ?? null : null
       rows.push({
         brew_run_id: brewRunId,
         section,
@@ -267,6 +278,8 @@ export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL,
         planned_qty: qty,
         actual_qty: qty,
         bag_count: bagCount,
+        alpha_acid_pct: (section === 'kettle' || section === 'whirlpool') ? item.alpha_acid_pct ?? null : null,
+        time_min: timeMin,
         sort_order: sortOrder++,
       })
     }
