@@ -1,0 +1,9 @@
+-- Grist bag allocation: pack size per recipe grist line, and the resulting bag count
+-- snapshotted per turn. Already applied directly to the live database via Supabase MCP
+-- (2026-09-04) — this file exists purely so the repo's migration history matches.
+
+alter table recipe_grist_items
+  add column pack_size_kg numeric(6,2);   -- null = not bagged, behaves exactly as before
+
+alter table brew_run_ingredients
+  add column bag_count numeric(6,2);      -- null unless this row was bag-allocated
