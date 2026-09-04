@@ -105,7 +105,7 @@ function TimeButton({ runId, fieldKey, label, value, onSaved, autoFillKey, durat
   }
 
   const display = value
-    ? new Date(value).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    ? new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     : null
 
   return (
@@ -173,9 +173,20 @@ function IngredientList({ title, items, onSaved }) {
   )
 }
 
+// Malt (grist) and hop additions (kettle/whirlpool) are entered/edited in Kg
+// rather than grams — everything else (water chemistry, fermenter additions)
+// stays in grams, since those are typically trace amounts. planned_qty/
+// actual_qty are always stored in grams underneath either way.
+function usesKg(section) {
+  return section === 'grist' || section === 'kettle' || section === 'whirlpool'
+}
+
 function IngredientRow({ item, onSaved }) {
+  const kg = usesKg(item.section)
+  const toDisplay = (g) => (g == null ? '' : kg ? +(g / 1000).toFixed(3) : g)
+
   const [name, setName] = useState(item.item_name)
-  const [actual, setActual] = useState(item.actual_qty ?? '')
+  const [actual, setActual] = useState(toDisplay(item.actual_qty))
   const [saving, setSaving] = useState(false)
 
   async function saveName() {
@@ -190,7 +201,7 @@ function IngredientRow({ item, onSaved }) {
   }
 
   async function saveActual() {
-    const value = actual === '' ? null : Number(actual)
+    const value = actual === '' ? null : Number(actual) * (kg ? 1000 : 1)
     if (value === item.actual_qty) return
     setSaving(true)
     try {
@@ -213,12 +224,14 @@ function IngredientRow({ item, onSaved }) {
       <td>
         <input
           type="number"
+          step={kg ? '0.001' : '1'}
           value={actual}
           onChange={(e) => setActual(e.target.value)}
           onBlur={saveActual}
           style={{ width: 90, ...(changed ? { borderColor: '#a66a00' } : {}) }}
           disabled={saving}
         />
+        <span style={{ marginLeft: '0.25rem', fontSize: '0.75rem', color: '#888' }}>{kg ? 'kg' : 'g'}</span>
       </td>
     </tr>
   )
@@ -395,17 +408,16 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
                       value={strikeVolumeL != null ? strikeVolumeL.toFixed(0) : null}
                       unit="L"
                     />
+                    <TargetValue label="Target Mash pH" value={recipe?.target_mash_ph} unit="" />
                     <TargetValue label="Mash Step 1" value={recipe?.mash_step_1_temp} unit="°C" />
                     <TargetValue label="Mash Step 2" value={recipe?.mash_step_2_temp} unit="°C" />
                     <TargetValue label="Mash Step 3" value={recipe?.mash_step_3_temp} unit="°C" />
                     <TargetValue label="Mash Out" value={recipe?.mash_out_temp} unit="°C" />
                   </div>
                   {fld('strike_temp', 'Strike Temp', 'number', 110)}
-                  {fld('mash_water_l', 'Mash H2O (L)', 'number', 120)}
+                  {fld('mash_water_l', 'Actual Strike Volume (L)', 'number', 140)}
                   {fld('mash_temp', 'Mash Temp', 'number', 110)}
                   {fld('mash_ph', 'Mash pH', 'number', 100)}
-                  {fld('flowmeter_target_l', 'Flowmeter Target (L)', 'number', 140)}
-                  {fld('flowmeter_actual_l', 'Flowmeter Actual (L)', 'number', 140)}
                   <div style={{ marginTop: '0.5rem' }}>
                     <TimeButton
                       runId={form.id}
@@ -432,13 +444,6 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
               {s.key === 'lauter' && (
                 <>
                   <div style={{ marginTop: '0.5rem' }}>
-                    <TimeButton
-                      runId={form.id}
-                      fieldKey="vorlauf_start_time"
-                      label="Vorlauf Start"
-                      value={form.vorlauf_start_time}
-                      onSaved={applySaved}
-                    />
                     <TimeButton
                       runId={form.id}
                       fieldKey="lauter_start_time"
@@ -519,36 +524,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
                     />
                   </div>
                   {fld('ko_flowmeter_l', 'Flowmeter (L)', 'number', 120)}
-                  {fld('correction_l', 'Correction (L)', 'number', 120)}
                   {fld('whirlpool_gravity', 'Gravity', 'number', 110)}
                   {fld('whirlpool_ph', 'pH', 'number', 100)}
-                  {fld('brewhouse_efficiency', 'Brewhouse Efficiency %', 'number', 160)}
-                  <label style={{ display: 'inline-block', marginRight: '0.75rem' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#555' }}>O2 Check</div>
-                    {confirmed ? (
-                      <div>
-                        {form.whirlpool_o2_check === true
-                          ? 'Yes'
-                          : form.whirlpool_o2_check === false
-                          ? 'No'
-                          : '—'}
-                      </div>
-                    ) : (
-                      <select
-                        value={form.whirlpool_o2_check === true ? 'yes' : form.whirlpool_o2_check === false ? 'no' : ''}
-                        onChange={(e) =>
-                          set(
-                            'whirlpool_o2_check',
-                            e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null
-                          )
-                        }
-                      >
-                        <option value="">—</option>
-                        <option value="yes">Yes</option>
-                        <option value="no">No</option>
-                      </select>
-                    )}
-                  </label>
                   <IngredientList title="Whirlpool Additions" items={whirlpoolItems} onSaved={onSaved} />
                 </>
               )}
@@ -560,19 +537,12 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
                   confirmStage(
                     s,
                     s.key === 'mash'
-                      ? ['strike_temp', 'mash_water_l', 'mash_temp', 'mash_ph', 'flowmeter_target_l', 'flowmeter_actual_l']
+                      ? ['strike_temp', 'mash_water_l', 'mash_temp', 'mash_ph']
                       : s.key === 'lauter'
                       ? ['first_runnings_gravity', 'last_runnings_gravity']
                       : s.key === 'boil'
                       ? ['preboil_volume_l', 'preboil_gravity', 'postboil_volume_l', 'postboil_gravity']
-                      : [
-                          'ko_flowmeter_l',
-                          'correction_l',
-                          'whirlpool_gravity',
-                          'whirlpool_ph',
-                          'brewhouse_efficiency',
-                          'whirlpool_o2_check',
-                        ]
+                      : ['ko_flowmeter_l', 'whirlpool_gravity', 'whirlpool_ph']
                   )
                 }
                 disabled={saving}
@@ -776,6 +746,26 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
 
   return (
     <div>
+      {/* Fixed to the viewport (not the page) — stays halfway up the screen as you
+          scroll, so a turn is always one tap away regardless of where you are on the
+          brewsheet. Labelled with the turn they'd take you to; hidden at either end. */}
+      {activeTurn > 1 && (
+        <button
+          onClick={() => setActiveTurn(activeTurn - 1)}
+          style={{ position: 'fixed', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}
+        >
+          ← Turn {activeTurn - 1}
+        </button>
+      )}
+      {activeTurn < turnCount && (
+        <button
+          onClick={() => setActiveTurn(activeTurn + 1)}
+          style={{ position: 'fixed', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}
+        >
+          Turn {activeTurn + 1} →
+        </button>
+      )}
+
       <h1>Batch {batch.batch_number}</h1>
       <p style={{ color: '#666' }}>
         {batch.recipes?.name} — {batch.recipes?.style}
