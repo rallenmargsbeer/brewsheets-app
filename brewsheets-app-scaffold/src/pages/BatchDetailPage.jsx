@@ -5,6 +5,7 @@ import {
   upsertBatch,
   deleteBatch,
   listTanks,
+  listIngredients,
   upsertBrewRun,
   snapshotBrewRunIngredients,
   updateBrewRunIngredient,
@@ -36,6 +37,61 @@ const MAX_TURNS_PER_TANK = 4
 // equipment losses, not something that depends on the recipe. Ryan supplied these directly;
 // update here if the brewhouse's water balance changes or a new turn size is added.
 const TOTAL_WATER_L = { 1000: 1360, 1500: 2040, 2500: 3400 }
+
+// Metric-to-imperial constants — these two calculators (Mash Efficiency, IBU) are built on
+// brewing-industry formulas that are conventionally expressed in lb/gallon; the app itself
+// stays metric everywhere else, so the conversion only happens inside the math below and is
+// never shown to Ryan.
+const KG_TO_LB = 2.20462
+const L_TO_GAL = 0.264172
+
+// Mash/kettle efficiency (Brewer's Friend convention): what fraction of the grain bill's
+// potential extract actually made it into the kettle, judged from pre-boil gravity/volume.
+// potentialPpgByName maps a grist item's name (as typed on the recipe) to the Potential PPG
+// entered for it on the Ingredients page — only items with a match contribute; if none of a
+// turn's grist items have a Potential PPG on file, this returns null (shown as "—") rather
+// than a misleadingly partial number.
+function calcMashEfficiency(gristItems, potentialPpgByName, preboilGravity, preboilVolumeL) {
+  if (preboilGravity == null || preboilGravity === '' || !preboilVolumeL) return null
+  let potentialPoints = 0
+  let matchedAny = false
+  for (const item of gristItems) {
+    const kg = (item.actual_qty ?? item.planned_qty ?? 0) / 1000
+    const ppg = potentialPpgByName.get(item.item_name)
+    if (kg > 0 && ppg != null) {
+      potentialPoints += kg * KG_TO_LB * ppg
+      matchedAny = true
+    }
+  }
+  if (!matchedAny || potentialPoints === 0) return null
+  const actualPoints = 1000 * (Number(preboilGravity) - 1) * (Number(preboilVolumeL) * L_TO_GAL)
+  return (actualPoints / potentialPoints) * 100
+}
+
+// Tinseth IBU estimate. hopItems is kettle + whirlpool brew_run_ingredients rows — each one
+// only contributes if it was actually given an Alpha Acid % on the recipe (Irish
+// Moss/whirlfloc-type rows are left blank there and are correctly skipped here). Whirlpool
+// hops use the same formula with their (shorter) stand time in the boil-time factor, which is
+// what gives them reduced utilization relative to a full boil — no separate whirlpool-specific
+// temperature model, per how this was scoped with Ryan.
+function calcIBU(hopItems, boilGravity, batchVolumeL) {
+  if (boilGravity == null || boilGravity === '' || !batchVolumeL) return null
+  const volumeGal = Number(batchVolumeL) * L_TO_GAL
+  let total = 0
+  let matchedAny = false
+  for (const item of hopItems) {
+    const weightG = item.actual_qty ?? item.planned_qty
+    if (!weightG || !item.alpha_acid_pct || item.time_min == null) continue
+    const weightOz = (weightG / 1000) * KG_TO_LB * 16
+    const aaDecimal = item.alpha_acid_pct / 100
+    const bignessFactor = 1.65 * Math.pow(0.000125, Number(boilGravity) - 1)
+    const boilTimeFactor = (1 - Math.exp(-0.04 * Number(item.time_min))) / 4.15
+    const utilization = bignessFactor * boilTimeFactor
+    total += (weightOz * aaDecimal * utilization * 7489) / volumeGal
+    matchedAny = true
+  }
+  return matchedAny ? total : null
+}
 
 // The 4 gated brew-day stages, in order. Each one's confirmedField is a
 // brew_runs timestamp column — set it and the stage locks (read-only) and the
@@ -289,7 +345,7 @@ function IngredientRow({ item, onSaved }) {
   )
 }
 
-function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) {
+function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, ingredients, onSaved }) {
   const [form, setForm] = useState(() => seedForm(batchId, runNumber, run))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -391,6 +447,17 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
   const spargeAddedL = Number(form.sparge_added_l) || 0
   const spargeRequiredL =
     totalWaterL != null && strikeForSparge != null ? totalWaterL - strikeForSparge - spargeAddedL : null
+
+  // Mash Efficiency: pre-boil gravity/volume vs. the grain bill's potential extract (Potential
+  // PPG, set per-ingredient on the Ingredients page). Whichever's typed into the Boil fields
+  // right now, before Confirm & Continue — same "live as you type" treatment as Target Strike
+  // Volume/Sparge Water Required above.
+  const potentialPpgByName = new Map(ingredients.map((i) => [i.name, i.potential_ppg]).filter(([, ppg]) => ppg != null))
+  const mashEfficiencyPct = calcMashEfficiency(gristItems, potentialPpgByName, form.preboil_gravity, form.preboil_volume_l)
+
+  // IBU (Tinseth estimate): kettle + whirlpool hops, using post-boil gravity/volume as the
+  // batch reference point.
+  const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], form.postboil_gravity, form.postboil_volume_l)
 
   return (
     <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
@@ -550,8 +617,13 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
 
               {s.key === 'boil' && (
                 <>
-                  <div style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                     <TargetValue label="Target Pre-Boil Gravity" value={recipe?.target_preboil_gravity} unit="" />
+                    <TargetValue
+                      label="Mash Efficiency (est.)"
+                      value={mashEfficiencyPct != null ? mashEfficiencyPct.toFixed(0) : null}
+                      unit="%"
+                    />
                   </div>
                   <div style={{ marginTop: '0.5rem' }}>
                     <TimeButton
@@ -582,9 +654,14 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
 
               {s.key === 'knockout' && (
                 <>
-                  {recipe?.ko_temp != null && (
-                    <div style={{ marginBottom: '0.75rem' }}>
-                      <TargetValue label="Target KO Temp" value={recipe.ko_temp} unit="°C" />
+                  {(recipe?.ko_temp != null || estimatedIBU != null) && (
+                    <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                      {recipe?.ko_temp != null && <TargetValue label="Target KO Temp" value={recipe.ko_temp} unit="°C" />}
+                      <TargetValue
+                        label="IBU (est., Tinseth)"
+                        value={estimatedIBU != null ? estimatedIBU.toFixed(0) : null}
+                        unit=""
+                      />
                     </div>
                   )}
                   <div style={{ marginTop: '0.5rem' }}>
@@ -734,14 +811,16 @@ export default function BatchDetailPage() {
   const navigate = useNavigate()
   const [batch, setBatch] = useState(null)
   const [tanks, setTanks] = useState([])
+  const [ingredients, setIngredients] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   function refresh() {
-    Promise.all([getBatch(id), listTanks()])
-      .then(([b, t]) => {
+    Promise.all([getBatch(id), listTanks(), listIngredients()])
+      .then(([b, t, i]) => {
         setBatch(b)
         setTanks(t)
+        setIngredients(i)
       })
       .finally(() => setLoading(false))
   }
@@ -795,10 +874,21 @@ export default function BatchDetailPage() {
 
   if (loading || !batch) return <p>Loading…</p>
 
-  return <BatchDetailContent batch={batch} tanks={tanks} set={set} save={save} saving={saving} remove={remove} refresh={refresh} />
+  return (
+    <BatchDetailContent
+      batch={batch}
+      tanks={tanks}
+      ingredients={ingredients}
+      set={set}
+      save={save}
+      saving={saving}
+      remove={remove}
+      refresh={refresh}
+    />
+  )
 }
 
-function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }) {
+function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remove, refresh }) {
   const runsByNumber = Object.fromEntries((batch.brew_runs ?? []).map((r) => [r.run_number, r]))
   const existingRunNumbers = Object.keys(runsByNumber).map(Number)
   // How many turn tabs to show: the turn_quantity set by the Add Brew wizard, or
@@ -891,6 +981,7 @@ function BatchDetailContent({ batch, tanks, set, save, saving, remove, refresh }
             run={runsByNumber[n]}
             recipe={batch.recipes}
             turnVolumeL={batch.turn_volume_l}
+            ingredients={ingredients}
             onSaved={refresh}
           />
         </div>
