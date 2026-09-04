@@ -20,6 +20,7 @@ const emptyRecipe = {
   target_fg: '',
   ko_temp: '',
   target_strike_temp: '',
+  target_mash_ph: '',
   liquor_grist_ratio: 3.0,
   mash_step_1_temp: '',
   mash_step_2_temp: '',
@@ -370,7 +371,7 @@ export default function RecipeEditPage() {
 
       <Section title="Mash Schedule" subtitle="These show up as targets on the Brew Day sheet, next to what actually happened.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
-          <Field label="Target Strike Temp" value={recipe.target_strike_temp} onChange={(v) => updateField('target_strike_temp', v)} />
+          <Field label="Target Mash pH" value={recipe.target_mash_ph} onChange={(v) => updateField('target_mash_ph', v)} />
           <Field label="Liquor:Grist Ratio (L/kg)" value={recipe.liquor_grist_ratio} onChange={(v) => updateField('liquor_grist_ratio', v)} />
           <Field label="Mash Duration (min)" value={recipe.mash_duration_min} onChange={(v) => updateField('mash_duration_min', v)} />
           <Field label="Step 1 (0-20) temp" value={recipe.mash_step_1_temp} onChange={(v) => updateField('mash_step_1_temp', v)} />
