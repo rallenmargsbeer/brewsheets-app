@@ -32,6 +32,11 @@ function blankToNull(obj) {
 // AddBrewPage.jsx, which now also offers all 4 turns from the wizard itself).
 const MAX_TURNS_PER_TANK = 4
 
+// Fixed total water (strike + sparge combined) per turn size — a brewhouse constant tied to
+// equipment losses, not something that depends on the recipe. Ryan supplied these directly;
+// update here if the brewhouse's water balance changes or a new turn size is added.
+const TOTAL_WATER_L = { 1000: 1360, 1500: 2040, 2500: 3400 }
+
 // The 4 gated brew-day stages, in order. Each one's confirmedField is a
 // brew_runs timestamp column — set it and the stage locks (read-only) and the
 // next stage unlocks; null it out again ("Reopen") and it's editable again.
@@ -127,6 +132,49 @@ function TimeButton({ runId, fieldKey, label, value, onSaved, autoFillKey, durat
         <button onClick={stamp} disabled={saving || !runId}>
           {saving ? '…' : 'Tap to stamp'}
         </button>
+      )}
+    </label>
+  )
+}
+
+// Sparge water is added periodically through the lauter rather than in one go, so this is a
+// simple "top up a running total" control rather than a plain editable number — type an
+// amount, hit Add, and it's added to whatever's already been recorded (never overwrites it).
+// Saves immediately via upsertBrewRun, same pattern as TimeButton.
+function AddSpargeControl({ runId, addedSoFar, onSaved }) {
+  const [amount, setAmount] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function add() {
+    const value = Number(amount)
+    if (!value) return
+    setSaving(true)
+    try {
+      const saved = await upsertBrewRun({ id: runId, sparge_added_l: (addedSoFar || 0) + value })
+      setAmount('')
+      onSaved(saved)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <label style={{ display: 'inline-block', marginRight: '0.75rem', marginBottom: '0.5rem' }}>
+      <div style={{ fontSize: '0.8rem', color: '#555' }}>Add Sparge (L)</div>
+      <div style={{ display: 'flex', gap: '0.25rem' }}>
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          style={{ width: 80 }}
+          disabled={saving}
+        />
+        <button onClick={add} disabled={saving || !amount}>
+          {saving ? '…' : 'Add'}
+        </button>
+      </div>
+      {addedSoFar > 0 && (
+        <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.15rem' }}>{addedSoFar}L added so far</div>
       )}
     </label>
   )
@@ -333,6 +381,17 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
   const strikeVolumeL =
     recipe?.liquor_grist_ratio != null && gristKg > 0 ? gristKg * recipe.liquor_grist_ratio : null
 
+  // Sparge Water Required = this turn's fixed total water budget, minus whatever strike water
+  // actually went in (falling back to the computed Target Strike Volume above until the brewer
+  // records an actual), minus however much sparge has already been added. Counts down as
+  // AddSpargeControl tops up sparge_added_l.
+  const totalWaterL = TOTAL_WATER_L[turnVolumeL] ?? null
+  const actualStrikeL = form.mash_water_l !== '' && form.mash_water_l != null ? Number(form.mash_water_l) : null
+  const strikeForSparge = actualStrikeL ?? strikeVolumeL
+  const spargeAddedL = Number(form.sparge_added_l) || 0
+  const spargeRequiredL =
+    totalWaterL != null && strikeForSparge != null ? totalWaterL - strikeForSparge - spargeAddedL : null
+
   return (
     <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
@@ -447,6 +506,25 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, onSaved }) 
 
               {s.key === 'lauter' && (
                 <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '1.5rem',
+                      flexWrap: 'wrap',
+                      alignItems: 'flex-end',
+                      marginBottom: '0.75rem',
+                      padding: '0.6rem 0.75rem',
+                      background: '#f7f6f3',
+                      borderRadius: 4,
+                    }}
+                  >
+                    <TargetValue
+                      label="Sparge Water Required"
+                      value={spargeRequiredL != null ? spargeRequiredL.toFixed(0) : null}
+                      unit="L"
+                    />
+                    <AddSpargeControl runId={form.id} addedSoFar={spargeAddedL} onSaved={applySaved} />
+                  </div>
                   <div style={{ marginTop: '0.5rem' }}>
                     <TimeButton
                       runId={form.id}
