@@ -139,6 +139,17 @@ export async function importIngredients(rows) {
   return { inserted: rows.length - updated, updated }
 }
 
+export async function updateIngredientPotentialPpg(id, potentialPpg) {
+  const { data, error } = await supabase
+    .from('ingredients')
+    .update({ potential_ppg: potentialPpg })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 export async function updateIngredientAlphaAcid(id, alphaAcidPct) {
   const { data, error } = await supabase
     .from('ingredients')
@@ -149,6 +160,7 @@ export async function updateIngredientAlphaAcid(id, alphaAcidPct) {
   if (error) throw error
   return data
 }
+
 export async function updateIngredientSections(id, sections) {
   const { data, error } = await supabase
     .from('ingredients')
