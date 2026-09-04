@@ -1,0 +1,7 @@
+-- Sparge water tracking: a running total of sparge water added so far this turn, so the Lauter
+-- stage can show a live "Sparge Water Required" figure that counts down as it's added. Already
+-- applied directly to the live database via Supabase MCP (2026-09-04) — this file exists purely
+-- so the repo's migration history matches.
+
+alter table brew_runs
+  add column sparge_added_l numeric(8,2);
