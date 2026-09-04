@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listIngredients, importIngredients, updateIngredientSections } from '../lib/api'
+import { listIngredients, importIngredients, updateIngredientSections, updateIngredientPotentialPpg } from '../lib/api'
 
 // Recipe-flow order — also used for the default sort/grouping below.
 const SECTION_ORDER = ['grist', 'water', 'kettle', 'whirlpool', 'fermenter']
@@ -144,6 +144,25 @@ function primarySection(sections) {
   return SECTION_ORDER.find((s) => sections.includes(s)) ?? null
 }
 
+// Potential extract, in points/lb/gallon (PPG) — only meaningful for grist/malt items, but
+// left editable on every row since Unleashed's own grouping doesn't perfectly predict which
+// rows end up checked into Grist. Feeds the Mash Efficiency calculator on the brew sheet;
+// blank for anything that isn't a fermentable. Local input + save-on-blur, same pattern as
+// the per-turn ingredient rows on the Batch Detail page.
+function PpgCell({ ingredient, onSave }) {
+  const [value, setValue] = useState(ingredient.potential_ppg ?? '')
+  return (
+    <input
+      type="number"
+      step="0.1"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => onSave(value)}
+      style={{ width: 70 }}
+    />
+  )
+}
+
 export default function IngredientsPage() {
   const [ingredients, setIngredients] = useState([])
   const [loading, setLoading] = useState(true)
@@ -194,6 +213,13 @@ export default function IngredientsPage() {
       ? ingredient.sections.filter((s) => s !== section)
       : [...ingredient.sections, section]
     const updated = await updateIngredientSections(ingredient.id, nextSections)
+    setIngredients((prev) => prev.map((i) => (i.id === ingredient.id ? updated : i)))
+  }
+
+  async function savePotentialPpg(ingredient, value) {
+    const parsed = value === '' ? null : Number(value)
+    if (parsed === ingredient.potential_ppg) return
+    const updated = await updateIngredientPotentialPpg(ingredient.id, parsed)
     setIngredients((prev) => prev.map((i) => (i.id === ingredient.id ? updated : i)))
   }
 
@@ -289,6 +315,7 @@ export default function IngredientsPage() {
                     {SECTION_LABELS[s]}
                   </th>
                 ))}
+                <th style={stickyHeaderCellStyle}>Potential PPG</th>
                 <th style={stickyHeaderCellStyle}>Unit</th>
                 <th style={stickyHeaderCellStyle}>Unleashed Code</th>
               </tr>
@@ -307,13 +334,16 @@ export default function IngredientsPage() {
                       />
                     </td>
                   ))}
+                  <td>
+                    <PpgCell ingredient={i} onSave={(v) => savePotentialPpg(i, v)} />
+                  </td>
                   <td>{i.base_unit ?? '—'}</td>
                   <td style={{ color: '#666', fontSize: '0.85rem' }}>{i.unleashed_code}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={3 + SECTION_ORDER.length}>
+                  <td colSpan={4 + SECTION_ORDER.length}>
                     {ingredients.length === 0
                       ? 'No ingredients imported yet — import a CSV from Unleashed to get started.'
                       : 'No ingredients match your search/filter.'}
