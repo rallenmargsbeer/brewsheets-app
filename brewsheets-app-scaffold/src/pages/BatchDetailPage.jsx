@@ -345,7 +345,7 @@ function IngredientRow({ item, onSaved }) {
   )
 }
 
-function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, ingredients, onSaved }) {
+function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngredients, onSaved }) {
   const [form, setForm] = useState(() => seedForm(batchId, runNumber, run))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -452,7 +452,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, ingredients
   // PPG, set per-ingredient on the Ingredients page). Whichever's typed into the Boil fields
   // right now, before Confirm & Continue — same "live as you type" treatment as Target Strike
   // Volume/Sparge Water Required above.
-  const potentialPpgByName = new Map(ingredients.map((i) => [i.name, i.potential_ppg]).filter(([, ppg]) => ppg != null))
+  const potentialPpgByName = new Map(masterIngredients.map((i) => [i.name, i.potential_ppg]).filter(([, ppg]) => ppg != null))
   const mashEfficiencyPct = calcMashEfficiency(gristItems, potentialPpgByName, form.preboil_gravity, form.preboil_volume_l)
 
   // IBU (Tinseth estimate): kettle + whirlpool hops, using post-boil gravity/volume as the
@@ -981,7 +981,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
             run={runsByNumber[n]}
             recipe={batch.recipes}
             turnVolumeL={batch.turn_volume_l}
-            ingredients={ingredients}
+            masterIngredients={ingredients}
             onSaved={refresh}
           />
         </div>
