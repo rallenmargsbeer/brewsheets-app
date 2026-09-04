@@ -1,0 +1,22 @@
+-- Mash Efficiency + IBU calculators. Already applied directly to the live database via
+-- Supabase MCP (2026-09-04) — this file exists purely so the repo's migration history matches.
+
+-- Mash Efficiency: potential extract (PPG) lives on the Ingredients master list, matched by
+-- name at display time against brew_run_ingredients.item_name (same "match by name" approach
+-- already used for suggestions elsewhere — no foreign key needed).
+alter table ingredients
+  add column potential_ppg numeric(5,1);
+
+-- IBU: hop alpha acid % is entered per recipe line (Kettle and Whirlpool Additions) and
+-- snapshotted onto each brew run's ingredient row, alongside a generic numeric time_min
+-- (boil time for Kettle rows, stand time for Whirlpool rows), so brew day can compute a
+-- Tinseth IBU estimate from what was actually used, not just the recipe's plan.
+alter table recipe_kettle_additions
+  add column alpha_acid_pct numeric(4,1);
+
+alter table recipe_whirlpool_additions
+  add column alpha_acid_pct numeric(4,1);
+
+alter table brew_run_ingredients
+  add column alpha_acid_pct numeric(4,1),
+  add column time_min numeric(5,1);
