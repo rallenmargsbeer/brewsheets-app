@@ -220,7 +220,11 @@ function IngredientRow({ item, onSaved }) {
         <input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} style={{ width: 160 }} disabled={saving} />
       </td>
       <td style={{ color: '#666', fontSize: '0.85rem' }}>{item.timing_note ?? '—'}</td>
-      <td style={{ color: '#666' }}>{formatQty(item.planned_qty)}</td>
+      <td style={{ color: '#666' }}>
+        {item.bag_count != null
+          ? `${item.bag_count} bag${item.bag_count === 1 ? '' : 's'} (${formatQty(item.planned_qty)})`
+          : formatQty(item.planned_qty)}
+      </td>
       <td>
         <input
           type="number"
