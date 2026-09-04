@@ -429,6 +429,7 @@ export default function RecipeEditPage() {
           { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.kettle },
           { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
+          { key: 'alpha_acid_pct', label: 'Alpha Acid %', type: 'number', width: 90 },
         ]}
       />
 
@@ -441,6 +442,7 @@ export default function RecipeEditPage() {
           { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.whirlpool },
           { key: 'stand_time_min', label: 'Stand time (min)', type: 'number', width: 90 },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
+          { key: 'alpha_acid_pct', label: 'Alpha Acid %', type: 'number', width: 90 },
         ]}
       />
 
