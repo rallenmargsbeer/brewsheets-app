@@ -72,14 +72,14 @@ function Field({ label, value, onChange, type = 'text', width }) {
   )
 }
 
-function LineItemsEditor({ title, subtitle, items, setItems, fields }) {
+function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults }) {
   function update(i, key, value) {
     const next = [...items]
     next[i] = { ...next[i], [key]: value }
     setItems(next)
   }
   function add() {
-    setItems([...items, Object.fromEntries(fields.map((f) => [f.key, '']))])
+    setItems([...items, { ...Object.fromEntries(fields.map((f) => [f.key, ''])), ...defaults }])
   }
   function remove(i) {
     setItems(items.filter((_, idx) => idx !== i))
@@ -393,11 +393,14 @@ export default function RecipeEditPage() {
 
       <LineItemsEditor
         title="Grist / Malt Bill"
+        subtitle="Pack Size is the bag weight this ingredient is bought in — leave it blank for anything not bought in fixed bags. It's what the Add Brew wizard uses to let you allocate whole bags per turn instead of a computed weight."
         items={grist}
         setItems={setGrist}
+        defaults={{ pack_size_kg: 25 }}
         fields={[
           { key: 'ingredient_name', label: 'Ingredient', width: 200, datalistOptions: ingredientNamesByCategory.grist },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
+          { key: 'pack_size_kg', label: 'Pack Size (kg)', type: 'number', width: 90 },
         ]}
       />
 
