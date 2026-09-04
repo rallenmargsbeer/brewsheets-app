@@ -234,7 +234,13 @@ function ingredientTimingNote(section, item) {
   return null
 }
 
-export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL) {
+// bagCounts (grist only): { [recipe_grist_items.id]: bagsForThisTurn }. When a grist item has
+// a pack_size_kg set AND this turn has a bag count for it, planned/actual is bag_count ×
+// pack_size_kg instead of the usual qty_g_per_l × turnVolumeL — this is what lets a turn's
+// sheet say "1 bag (25.00 kg)" instead of a computed-to-the-gram figure for something that's
+// actually grabbed off the shelf by the whole bag. Everything else (no pack size, or no bag
+// count supplied for this turn/item) keeps the original per-litre calc, bag_count stays null.
+export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL, bagCounts = {}) {
   const sections = [
     ['grist', recipe.recipe_grist_items ?? [], 'ingredient_name'],
     ['water', recipe.recipe_water_additions ?? [], 'additive_name'],
@@ -246,7 +252,12 @@ export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL)
   let sortOrder = 0
   for (const [section, items, nameKey] of sections) {
     for (const item of items) {
-      const qty = item.qty_g_per_l != null ? item.qty_g_per_l * turnVolumeL : null
+      let qty = item.qty_g_per_l != null ? item.qty_g_per_l * turnVolumeL : null
+      let bagCount = null
+      if (section === 'grist' && item.pack_size_kg > 0 && bagCounts[item.id] != null) {
+        bagCount = bagCounts[item.id]
+        qty = bagCount * item.pack_size_kg * 1000
+      }
       rows.push({
         brew_run_id: brewRunId,
         section,
@@ -255,6 +266,7 @@ export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL)
         item_name: item[nameKey],
         planned_qty: qty,
         actual_qty: qty,
+        bag_count: bagCount,
         sort_order: sortOrder++,
       })
     }
@@ -281,16 +293,20 @@ export async function updateBrewRunIngredient(id, fields) {
 // after a batch is created by the Add Brew wizard — one row per brewhouse turn — then
 // snapshots each turn's ingredient list from the recipe. `recipe` must be the FULL
 // recipe (from getRecipe, with its nested ingredient arrays), not the bare listRecipes()
-// shape.
-export async function initializeBrewRuns(batchId, turnQuantity, recipe, turnVolumeL) {
+// shape. `bagAllocations` (optional, grist only): { [gristItemId]: [countForTurn1,
+// countForTurn2, ...] } — the Allocate Grist Bags wizard step's output.
+export async function initializeBrewRuns(batchId, turnQuantity, recipe, turnVolumeL, bagAllocations = {}) {
   const rows = Array.from({ length: turnQuantity }, (_, i) => ({
     batch_id: batchId,
     run_number: i + 1,
   }))
   const { data: runs, error } = await supabase.from('brew_runs').insert(rows).select()
   if (error) throw error
-  for (const run of runs) {
-    await snapshotBrewRunIngredients(run.id, recipe, turnVolumeL)
+  for (const [i, run] of runs.entries()) {
+    const bagCounts = Object.fromEntries(
+      Object.entries(bagAllocations).map(([itemId, counts]) => [itemId, counts[i] ?? 0])
+    )
+    await snapshotBrewRunIngredients(run.id, recipe, turnVolumeL, bagCounts)
   }
   return runs
 }
