@@ -371,6 +371,7 @@ export default function RecipeEditPage() {
 
       <Section title="Mash Schedule" subtitle="These show up as targets on the Brew Day sheet, next to what actually happened.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+          <Field label="Target Strike Temp" value={recipe.target_strike_temp} onChange={(v) => updateField('target_strike_temp', v)} />
           <Field label="Target Mash pH" value={recipe.target_mash_ph} onChange={(v) => updateField('target_mash_ph', v)} />
           <Field label="Liquor:Grist Ratio (L/kg)" value={recipe.liquor_grist_ratio} onChange={(v) => updateField('liquor_grist_ratio', v)} />
           <Field label="Mash Duration (min)" value={recipe.mash_duration_min} onChange={(v) => updateField('mash_duration_min', v)} />
@@ -428,7 +429,7 @@ export default function RecipeEditPage() {
         fields={[
           { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.kettle },
           { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
-           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
+          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
         ]}
       />
 
