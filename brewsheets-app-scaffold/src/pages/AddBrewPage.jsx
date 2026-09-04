@@ -74,6 +74,23 @@ function evenBagSplit(totalBags, turnQuantity) {
   return Array.from({ length: turnQuantity }, (_, i) => base + (i < remainder ? 1 : 0))
 }
 
+function bagsNeededFor(item, turnVolumeL, turnQuantity) {
+  const totalKg = ((item.qty_g_per_l ?? 0) * turnVolumeL * turnQuantity) / 1000
+  return item.pack_size_kg ? totalKg / item.pack_size_kg : 0
+}
+
+// A bagged item only needs a human decision when the split isn't obvious: either the batch
+// doesn't need a whole number of bags to begin with, or it does but that count doesn't divide
+// evenly across the turns. When both divide cleanly (e.g. 4 bags / 4 turns = 1 each, no
+// remainder anywhere), the even split is the only sensible answer, so there's nothing to
+// review — it's still allocated that way, just without bothering anyone with the table row.
+function needsBagReview(item, turnVolumeL, turnQuantity) {
+  const bagsNeeded = bagsNeededFor(item, turnVolumeL, turnQuantity)
+  const whole = Math.round(bagsNeeded)
+  const isWholeBags = Math.abs(bagsNeeded - whole) < 1e-6
+  return !isWholeBags || whole % turnQuantity !== 0
+}
+
 // One row per bagged grist item (pack_size_kg set), one column per turn. Shown only when
 // the recipe has at least one such item — otherwise Add Brew behaves exactly as before.
 function BagAllocationStep({ items, turnVolumeL, turnQuantity, allocations, setAllocations, onCreate, creating }) {
@@ -105,8 +122,7 @@ function BagAllocationStep({ items, turnVolumeL, turnQuantity, allocations, setA
         </thead>
         <tbody>
           {items.map((item) => {
-            const totalKg = ((item.qty_g_per_l ?? 0) * turnVolumeL * turnQuantity) / 1000
-            const bagsNeeded = item.pack_size_kg ? totalKg / item.pack_size_kg : 0
+            const bagsNeeded = bagsNeededFor(item, turnVolumeL, turnQuantity)
             const row = allocations[item.id] ?? Array(turnQuantity).fill(0)
             const allocated = row.reduce((sum, v) => sum + (Number(v) || 0), 0)
             const matches = Math.round(allocated) === Math.round(bagsNeeded)
@@ -168,6 +184,13 @@ export default function AddBrewPage() {
   }, [recipeId])
 
   const baggedGristItems = (fullRecipe?.recipe_grist_items ?? []).filter((g) => g.pack_size_kg > 0)
+  // Only the items whose split isn't obvious actually show up in the Allocate Grist Bags
+  // table — see needsBagReview above. Depends on turnQuantity, so there's nothing to show
+  // before Step 3 is answered.
+  const reviewGristItems =
+    turnQuantity != null
+      ? baggedGristItems.filter((item) => needsBagReview(item, turnVolumeL, turnQuantity))
+      : []
 
   async function createBrew(quantity, bagAllocations) {
     setCreating(true)
@@ -194,8 +217,10 @@ export default function AddBrewPage() {
   }
 
   // Picking a turn quantity no longer creates the batch straight away — if the recipe has
-  // bagged grist items, an Allocate Grist Bags step comes first. Otherwise this behaves
-  // exactly as before.
+  // bagged grist items whose split needs a decision, an Allocate Grist Bags step comes first.
+  // Every bagged item (reviewed or not) still gets the even split seeded in — items that
+  // don't need review are simply never shown, since that split is already the only sensible
+  // answer for them.
   function pickTurnQuantity(quantity) {
     setTurnQuantity(quantity)
     if (baggedGristItems.length === 0) {
@@ -203,12 +228,13 @@ export default function AddBrewPage() {
       return
     }
     const seeded = Object.fromEntries(
-      baggedGristItems.map((item) => {
-        const totalKg = ((item.qty_g_per_l ?? 0) * turnVolumeL * quantity) / 1000
-        const bagsNeeded = item.pack_size_kg ? totalKg / item.pack_size_kg : 0
-        return [item.id, evenBagSplit(bagsNeeded, quantity)]
-      })
+      baggedGristItems.map((item) => [item.id, evenBagSplit(bagsNeededFor(item, turnVolumeL, quantity), quantity)])
     )
+    const needsReview = baggedGristItems.some((item) => needsBagReview(item, turnVolumeL, quantity))
+    if (!needsReview) {
+      createBrew(quantity, seeded)
+      return
+    }
     setAllocations(seeded)
   }
 
@@ -275,10 +301,10 @@ export default function AddBrewPage() {
         )}
       </StepCard>
 
-      {turnQuantity != null && baggedGristItems.length > 0 && (
+      {turnQuantity != null && reviewGristItems.length > 0 && (
         <StepCard number={4} title="Allocate Grist Bags" active>
           <BagAllocationStep
-            items={baggedGristItems}
+            items={reviewGristItems}
             turnVolumeL={turnVolumeL}
             turnQuantity={turnQuantity}
             allocations={allocations}
