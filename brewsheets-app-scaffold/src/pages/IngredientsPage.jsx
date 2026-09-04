@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listIngredients, importIngredients, updateIngredientSections, updateIngredientPotentialPpg } from '../lib/api'
+import {
+  listIngredients,
+  importIngredients,
+  updateIngredientSections,
+  updateIngredientPotentialPpg,
+  updateIngredientAlphaAcid,
+} from '../lib/api'
 
 // Recipe-flow order — also used for the default sort/grouping below.
 const SECTION_ORDER = ['grist', 'water', 'kettle', 'whirlpool', 'fermenter']
@@ -137,6 +143,17 @@ function parseUnleashedCsv(text) {
   return Array.from(byCode.values())
 }
 
+// Potential PPG only makes sense for a fermentable, Alpha Acid % only for a hop — both are
+// gated on Unleashed's own "Product Group" classification (kept as-is in unleashed_group),
+// not the section checkboxes, since a non-hop item like Irish Moss is still legitimately
+// checked into Kettle Additions and shouldn't get an Alpha Acid field because of that.
+function isMalt(ingredient) {
+  return (ingredient.unleashed_group || '').trim().toLowerCase() === 'malt'
+}
+function isHops(ingredient) {
+  return (ingredient.unleashed_group || '').trim().toLowerCase() === 'hops'
+}
+
 // For sorting/grouping only — an ingredient can belong to several sections,
 // so this just picks the earliest one in recipe-flow order to group it
 // under. It's still suggested everywhere it's actually assigned.
@@ -144,20 +161,21 @@ function primarySection(sections) {
   return SECTION_ORDER.find((s) => sections.includes(s)) ?? null
 }
 
-// Potential extract, in points/lb/gallon (PPG) — only meaningful for grist/malt items, but
-// left editable on every row since Unleashed's own grouping doesn't perfectly predict which
-// rows end up checked into Grist. Feeds the Mash Efficiency calculator on the brew sheet;
-// blank for anything that isn't a fermentable. Local input + save-on-blur, same pattern as
-// the per-turn ingredient rows on the Batch Detail page.
-function PpgCell({ ingredient, onSave }) {
-  const [value, setValue] = useState(ingredient.potential_ppg ?? '')
+// Shared editable-number cell for Potential PPG / Alpha Acid % — only editable for the
+// ingredient type it applies to (see isMalt/isHops above); shows a plain dash everywhere
+// else so it's clear the field doesn't apply rather than looking like an empty editable one.
+// Local input + save-on-blur, same pattern as the per-turn ingredient rows on the Batch
+// Detail page.
+function NumericTagCell({ applies, value, onSave }) {
+  const [local, setLocal] = useState(value ?? '')
+  if (!applies) return <span style={{ color: '#ccc' }}>—</span>
   return (
     <input
       type="number"
       step="0.1"
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => onSave(value)}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => onSave(local)}
       style={{ width: 70 }}
     />
   )
@@ -220,6 +238,13 @@ export default function IngredientsPage() {
     const parsed = value === '' ? null : Number(value)
     if (parsed === ingredient.potential_ppg) return
     const updated = await updateIngredientPotentialPpg(ingredient.id, parsed)
+    setIngredients((prev) => prev.map((i) => (i.id === ingredient.id ? updated : i)))
+  }
+
+  async function saveAlphaAcid(ingredient, value) {
+    const parsed = value === '' ? null : Number(value)
+    if (parsed === ingredient.alpha_acid_pct) return
+    const updated = await updateIngredientAlphaAcid(ingredient.id, parsed)
     setIngredients((prev) => prev.map((i) => (i.id === ingredient.id ? updated : i)))
   }
 
@@ -316,6 +341,7 @@ export default function IngredientsPage() {
                   </th>
                 ))}
                 <th style={stickyHeaderCellStyle}>Potential PPG</th>
+                <th style={stickyHeaderCellStyle}>Alpha Acid %</th>
                 <th style={stickyHeaderCellStyle}>Unit</th>
                 <th style={stickyHeaderCellStyle}>Unleashed Code</th>
               </tr>
@@ -335,7 +361,10 @@ export default function IngredientsPage() {
                     </td>
                   ))}
                   <td>
-                    <PpgCell ingredient={i} onSave={(v) => savePotentialPpg(i, v)} />
+                    <NumericTagCell applies={isMalt(i)} value={i.potential_ppg} onSave={(v) => savePotentialPpg(i, v)} />
+                  </td>
+                  <td>
+                    <NumericTagCell applies={isHops(i)} value={i.alpha_acid_pct} onSave={(v) => saveAlphaAcid(i, v)} />
                   </td>
                   <td>{i.base_unit ?? '—'}</td>
                   <td style={{ color: '#666', fontSize: '0.85rem' }}>{i.unleashed_code}</td>
@@ -343,7 +372,7 @@ export default function IngredientsPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4 + SECTION_ORDER.length}>
+                  <td colSpan={5 + SECTION_ORDER.length}>
                     {ingredients.length === 0
                       ? 'No ingredients imported yet — import a CSV from Unleashed to get started.'
                       : 'No ingredients match your search/filter.'}
