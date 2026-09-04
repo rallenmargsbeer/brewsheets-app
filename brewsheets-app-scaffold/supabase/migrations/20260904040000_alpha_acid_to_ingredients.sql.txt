@@ -1,0 +1,18 @@
+-- Move Alpha Acid % off recipe lines and onto the Ingredients master list — same place
+-- Potential PPG lives, since both are per-ingredient properties, not per-recipe-line ones.
+-- Already applied directly to the live database via Supabase MCP (2026-09-04) — this file
+-- exists purely so the repo's migration history matches.
+
+alter table ingredients
+  add column alpha_acid_pct numeric(4,1);
+
+alter table recipe_kettle_additions
+  drop column alpha_acid_pct;
+
+alter table recipe_whirlpool_additions
+  drop column alpha_acid_pct;
+
+-- No longer snapshotted per turn — IBU now looks alpha acid up live from the Ingredients
+-- master list by name, same approach already used for Mash Efficiency's Potential PPG.
+alter table brew_run_ingredients
+  drop column alpha_acid_pct;
