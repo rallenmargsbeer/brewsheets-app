@@ -4,7 +4,7 @@ import { listBatchesInTanks, listPackagingTotals } from '../lib/api'
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import { sumSessions } from '../lib/packaging'
 
-// Conditioning (in a BBT, usually what's next to package) first, then the rest.
+// Conditioning first, then anything else still sitting in a BBT.
 const ORDER = { conditioning: 0, fermenting: 1, brewing: 2, planned: 3 }
 
 export default function PackagingPage() {
@@ -16,8 +16,10 @@ export default function PackagingPage() {
   useEffect(() => {
     listBatchesInTanks(IN_TANK_STATUSES)
       .then(async (b) => {
-        setBatches([...b].sort((x, y) => ORDER[x.status] - ORDER[y.status]))
-        const rows = await listPackagingTotals(b.map((x) => x.id))
+        // We only ever package out of bright tanks, never straight from an FV.
+        const inBbt = b.filter((x) => x.tanks?.tank_type === 'BBT')
+        setBatches([...inBbt].sort((x, y) => ORDER[x.status] - ORDER[y.status]))
+        const rows = await listPackagingTotals(inBbt.map((x) => x.id))
         const byBatch = {}
         for (const r of rows) (byBatch[r.batch_id] ??= []).push(r)
         setTotals(Object.fromEntries(Object.entries(byBatch).map(([id, s]) => [id, sumSessions(s)])))
@@ -34,7 +36,7 @@ export default function PackagingPage() {
       {loading ? (
         <p>Loading…</p>
       ) : batches.length === 0 ? (
-        <p style={{ color: 'var(--ink2)' }}>No batches in tanks right now.</p>
+        <p style={{ color: 'var(--ink2)' }}>No batches in bright tanks right now. Transfer one from the Cellar tab first.</p>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
           {batches.map((b) => {
