@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Landed Cost Board Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+#tabeff,#ai,#vai,#eai{display:none!important}
+/* Layout: one summary band (by format), one filter row, one ranked table with inline cost bars. */
+:root{--bg:#f6f5f1;--surface:#fff;--ink:#1d2421;--ink2:#505a55;--muted:#818a85;--line:#dfddd4;--accent:#b4691a;--accent-soft:#f3e4d0;--bar:#c98a3e;--hl:#fbf3e6;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;
+--font:'Schibsted Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141816;--surface:#1c211f;--ink:#ecebe4;--ink2:#b3b9b4;--muted:#848c87;--line:#2e3532;--accent:#e0a156;--accent-soft:#3a2d1b;--bar:#d19449;--hl:#241f17;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141816;--surface:#1c211f;--ink:#ecebe4;--ink2:#b3b9b4;--muted:#848c87;--line:#2e3532;--accent:#e0a156;--accent-soft:#3a2d1b;--bar:#d19449;--hl:#241f17;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:28px 48px;display:flex;flex-direction:column;gap:24px}
+h1{font-size:clamp(24px,4vw,32px);line-height:1.1;margin:0;font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+.sub{color:var(--ink2);margin:6px 0 0;max-width:68ch}
+.meta{display:flex;flex-wrap:wrap;gap:6px 16px;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile.on{border-color:var(--accent);background:var(--hl)}
+.tile button{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.tile button:focus-visible{outline:2px solid var(--accent);outline-offset:6px}
+.lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.big{font-family:var(--mono);font-size:26px;font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.small{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.bar input[type=search]{flex:1 1 220px;min-width:0;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:9px 12px;font:inherit}
+.bar input:focus-visible,.seg button:focus-visible,th button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{font:inherit;background:var(--surface);color:var(--ink2);border:1px solid var(--line);border-radius:6px;padding:7px 11px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.tw{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:680px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500;position:sticky;top:0;background:var(--surface)}
+th button{all:unset;cursor:pointer}
+th.n,td.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+td.cost{width:34%;min-width:200px}
+.cb{display:flex;align-items:center;gap:10px}
+.cb i{display:block;height:8px;background:var(--bar);border-radius:0 4px 4px 0;flex:none;min-width:2px}
+.cb span{font-family:var(--mono);font-variant-numeric:tabular-nums;min-width:62px}
+.tag{font-size:11px;color:var(--ink2);border:1px solid var(--line);border-radius:999px;padding:1px 8px;white-space:nowrap}
+h2{font-size:16px;margin:0}
+.note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:14px 16px;color:var(--ink2);display:flex;flex-direction:column;gap:6px}
+.note b{color:var(--ink)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 16px}
+summary{cursor:pointer;font-weight:500}
+.fb{columns:240px;column-gap:24px;margin-top:12px;font-size:13px}
+.fb div{display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px dotted var(--line);break-inside:avoid}
+.fb span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.sel{display:flex;flex-direction:column;gap:3px}.sel select{font:inherit;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:170px}.sel select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;position:relative;min-width:0}
+.panel h2{display:flex;align-items:center;gap:8px}.panel h2 i{display:inline-block;width:14px;height:3px;border-radius:2px}
+.panel .small{margin:2px 0 6px}
+.fvin{width:84px;font:inherit;font-family:var(--mono);font-size:12px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:2px 5px;background:var(--surface);color:var(--ink)}.fvin.sh{border-style:dashed;border-color:var(--accent)}.fvin.ed{border-color:var(--accent);background:var(--hl)}.fvx{font:inherit;font-size:12px;color:var(--ink2);background:transparent;border:0;cursor:pointer;padding:0 0 0 4px}
+.fbtn{margin-left:auto;font:inherit;font-size:12px;font-weight:400;color:var(--ink2);background:transparent;border:1px solid var(--line);border-radius:6px;padding:3px 9px;cursor:pointer}.fbtn:hover{background:var(--hl)}
+.charts.one{grid-template-columns:1fr}.charts.one .panel:not(.sel){display:none}
+.plot svg{display:block;width:100%;overflow:visible}
+.plot svg text{fill:var(--muted);font-family:var(--mono);font-size:11px}
+.plot svg .g{stroke:var(--line);stroke-width:1}
+.tt{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;box-shadow:0 2px 8px rgba(0,0,0,.15);font-size:12px;white-space:nowrap;z-index:2;display:flex;flex-direction:column;gap:1px}
+.tt b{font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums}
+.tt span{color:var(--ink2)}
+.tt[hidden]{display:none}
+.nodata{padding:36px 0;text-align:center;color:var(--muted)}
+.datatbl{margin-top:4px}.datatbl table{min-width:0;font-size:12px}
+.pick{padding:0;border:0;background:none;position:relative}
+.pick summary{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 11px;color:var(--ink2);list-style:none;font-weight:400}
+.pick summary::-webkit-details-marker{display:none}
+.pick[open] summary{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.pickbody{position:absolute;z-index:5;top:calc(100% + 4px);left:0;width:min(340px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:6px}
+.pickbody input{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit}
+.picklist{max-height:240px;overflow:auto;display:flex;flex-direction:column}
+.picklist label{display:flex;gap:8px;align-items:center;padding:4px 2px;cursor:pointer}
+.picklist label.off{opacity:.45;cursor:not-allowed}
+.tc{display:contents}
+.seg button:disabled{opacity:.45;cursor:not-allowed}
+.bar .pickbody input[type=search]{flex:none}.picklist{flex:none}.pick.r .pickbody{left:auto;right:0}
+.pgh{padding:6px 2px 2px;color:var(--muted);font-size:.85em;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 10px;background:var(--surface)}
+.chip button{all:unset;cursor:pointer;padding:0 6px;color:var(--muted)}
+.chip button:focus-visible,.pick summary:focus-visible,.picklist input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lgs{display:flex;flex-wrap:wrap;gap:4px 16px;margin:4px 0 8px;font-size:12px;color:var(--ink2)}
+.lg{display:inline-flex;align-items:center;gap:6px}.lg b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+#gfs{margin-left:auto;font:inherit;background:var(--surface);color:var(--ink2);border:1px solid var(--line);border-radius:6px;padding:7px 11px;cursor:pointer}
+#gfs:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.gsec{display:flex;flex-direction:column;gap:12px}
+.gsec.full{position:fixed;inset:0;z-index:50;background:var(--bg);padding:max(16px,env(safe-area-inset-top,0px)) 20px max(16px,env(safe-area-inset-bottom,0px))}
+.gsec.full .charts{flex:1;min-height:0;overflow:auto;grid-auto-rows:minmax(300px,1fr)}
+.gsec.full .panel{display:flex;flex-direction:column}
+.gsec.full .panel .plot{flex:1;min-height:0}
+.gsec.full .panel h2{font-size:20px}
+.gsec.full .datatbl,.gsec.full .qs{display:none}
+.tt .row{display:flex;align-items:center;gap:8px}
+.tt .row svg{flex:none}
+.tw td:not(:first-child),.tw th{white-space:nowrap}
+.tw table{min-width:900px}
+.mut{color:var(--muted);font-size:11px}
+.ai{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.aih{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}.aih .small{flex:1 1 200px;min-width:0}
+.aiout{display:flex;flex-direction:column;gap:10px;max-width:75ch;min-height:0}
+.aiout p{margin:0}.aiout:empty{display:none}
+.aiout.busy{opacity:.85}
+.ai .seg button{cursor:pointer}
+.ai .seg button:disabled{opacity:.5;cursor:default}
+.xs{position:fixed;inset:0;z-index:59;background:rgba(0,0,0,.4)}
+.xp{position:fixed;z-index:60;left:50%;top:50%;transform:translate(-50%,-50%);width:min(580px,calc(100vw - 24px));max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:16px 18px;box-shadow:0 12px 40px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:12px}
+.xp[hidden],.xs[hidden]{display:none}
+.xh2{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.xh2 h2{font-size:17px;margin:0}
+#xc{all:unset;cursor:pointer;font-size:22px;line-height:1;padding:0 6px;color:var(--ink2)}#xc:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.xp table{min-width:0;width:100%;font-size:13px}.xp th,.xp td{padding:6px 8px}
+.xp .kv{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--ink2)}.xp .kv b{color:var(--ink);font-family:var(--mono);font-weight:500}
+.xp .why{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.xp .why p{margin:0}
+.xp .pos{color:var(--ink)}
+#tab-cost,#tab-vol,#tab-eff{display:flex;flex-direction:column;gap:24px}
+#tab-cost[hidden],#tab-vol[hidden],#tab-eff[hidden]{display:none}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tabs button{font:inherit;background:none;color:var(--ink2);border:0;border-bottom:3px solid transparent;padding:8px 14px;cursor:pointer;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:500}
+.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.vnote{font-size:12px;color:var(--muted)}
+#tab-vol .tile .small b,#tab-eff .tile .small b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.up{color:var(--ink)}
+</style>
+<div class="wrap">
+ <header>
+  <h1>Average landed cost by SKU</h1>
+  <p class="sub">Materials landed cost per unit of what was assembled in the chosen month, from completed assemblies in Unleashed. It is total component cost divided by units assembled, weighted across assemblies of the same SKU.</p>
+  <div class="meta"><span>Margaret River Beer Co</span><span>Monthly board report</span><span>Unleashed data pulled <b id="asof"></b></span></div>
+ </header>
+ <nav class="tabs" role="tablist" aria-label="Report sections"><button type="button" role="tab" id="tabcost" aria-selected="true">Landed cost</button><button type="button" role="tab" id="tabvol" aria-selected="false">Volumes</button><button type="button" role="tab" id="tabeff" aria-selected="false">Efficiency</button></nav>
+ <div id="tab-cost">
+ <section class="tiles" id="tiles" aria-label="Summary by format"></section>
+
+ <section class="ai" id="ai" hidden aria-live="polite">
+  <div class="aih"><h2>Month summary</h2><span class="small" id="aiscope"></span><div class="seg"><button type="button" id="aigo">Summarise</button><button type="button" id="aistop" hidden>Stop</button></div></div>
+  <div class="aiout" id="aiout"></div>
+  <div class="small" id="ainote"></div>
+ </section>
+ <section class="note">
+  <div><b>What this number includes.</b> Materials only: beer at its Unleashed cost per litre, plus kegs, caps, collars and other packaging. Labour, overheads, energy and excise are not in it, so treat it as materials landed cost, not full cost of goods. Kegs with no size in their Unleashed name are treated as 50L.</div>
+ </section>
+ <section style="display:flex;flex-direction:column;gap:12px">
+  <div class="gsec" id="gsec">
+  <div class="bar">
+   <label class="sel"><span class="lab">Month</span><select id="month"></select></label>
+   <label class="sel"><span class="lab">Keg size</span><select id="size"></select></label>
+   <input type="search" class="qs" id="q" placeholder="Search SKU name" aria-label="Search SKU name">
+  </div>
+  <div class="bar"><div class="seg" id="fmt" role="group" aria-label="Format"></div><div class="seg" id="rng" role="group" aria-label="Range"></div></div>
+  <div class="bar" id="opts">
+   <details class="pick" id="pick"><summary id="picksum">Compare SKUs</summary><div class="pickbody"><input type="search" id="pq" placeholder="Filter SKUs" aria-label="Filter SKUs"><div class="picklist" id="picklist"></div></div></details>
+   <div class="tc" id="yrs"></div>
+   <div class="seg"><button type="button" id="avgbtn" aria-pressed="true">Average line</button><button type="button" id="totbtn" aria-pressed="false" hidden>Include format total</button></div>
+   <button type="button" id="gfs">Full screen</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="charts" id="charts"></div>
+  <details class="datatbl" id="dtl"><summary>Show chart data as a table</summary><div class="tw"><table><thead id="dh"></thead><tbody id="db"></tbody></table></div></details>
+  <div class="xs" id="xs" hidden></div>
+  <div class="xp" id="xp" hidden role="dialog" aria-modal="true" aria-labelledby="xt"><div class="xh2"><h2 id="xt"></h2><button type="button" id="xc" aria-label="Close">×</button></div><div id="xb"></div></div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between"><div class="small" id="count"></div><div class="seg"><button type="button" id="allbtn" aria-pressed="false">Show SKUs not assembled</button></div></div>
+  <div class="tw"><table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table></div>
+ </section> 
+ </div>
+
+ <div id="tab-eff" hidden>
+  <div class="bar">
+   <label class="sel"><span class="lab">Month</span><select id="emonth"></select></label>
+   <div class="seg" id="erng" role="group" aria-label="Range"></div>
+   <div class="seg"><button type="button" id="esmall" aria-pressed="false">Include small brews</button></div>
+  </div>
+  <section class="tiles" id="etiles" aria-label="Efficiency for the month"></section>
+  <section class="ai" id="eai" hidden aria-live="polite">
+   <div class="aih"><h2>Efficiency summary</h2><span class="small" id="escope"></span><div class="seg"><button type="button" id="ego">Summarise</button><button type="button" id="estop" hidden>Stop</button></div></div>
+   <div class="aiout" id="eout"></div><div class="small" id="enote"></div>
+  </section>
+  <section class="note"><div><b>How to read this.</b> Each finished beer assembly is one batch, matched to its kegs and cubes through the Unleashed batch number and the beer (the batch and beer the keg or cube line actually drew from, so two beers that share a batch number stay separate batches). <b>Transfer efficiency</b> is litres in the completed assembly divided by the litres assumed to go into the fermenter, which is the completed volume rounded up to the next 2,500 L unless the real figure is available: litres typed into the table below come first, then litres loaded from the Brewery Efficiency Tracking sheet (dashed cells), then the rounded-up assumption. <b>Brite to packaged</b> is nominal litres packaged (kegs at their size, cubes at 6 L) divided by litres in the assembly. <b>Overall</b> is litres packaged divided by the assumed fermenter volume. Monthly figures are weighted by litres, not averages of percentages. Small brews (under 1,500 L) are left out, and batches still being packaged are left out of packaging and overall figures.</div></section>
+  <div class="gsec" id="egsec">
+   <div class="bar"><div class="seg" id="emet" role="group" aria-label="Efficiency measure"></div><div class="tc" id="eyrs"></div><details class="pick" id="epick"><summary id="epicksum">Compare beers</summary><div class="pickbody"><input type="search" id="epq" placeholder="Filter beers" aria-label="Filter beers"><div class="picklist" id="epicklist"></div></div></details><div class="seg"><button type="button" id="efs">Full screen</button></div></div>
+   <div class="chips" id="echips"></div>
+   <div class="charts" id="echarts"></div>
+  </div>
+  <section style="display:flex;flex-direction:column;gap:12px">
+   <h2>Batches completed in <span id="emlab"></span></h2><div class="bar"><div class="seg"><button type="button" id="fvload">Load FV litres from the brewsheet</button></div><div class="small" id="fvnote"></div></div><div class="tw"><table><thead id="ebh"></thead><tbody id="ebb"></tbody></table></div>
+   <h2>By beer, 12 months to <span id="emlab2"></span></h2><div class="tw"><table><thead id="ebeh"></thead><tbody id="ebeb"></tbody></table></div>
+  </section>
+ </div>
+ <div id="tab-vol" hidden>
+  <div class="bar">
+   <label class="sel"><span class="lab">Month</span><select id="vmonth"></select></label>
+   <label class="sel"><span class="lab">Keg size</span><select id="vsize"></select></label>
+   <div class="seg" id="vrng" role="group" aria-label="Range"></div>
+  </div>
+  <section class="tiles" id="vtiles" aria-label="Volumes for the month"></section>
+  <section class="ai" id="vai" hidden aria-live="polite">
+   <div class="aih"><h2>Volume summary</h2><span class="small" id="vscope"></span><div class="seg"><button type="button" id="vgo">Summarise</button><button type="button" id="vstop" hidden>Stop</button></div></div>
+   <div class="aiout" id="vout"></div><div class="small" id="vnote"></div>
+  </section>
+  <section class="note"><div><b>How to read this.</b> Volumes are completed assemblies in Unleashed. Finished beer is counted in the month its assembly was completed, which can be weeks after the brew date; kegs and cubes by their production date. Parked assemblies (not yet completed) are not counted. Beer is assigned to a range by the SKUs that use it most. Kegs follow the keg size filter, which defaults to 50L. Litres for kegs and cubes are the beer actually used, not including loss.</div></section>
+  <div class="gsec" id="vgsec">
+  <div class="bar"><div class="seg" id="vmet" role="group" aria-label="Keg and cube measure"></div><div class="tc" id="vyrs"></div><div class="seg"><button type="button" id="vavgbtn" aria-pressed="true">Average line</button></div><div class="seg"><button type="button" id="vfs">Full screen</button></div></div>
+  <div class="bar"><details class="pick" id="vpick"><summary id="vpicksum">Compare SKUs and beers</summary><div class="pickbody"><input type="search" id="vpq" placeholder="Filter beers and SKUs" aria-label="Filter beers and SKUs"><div class="picklist" id="vpicklist"></div></div></details><div class="seg"><button type="button" id="vtotbtn" aria-pressed="false" hidden>Include totals</button></div></div>
+  <div class="chips" id="vchips"></div>
+  <div class="charts" id="vcharts"></div>
+  </div>
+  <section style="display:flex;flex-direction:column;gap:12px">
+   <h2>Finished beer by beer</h2><div class="tw"><table><thead id="vbh"></thead><tbody id="vbb"></tbody></table></div>
+   <h2>Kegs and cubes by SKU</h2><div class="tw"><table><thead id="vsh"></thead><tbody id="vsb"></tbody></table></div>
+  </section>
+  <div class="xs" id="vxs" hidden></div>
+  <div class="xp" id="vxp" hidden role="dialog" aria-modal="true" aria-labelledby="vxt"><div class="xh2"><h2 id="vxt"></h2><button type="button" id="vxc" aria-label="Close">×</button></div><div id="vxb"></div></div>
+ </div>
+</div>
+<script>
+/* ===== 1. DATA. Same shape as the future Supabase tables: products (one row per SKU), assemblies (one row per completed assembly). ===== */
+const DATA=__DATA__;
+
+/* ===== 2. CALC. Pure functions, no DOM. These move unchanged into the brewsheets app. ===== */
+const Calc={
+  monthOf:d=>d.slice(0,7),
+  prevMonth:m=>{let [y,mo]=m.split('-').map(Number);mo--;if(!mo){mo=12;y--}return y+'-'+String(mo).padStart(2,'0')},
+  months:asm=>[...new Set(asm.map(a=>a.d.slice(0,7)))].sort().reverse(),
+  /* Per SKU for one month: units assembled, total component cost, ALC = cost / units. */
+  alcByMonth(asm,month){
+    const m=new Map();
+    for(const a of asm){ if(a.d.slice(0,7)!==month||!(a.qty>0)) continue;
+      const x=m.get(a.code)||{units:0,cost:0}; x.units+=a.qty; x.cost+=a.cost; m.set(a.code,x); }
+    for(const x of m.values()) x.alc=x.cost/x.units;
+    return m;
+  },
+  /* One row per product with this month and the month before. */
+  /* Per-SKU history: months -> {units,cost}. */
+  index(asm){const m=new Map();for(const a of asm){if(!(a.qty>0))continue;const k=a.d.slice(0,7);let c=m.get(a.code);if(!c){c=new Map();m.set(a.code,c)}
+    const x=c.get(k)||{units:0,cost:0};x.units+=a.qty;x.cost+=a.cost;c.set(k,x)}return m},
+  /* One row per product: this month; the SKU's previous run (latest earlier month it was assembled, however long ago);
+     and its average over the 12 months before this one. A SKU not made last month is not a first reading. */
+  skuRows(products,asm,month){
+    const ix=Calc.index(asm),base=new Set(Calc.monthsBack(Calc.prevMonth(month),12));
+    return products.map(p=>{const mm=ix.get(p.code)||new Map(),c=mm.get(month);
+      let pr=null,u=0,cs=0,n=0;
+      for(const [k,x] of mm){if(k<month&&(!pr||k>pr.month))pr={month:k,alc:x.cost/x.units,units:x.units};if(base.has(k)){u+=x.units;cs+=x.cost;n++}}
+      const alc=c?c.cost/c.units:null,avg=u?cs/u:null;
+      return {...p,units:c?c.units:0,alc,prevAlc:pr?pr.alc:null,prevRunMonth:pr?pr.month:null,avg12:avg,runs12:n,
+        change:(alc!=null&&pr)?alc-pr.alc:null,vsAvg:(alc!=null&&avg!=null)?alc-avg:null,firstEver:!pr};});
+  },
+
+  /* Units-weighted average ALC across rows that were assembled. */
+  weightedAlc(rows){const u=rows.reduce((s,r)=>s+r.units,0);return u?rows.reduce((s,r)=>s+r.units*r.alc,0)/u:null},
+  totalUnits:rows=>rows.reduce((s,r)=>s+r.units,0),
+  /* ---- Volumes. Index: month -> code -> {u units (or batches), l litres, n assemblies}. Kegs and cubes: litres = beer actually used (bl - bw). ---- */
+  /* ---- Efficiency. b: {bn,beer[],brew,done,L,init,pk,keg,cube}. Transfer = L/init; pack = pk/L; overall = pk/init. ---- */
+  dayShift(s,n){const d=new Date(s+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)},
+  effBatch(b,pulled,smallCut){
+    const tr=b.L/b.init,pr=b.L?b.pk/b.L:0,small=b.L<smallCut,inprog=!small&&b.done>=Calc.dayShift(pulled,-21)&&pr<0.9,check=!small&&!inprog&&(pr>1.05||pr<0.6);
+    return {...b,tr,pr,ov:b.pk/b.init,small,inprog,check,m:b.done.slice(0,7)};
+  },
+  effAgg(list){
+    const t=list.filter(x=>!x.small),p=t.filter(x=>!x.inprog),s=(a,f)=>a.reduce((n,x)=>n+f(x),0);
+    const L=s(t,x=>x.L),init=s(t,x=>x.init),pL=s(p,x=>x.L),pInit=s(p,x=>x.init),pk=s(p,x=>x.pk);
+    return {n:t.length,np:p.length,small:list.length-t.length,flagged:t.filter(x=>x.check).length,L,init,pL,pInit,pk,transfer:init?L/init:null,pack:pL?pk/pL:null,overall:pInit?pk/pInit:null};
+  },
+  volIndex(products,asm,fbb){
+    const pm=new Map(products.map(p=>[p.code,p])),pkg=new Map(),beer=new Map();
+    const put=(M,k,code,u,l)=>{let m=M.get(k);if(!m){m=new Map();M.set(k,m)}const x=m.get(code)||{u:0,l:0,n:0};x.u+=u;x.l+=l;x.n++;m.set(code,x)};
+    for(const a of asm){if(a.qty>0&&pm.has(a.code))put(pkg,a.d.slice(0,7),a.code,a.qty,a.bl-a.bw)}
+    for(const b of fbb)put(beer,(b.cd||b.d).slice(0,7),b.code,1,b.L);
+    return {pm,pkg,beer};
+  },
+  /* Items made in a month. kind 'Beer': keep(code); otherwise keep(product) and product.fmt === kind. */
+  volItems(ix,kind,month,keep){const m=(kind==='Beer'?ix.beer:ix.pkg).get(month);if(!m)return[];const out=[];
+    for(const [code,x] of m){if(kind==='Beer'){if(!keep(code))continue}else{const p=ix.pm.get(code);if(p.fmt!==kind||!keep(p))continue}out.push({code,u:x.u,l:x.l,n:x.n})}
+    return out.sort((a,b)=>b.l-a.l)},
+  volSum(ix,kind,month,keep,metric){let s=0;for(const it of Calc.volItems(ix,kind,month,keep))s+=metric==='units'?it.u:it.l;return s},
+  volSeries(ix,kind,months,keep,metric){return months.map(m=>({month:m,value:Calc.volSum(ix,kind,m,keep,metric)}))},
+  /* Facts behind one bar: value, comparisons, and the items that make it up against their own prior-12-month monthly average. */
+  volExplain(ix,kind,month,keep,metric,label){
+    const r1=n=>n==null?null:Math.round(n*10)/10,pct=(a,b)=>b>0?Math.round((a-b)/b*1000)/10:null;
+    const base=Calc.monthsBack(Calc.prevMonth(month),12),vals=base.map(m=>Calc.volSum(ix,kind,m,keep,metric)),avg=vals.reduce((s,x)=>s+x,0)/12;
+    const items=Calc.volItems(ix,kind,month,keep),val=Calc.volSum(ix,kind,month,keep,metric),prior=Calc.volSum(ix,kind,Calc.prevMonth(month),keep,metric),ly=Calc.volSum(ix,kind,Calc.shiftMonth(month,-12),keep,metric);
+    const mt=it=>metric==='units'?it.u:it.l,tot=items.reduce((s,it)=>s+mt(it),0)||1;
+    const itemAvg=code=>base.reduce((s,m)=>{const x=(kind==='Beer'?ix.beer:ix.pkg).get(m)?.get(code);return s+(x?(metric==='units'?x.u:x.l):0)},0)/12;
+    const rows=items.slice(0,10).map(it=>{const a=itemAvg(it.code);return {item:it.code,thisMonth:Math.round(mt(it)),sharePct:r1(mt(it)/tot*100),ownMonthlyAvgPrior12:Math.round(a),vsOwnAvgPct:pct(mt(it),a),assemblies:it.n,
+      avgBatchLitres:kind==='Beer'?Math.round(it.l/it.n):undefined,units:kind==='Beer'?undefined:Math.round(it.u),litres:kind==='Beer'?undefined:Math.round(it.l)}});
+    const sorted=[...vals].sort((a,b)=>a-b);
+    return {label,month,measure:metric==='units'?'units made':'litres',value:Math.round(val),priorMonth:Math.round(prior),priorMonthChangePct:pct(val,prior),sameMonthLastYear:Math.round(ly),sameMonthLastYearChangePct:pct(val,ly),
+      avgMonthPrior12:Math.round(avg),vsAvgPct:pct(val,avg),lowestMonthPrior12:Math.round(sorted[0]),highestMonthPrior12:Math.round(sorted[11]),
+      itemsMade:items.length,shareOfTopItemPct:rows.length?rows[0].sharePct:null,topItems:rows,
+      newItemsNotMadeInPrior12:rows.filter(x=>x.ownMonthlyAvgPrior12===0).map(x=>x.item)};
+  },
+  /* ---- Cost drivers. Each assembly carries its cost split: bc beer, kg keg hardware, cn cans and lids, ot other packaging;
+     bl beer litres used including wastage, bw wastage litres. ---- */
+  parts(asm,codes,months){const o={units:0,cost:0,bc:0,bl:0,bw:0,kg:0,cn:0,ot:0};
+    for(const a of asm){if(!codes.has(a.code)||!(a.qty>0)||!months.has(a.d.slice(0,7)))continue;o.units+=a.qty;for(const k of['cost','bc','bl','bw','kg','cn','ot'])o[k]+=a[k]}return o},
+  /* Beer (finished beer) cost per litre from brewing batches: last 6 months, prior 12 months, hop share, last batches. */
+  fbStats(fbb,code,month){
+    const rec=new Set(Calc.monthsBack(month,6)),pri=new Set(Calc.monthsBack(Calc.prevMonth(Calc.shiftMonth(month,-5)),12));
+    const agg=set=>{let L=0,c=0,h=0;for(const b of fbb){if(b.code!==code||!set.has(b.d.slice(0,7)))continue;L+=b.L;c+=b.hp+b.ml+b.ye+b.ot;h+=b.hp}return {L,perL:L?c/L:null,hopShare:c?h/c:null}};
+    const r=agg(rec),p=agg(pri),last=fbb.filter(b=>b.code===code&&b.d.slice(0,7)<=month).sort((a,b)=>a.d<b.d?1:-1).slice(0,3).map(b=>({date:b.d,litres:b.L,costPerL:+((b.hp+b.ml+b.ye+b.ot)/b.L).toFixed(3)}));
+    return {recent6m:r,prior12m:p,lastBatches:last};
+  },
+  /* Why does a beer cost what it does per litre? Ingredient-level comparison of its brewing batches: last 6 months against the 12 months before.
+     For malt and hops the change is split into price per unit (including swapping to a different malt or hop) and quantity used per litre
+     (recipe and batch size). Other items (finings, acids, additives, yeast) are shown as a single change. */
+  beerDrivers(fbb,code,month){
+    const r3=n=>n==null?null:Math.round(n*1000)/1000,r2=n=>n==null?null:Math.round(n*100)/100;
+    const rec=new Set(Calc.monthsBack(month,6)),pri=new Set(Calc.monthsBack(Calc.prevMonth(Calc.shiftMonth(month,-5)),12));
+    const win=set=>{const o={L:0,n:0,g:{},ing:new Map()};for(const b of fbb){if(b.code!==code||!set.has(b.d.slice(0,7))||!b.lines)continue;o.L+=b.L;o.n++;
+      for(const [name,g,q,c] of b.lines){const x=o.g[g]||(o.g[g]={q:0,c:0});x.q+=q;x.c+=c;const y=o.ing.get(name)||{g,q:0,c:0};y.q+=q;y.c+=c;o.ing.set(name,y)}}return o};
+    const r=win(rec),p=win(pri);if(!r.L||!p.L)return null;
+    const GN={ml:'Malt',hp:'Hops',ye:'Yeast',ot:'Finings, acids and other additives'};
+    const groups=['ml','hp','ye','ot'].map(g=>{const a=r.g[g]||{q:0,c:0},b=p.g[g]||{q:0,c:0},c1=a.c/r.L,c0=b.c/p.L;
+      const split=(g==='ml'||g==='hp');let price=null,use=null;
+      if(split&&a.q&&b.q){const u1=a.c/a.q,u0=b.c/b.q,q1=a.q/r.L,q0=b.q/p.L;price=(u1-u0)*q0;use=(q1-q0)*u1}
+      return {group:GN[g],costPerL:r3(c1),priorCostPerL:r3(c0),change:r3(c1-c0),
+        pricePerKg:split&&a.q?r2(a.c/a.q):null,priorPricePerKg:split&&b.q?r2(b.c/b.q):null,kgPerL:split&&a.q?r3(a.q/r.L):null,priorKgPerL:split&&b.q?r3(b.q/p.L):null,
+        effectOfPricePerKg:r3(price),effectOfQuantityPerL:r3(use)}}).filter(x=>x.costPerL||x.priorCostPerL);
+    const rows=[];const names=new Set([...r.ing.keys(),...p.ing.keys()]);
+    for(const k of names){const a=r.ing.get(k),b=p.ing.get(k),c1=a?a.c/r.L:0,c0=b?b.c/p.L:0;let what;
+      if(!b)what='new in the last 6 months';else if(!a)what='not used in the last 6 months';
+      else{const u1=a.c/a.q,u0=b.c/b.q,pc=(u1-u0)/u0;what=Math.abs(pc)>0.03?`price per unit ${pc>0?'up':'down'} ${Math.abs(Math.round(pc*100))}% (${u0>=10?u0.toFixed(0):u0.toFixed(2)} to ${u1>=10?u1.toFixed(0):u1.toFixed(2)})`:`${c1>c0?'more':'less'} used per litre`}
+      rows.push({ingredient:k,group:GN[(a||b).g],changePerL:r3(c1-c0),what,unitPriceNow:a&&a.q?r2(a.c/a.q):null,unitPricePrior:b&&b.q?r2(b.c/b.q):null})}
+    rows.sort((x,y)=>Math.abs(y.changePerL)-Math.abs(x.changePerL));
+    return {costPerL_recent6m:r3(Object.values(r.g).reduce((s,x)=>s+x.c,0)/r.L),costPerL_prior12m:r3(Object.values(p.g).reduce((s,x)=>s+x.c,0)/p.L),
+      batches:{recent6m:r.n,prior12m:p.n},avgBatchLitres:{recent6m:Math.round(r.L/r.n),prior12m:Math.round(p.L/p.n)},groups,biggestIngredientChanges:rows.slice(0,5)};
+  },
+  /* Why is the ALC of the SKUs chosen by keep() what it is in this month, against the 12 months before? */
+  explain(products,asm,fbb,month,keep,label){
+    const codes=new Set(products.filter(keep).map(p=>p.code));
+    const base=new Set(Calc.monthsBack(Calc.prevMonth(month),12)),cur=Calc.parts(asm,codes,new Set([month])),b=Calc.parts(asm,codes,base);
+    if(!cur.units)return null;
+    const pu=(o,k)=>o.units?o[k]/o.units:null,r2=n=>n==null?null:Math.round(n*100)/100,r3=n=>n==null?null:Math.round(n*1000)/1000;
+    const alc=cur.cost/cur.units,balc=pu(b,'cost'),perL=cur.bl?cur.bc/cur.bl:null,bperL=b.bl?b.bc/b.bl:null,lit=cur.bl/cur.units,blit=b.units?b.bl/b.units:null;
+    const eff=b.units?{beerPrice:(perL!=null&&bperL!=null)?(perL-bperL)*blit:0,beerLitres:(perL!=null&&blit!=null)?(lit-blit)*perL:0,kegHardware:pu(cur,'kg')-pu(b,'kg'),cansAndLids:pu(cur,'cn')-pu(b,'cn'),otherPackaging:pu(cur,'ot')-pu(b,'ot')}:null;
+    const rows=[['bc','Beer'],['kg','Keg hardware'],['cn','Cans and lids'],['ot','Other packaging']].map(([k,name])=>({k,name,cur:pu(cur,k),base:pu(b,k)})).filter(x=>(x.cur||0)>0.005||(x.base||0)>0.005);
+    /* SKUs inside this group, with mix versus rate */
+    const sk=[...codes].map(c=>{const one=new Set([c]),cu=Calc.parts(asm,one,new Set([month])),ba=Calc.parts(asm,one,base);return cu.units?{sku:c,units:cu.units,alc:cu.cost/cu.units,baseAlc:ba.units?ba.cost/ba.units:null,baseRuns:ba.units?1:0}:null}).filter(Boolean).sort((x,y)=>y.units-x.units);
+    let rate=null,mix=null;
+    if(sk.length>1&&balc!=null){const w=sk.reduce((s,x)=>s+x.units,0);rate=sk.filter(x=>x.baseAlc!=null).reduce((s,x)=>s+x.units/w*(x.alc-x.baseAlc),0);mix=(alc-balc)-rate}
+    /* beer batches behind it */
+    const fbu=new Map();for(const a of asm){if(codes.has(a.code)&&a.d.slice(0,7)===month&&a.fb)fbu.set(a.fb,(fbu.get(a.fb)||0)+a.bl)}
+    const fbs=[...fbu.entries()].sort((x,y)=>y[1]-x[1]).slice(0,3).map(([code])=>{const s=Calc.fbStats(fbb,code,month);return {beer:code,costPerL_recent6m:r3(s.recent6m.perL),costPerL_prior12m:r3(s.prior12m.perL),hopShareOfBeerCost:r2(s.recent6m.hopShare),lastBatches:s.lastBatches,priceDrivers:Calc.beerDrivers(fbb,code,month)}});
+    return {label,month,units:Math.round(cur.units),alc:r2(alc),priorTwelveMonths:{units:Math.round(b.units),alc:r2(balc)},change:balc!=null?r2(alc-balc):null,
+      beer:{costPerL:r3(perL),priorCostPerL:r3(bperL),litresPerUnitIncludingLoss:r2(lit),priorLitresPerUnit:r2(blit),lossPct:r2(cur.bl?cur.bw/cur.bl*100:null),priorLossPct:r2(b.bl?b.bw/b.bl*100:null)},
+      perUnit:rows.map(x=>({part:x.name,thisMonth:r2(x.cur),prior12:r2(x.base)})),
+      effectsOnAlc:eff?Object.fromEntries(Object.entries(eff).map(([k,v])=>[k,r2(v)])):null,
+      mixVsRate:rate==null?null:{rateEffect:r2(rate),mixEffect:r2(mix)},
+      skus:sk.slice(0,8).map(x=>({sku:x.sku,units:Math.round(x.units),alc:r2(x.alc),prior12Alc:r2(x.baseAlc)})),
+      beerBatches:fbs,
+      notes:{beerBatchesRecordedInMonth:fbb.filter(x=>x.d.slice(0,7)===month).length}};
+  },
+  /* Compact facts for one month, for a written summary. keep(product) decides which SKUs are in scope. */
+  monthFacts(products,asm,fbb,month,keep){
+    const r2=n=>n==null?null:Math.round(n*100)/100;
+    const rows=Calc.skuRows(products,asm,month).filter(keep),made=rows.filter(r=>r.alc!=null);
+    const m12=Calc.monthsBack(month,12),ly=Calc.shiftMonth(month,-12),pm=Calc.prevMonth(month);
+    const one=(m,f)=>Calc.trend(products,asm,[m],p=>keep(p)&&(!f||p.fmt===f))[0];
+    const block=f=>{const a=made.filter(r=>!f||r.fmt===f);if(!a.length)return null;
+      const t12=Calc.trend(products,asm,m12,p=>keep(p)&&(!f||p.fmt===f)),pv=one(pm,f),l=one(ly,f);
+      const lo=t12.filter(x=>x.alc!=null).sort((x,y)=>x.alc-y.alc);
+      return {skusAssembled:a.length,unitsAssembled:Calc.totalUnits(a),alc:r2(Calc.weightedAlc(a)),
+        calendarPriorMonthAlc:r2(pv.alc),sameMonthLastYearAlc:r2(l.alc),twelveMonthAvgAlc:r2(Calc.windowAvg(t12)),
+        cheapestMonthInLast12:lo.length?{month:lo[0].month,alc:r2(lo[0].alc)}:null,dearestMonthInLast12:lo.length?{month:lo[lo.length-1].month,alc:r2(lo[lo.length-1].alc)}:null,
+        drivers:Calc.explain(products,asm,fbb,month,p=>keep(p)&&(!f||p.fmt===f),f||'All formats')};};
+    const beerMap={};
+    const strip=e=>{if(!e)return e;const {label,month:_m,...rest}=e;rest.beerBatches=(rest.beerBatches||[]).map(({priceDrivers,...x})=>{if(priceDrivers&&!beerMap[x.beer])beerMap[x.beer]=priceDrivers;return x});return rest};
+    const out={month,overall:block(null),byFormat:Object.fromEntries(['Keg','Cube','4-pack'].map(f=>[f,block(f)]).filter(x=>x[1])),
+      skusInScopeNotAssembled:rows.length-made.length,
+      skus:made.sort((a,b)=>b.units*b.alc-a.units*a.alc).map(r=>({sku:r.code,format:r.fmt,range:r.range,units:r.units,alc:r2(r.alc),prior12MonthAvgAlc:r2(r.avg12),runsInPrior12Months:r.runs12,vsPrior12MonthAvg:r2(r.vsAvg),previousRun:r.prevRunMonth?{month:r.prevRunMonth,alc:r2(r.prevAlc),change:r2(r.change)}:null,firstRunOnRecord:r.firstEver,
+        drivers:strip(Calc.explain(products,asm,fbb,month,p=>p.code===r.code,r.code))}))};
+    if(out.overall)out.overall.drivers=strip(out.overall.drivers);Object.values(out.byFormat).forEach(b=>{b.drivers=strip(b.drivers)});
+    out.beerPriceDrivers=beerMap;
+    return out;
+  },
+  /* The n months ending at m, oldest first. */
+  monthsBack(m,n){const o=[];let c=m;for(let i=0;i<n;i++){o.unshift(c);c=Calc.prevMonth(c)}return o},
+  shiftMonth(m,k){let [y,mo]=m.split('-').map(Number);const i=y*12+mo-1+k;return Math.floor(i/12)+'-'+String(i%12+1).padStart(2,'0')},
+  /* Weighted ALC over a window of trend points (total cost / total units). */
+  windowAvg(pts){let u=0,c=0;for(const p of pts){u+=p.units;c+=p.cost}return u?c/u:null},
+  /* Weighted ALC and units per month across the products that pass keep(). */
+  trend(products,asm,months,keep){
+    const codes=new Set(products.filter(keep).map(p=>p.code));
+    const by=new Map(months.map(m=>[m,{units:0,cost:0}]));
+    for(const a of asm){ if(!codes.has(a.code)||!(a.qty>0)) continue; const x=by.get(a.d.slice(0,7)); if(x){x.units+=a.qty;x.cost+=a.cost} }
+    return months.map(m=>{const x=by.get(m);return {month:m,units:x.units,cost:x.cost,alc:x.units?x.cost/x.units:null}});
+  }
+};
+
+/* ===== 3. UI ===== */
+const money=n=>'$'+n.toLocaleString('en-AU',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num=n=>n.toLocaleString('en-AU');
+const MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const monthLabel=m=>MN[+m.slice(5)-1]+' '+m.slice(0,4);
+const MONTHS=Calc.months(DATA.assemblies);
+const LATEST=MONTHS[0];
+const sizes=[...new Set(DATA.products.filter(p=>p.fmt==='Keg').map(p=>p.size))].sort((a,b)=>parseInt(b)-parseInt(a));
+const PULLM=DATA.pulled.slice(0,7);
+const st={month:(MONTHS[0]===PULLM&&MONTHS[1])?MONTHS[1]:MONTHS[0],fmt:'All',rng:'Core Range',size:'50L',tab:'cost',vmetric:'units',vsel:null,sel:null,full:false,focus:{},skus:[],years:[0],avg:true,total:false,pq:'',q:'',sort:'alc',dir:-1,all:false};
+const made=r=>r.alc!=null;
+document.getElementById('asof').textContent=new Date(DATA.pulled+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'});
+const monthSel=document.getElementById('month'), sizeSel=document.getElementById('size');
+monthSel.innerHTML=MONTHS.map(m=>`<option value="${m}">${monthLabel(m)}${m===LATEST&&LATEST>=PULLM?' (part month)':''}</option>`).join('');
+sizeSel.innerHTML=['All sizes',...sizes].map(s=>`<option value="${s}">${s==='All sizes'?s:s+' kegs'}</option>`).join('');
+monthSel.value=st.month; sizeSel.value=st.size;
+monthSel.onchange=()=>{st.month=monthSel.value;renderYears();render()};
+sizeSel.onchange=()=>{st.size=sizeSel.value;render()};
+const RANGES=['All',...[...new Set(DATA.products.map(p=>p.range))].sort()];
+const FORMATS=['All','Keg','Cube','4-pack'];
+const scope=r=>(st.rng==='All'||r.range===st.rng)&&(st.size==='All sizes'||r.fmt!=='Keg'||r.size===st.size);
+function seg(id,list,key,lab){
+  const el=document.getElementById(id);
+  el.innerHTML=list.map(v=>`<button type="button" aria-pressed="${st[key]===v}">${v==='All'?lab:v}</button>`).join('');
+  [...el.children].forEach((b,i)=>b.onclick=()=>{st[key]=list[i];render()});
+}
+
+const $=id=>document.getElementById(id);
+const SC=['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)'];
+const YR_DASH=['','7 5','2 5','8 3 2 3'];
+const MAXSKU=5;
+const FIRSTM=MONTHS[MONTHS.length-1];
+const CYEARS=(()=>{const c={};MONTHS.forEach(m=>c[m.slice(0,4)]=(c[m.slice(0,4)]||0)+1);return Object.keys(c).filter(y=>c[y]>=6).map(Number).sort()})();
+st.nm=12;st.cal=false;st.cyears=CYEARS.slice(-2);st.vskus=[];st.vtotal=false;st.ebeers=[];st.emetric='all';
+const mdiff=(a,b)=>(+b.slice(0,4)-+a.slice(0,4))*12+(+b.slice(5)-+a.slice(5));
+/* One time model for every graph: a rolling timeline ending at the chosen month, or Jan to Dec of chosen years laid over each other. */
+function timeWin(){
+  const ok=m=>m>=FIRSTM&&m<=st.month;
+  if(!st.cal){const ms=st.nm>=99?Calc.monthsBack(st.month,Math.max(2,mdiff(FIRSTM,st.month)+1)):Calc.monthsBack(st.month,st.nm);return {cal:false,n:ms.length,axis:ms,wins:[{wi:0,label:'',months:ms,ok}]}}
+  const ys=st.cyears.length?st.cyears:CYEARS.slice(-1);
+  const wins=ys.map((y,wi)=>({wi,label:String(y),months:Array.from({length:12},(_,i)=>y+'-'+String(i+1).padStart(2,'0')),ok}));
+  return {cal:true,n:12,axis:wins[0].months,wins};
+}
+const winDesc=()=>{const T=timeWin();return T.cal?'January to December, '+T.wins.map(w=>w.label).join(', ')+' overlaid (to '+monthLabel(st.month)+')':T.n+' months to '+monthLabel(st.month)};
+const everyN=iw=>Math.max(1,Math.ceil(timeWin().n/Math.max(2,Math.floor(iw/48))));
+const dotR=(n,big)=>big?6:(n>14?2.5:3.5);
+const vkind=c=>BYCODE[c]?BYCODE[c].fmt:'Beer';
+function chipsInto(id,list,nm,rm){const c=$(id);c.replaceChildren();list.forEach(code=>{const b=mk('button',{type:'button',textContent:'×'});b.setAttribute('aria-label','Remove '+nm(code));b.onclick=()=>rm(code);c.append(mk('span',{className:'chip'},mk('span',{textContent:nm(code)}),b))})}
+const FNAME={Keg:'Kegs',Cube:'Cubes','4-pack':'Four-packs'};
+const BYCODE=Object.fromEntries(DATA.products.map(p=>[p.code,p]));
+const mshort=m=>MN[+m.slice(5)-1].slice(0,3)+' '+m.slice(2,4);
+const mon3=m=>MN[+m.slice(5)-1].slice(0,3);
+const winLabel=off=>'to '+mshort(Calc.shiftMonth(st.month,-12*off));
+const mk=(tag,props,...kids)=>{const e=document.createElement(tag);Object.assign(e,props||{});e.append(...kids);return e};
+function niceTicks(lo,hi){
+  const span=Math.max(hi-lo,hi*0.05,0.5),raw=span/4,pow=Math.pow(10,Math.floor(Math.log10(raw)));
+  const step=[1,2,2.5,5,10].map(f=>f*pow).find(s=>s>=raw);
+  const a=Math.floor(lo/step)*step,b=Math.ceil(hi/step)*step,out=[];
+  for(let v=a;v<=b+1e-9;v+=step)out.push(+v.toFixed(6));
+  return out;
+}
+function svgKey(color,dash){return `<svg width="26" height="8" aria-hidden="true"><line x1="1" x2="25" y1="4" y2="4" stroke="${color}" stroke-width="2" stroke-linecap="round" ${dash?`stroke-dasharray="${dash}"`:''}/></svg>`}
+/* Series for one format panel: (format total and/or chosen SKUs) x (chosen years). */
+function buildSeries(f){
+  const here=st.skus.filter(c=>BYCODE[c]&&BYCODE[c].fmt===f);
+  const ents=[];
+  if(!here.length||st.total)ents.push({label:FNAME[f]+' total',keep:p=>scope(p)&&p.fmt===f});
+  here.forEach(c=>ents.push({label:c,keep:p=>p.code===c}));
+  const T=timeWin(),out=[];
+  ents.forEach((e,ei)=>T.wins.forEach(w=>{
+    const pts=Calc.trend(DATA.products,DATA.assemblies,w.months,e.keep).map(p=>w.ok(p.month)?p:{...p,units:0,cost:0,alc:null});
+    const solo=T.cal&&ents.length===1;
+    out.push({ent:e.label,keep:e.keep,off:w.wi,wlabel:w.label,color:solo?SC[w.wi%SC.length]:SC[ei%SC.length],dash:solo?'':YR_DASH[w.wi],pts,avg:Calc.windowAvg(pts)});
+  }));
+  return out.filter(s=>s.pts.some(p=>p.alc!=null));
+}
+function lineChart(panel,series){
+  const plot=panel.querySelector('.plot');plot.replaceChildren();const isFull=!!panel.closest('.gsec.full');const w=Math.max(260,plot.clientWidth),h=isFull?Math.max(240,plot.clientHeight):(panel.closest('.charts.one')?380:210),ml=46,mr=14,mt=12,mb=26,iw=w-ml-mr,ih=h-mt-mb,n=series[0].pts.length;
+  const all=[];series.forEach(s=>{s.pts.forEach(p=>p.alc!=null&&all.push(p.alc));if(st.avg&&s.avg!=null)all.push(s.avg)});
+  const ticks=niceTicks(Math.min(...all),Math.max(...all)),lo=ticks[0],hi=ticks[ticks.length-1];
+  const X=i=>ml+i*iw/(n-1),Y=v=>mt+ih-(v-lo)/(hi-lo)*ih;
+  const TW=timeWin(),every=everyN(iw),multiYr=TW.cal,cur=TW.axis;
+  let s=`<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="Weighted ALC by month">`;
+  ticks.forEach(v=>{s+=`<line class="g" x1="${ml}" x2="${w-mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml-8}" y="${Y(v)+4}" text-anchor="end">$${v%1?v.toFixed(2):v}</text>`});
+  cur.forEach((m,i)=>{if((n-1-i)%every===0)s+=`<text x="${X(i)}" y="${h-6}" text-anchor="middle">${multiYr?mon3(m):mshort(m)}</text>`});
+  if(!multiYr){const bw=iw/(n-1),x0=Math.max(ml,X(n-1)-bw/2),x1=Math.min(w-mr,X(n-1)+bw/2);s+=`<rect x="${x0}" y="${mt}" width="${x1-x0}" height="${ih}" fill="var(--hl)"/>`;}
+  if(st.avg)series.forEach(sr=>{if(sr.avg!=null)s+=`<line x1="${ml}" x2="${w-mr}" y1="${Y(sr.avg)}" y2="${Y(sr.avg)}" stroke="${sr.color}" stroke-width="1" opacity=".7" ${sr.dash?`stroke-dasharray="${sr.dash}"`:''}/>`});
+  series.forEach(sr=>{
+    const pts=sr.pts.map((p,i)=>p.alc==null?null:X(i)+','+Y(p.alc)).filter(Boolean);
+    if(pts.length>1)s+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${sr.dash?`stroke-dasharray="${sr.dash}"`:''}/>`;
+  });
+  series.forEach(sr=>sr.pts.forEach((p,i)=>{if(p.alc!=null)s+=`<circle cx="${X(i)}" cy="${Y(p.alc)}" r="${dotR(n,!multiYr&&i===n-1)}" fill="${sr.color}" stroke="var(--surface)" stroke-width="2"/>`}));
+  if(st.sel)series.forEach(sr=>{const i=sr.pts.findIndex(p=>p.month===st.sel.month);if(i>=0&&sr.ent===st.sel.ent&&sr.off===st.sel.off&&sr.pts[i].alc!=null)s+=`<circle cx="${X(i)}" cy="${Y(sr.pts[i].alc)}" r="10" fill="none" stroke="var(--ink)" stroke-width="2"/>`});
+  if(series.length===1&&!multiYr){const sr=series[0],p=sr.pts[n-1];
+    if(p.alc!=null)s+=`<text x="${X(n-1)}" y="${Y(p.alc)-12}" text-anchor="end" style="fill:var(--ink);font-weight:500;stroke:var(--surface);stroke-width:4px;paint-order:stroke">${money(p.alc)}</text>`;
+    if(st.avg&&sr.avg!=null)s+=`<text x="${ml+4}" y="${Y(sr.avg)-5}" style="fill:var(--ink2)">avg ${money(sr.avg)}</text>`;}
+  s+=`<line id="xh" class="g" y1="${mt}" y2="${mt+ih}" style="display:none"/><rect id="ov" x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent"/></svg>`;
+  panel.querySelector('.plot').innerHTML=s;
+  const lg=panel.querySelector('.lgs');lg.replaceChildren();
+  series.forEach(sr=>{const b=mk('b',{textContent:sr.avg!=null&&st.avg?'avg '+money(sr.avg):''});const k=mk('span');k.innerHTML=svgKey(sr.color,sr.dash);
+    lg.append(mk('span',{className:'lg'},k,mk('span',{textContent:sr.ent+(multiYr?' · '+sr.wlabel:'')}),b))});
+  const svg=panel.querySelector('.plot svg'),ov=svg.querySelector('#ov'),xh=svg.querySelector('#xh'),tt=panel.querySelector('.tt');
+  const idxAt=e=>{const r=svg.getBoundingClientRect();const x=(e.clientX-r.left)*(w/r.width)-ml;return Math.max(0,Math.min(n-1,Math.round(x/iw*(n-1))))};
+  const show=e=>{const i=idxAt(e);xh.setAttribute('x1',X(i));xh.setAttribute('x2',X(i));xh.style.display='';
+    tt.replaceChildren(mk('span',{textContent:multiYr?MN[+cur[i].slice(5)-1]:monthLabel(cur[i])}));
+    series.forEach(sr=>{const p=sr.pts[i];const k=mk('span');k.innerHTML=svgKey(sr.color,sr.dash);
+      tt.append(mk('div',{className:'row'},k,mk('b',{textContent:p.alc==null?'n/a':money(p.alc)}),mk('span',{textContent:sr.ent+(multiYr||p.alc!=null?' · '+mshort(p.month):'')+(p.alc!=null?', '+num(p.units)+' units':', not assembled')})))});
+    tt.hidden=false;const pr=panel.getBoundingClientRect(),sr2=svg.getBoundingClientRect();let left=sr2.left-pr.left+X(i)*(sr2.width/w)+12;if(left+tt.offsetWidth>pr.width-8)left=Math.max(4,left-tt.offsetWidth-24);tt.style.left=left+'px';tt.style.top=(sr2.top-pr.top+mt)+'px'};
+  ov.addEventListener('pointermove',show);ov.addEventListener('pointerdown',show);ov.style.cursor='pointer';
+  ov.addEventListener('click',e=>{const i=idxAt(e),r=svg.getBoundingClientRect(),y=(e.clientY-r.top)*(h/r.height);
+    let best=null,bd=1e9;series.forEach(sr=>{const p=sr.pts[i];if(p.alc==null)return;const dd=Math.abs(Y(p.alc)-y);if(dd<bd){bd=dd;best=sr}});
+    if(best)openExplain(best,i)});
+  ov.addEventListener('pointerleave',()=>{xh.style.display='none';tt.hidden=true});
+}
+let lastPanels=[];
+function drawCharts(){
+  const el=document.getElementById('charts');
+  const fmts=['Keg','Cube','4-pack'].filter(f=>st.fmt==='All'||st.fmt===f).filter(f=>!st.skus.length||st.total||st.skus.some(c=>BYCODE[c]&&BYCODE[c].fmt===f));
+  lastPanels=fmts.map(f=>[f,buildSeries(f)]).filter(([f,s])=>s.length);
+  const end=monthLabel(st.month);
+  el.innerHTML=lastPanels.length?lastPanels.map(([f])=>`<div class="panel" data-f="${f}"><h2>${FNAME[f]}<button type="button" class="fbtn">Show only this</button></h2><div class="small">Weighted ALC per unit, ${winDesc()}. Months with no production are joined across. Click a point for an explanation.</div><div class="lgs"></div><div class="plot"></div><div class="tt" hidden></div></div>`).join(''):'<div class="panel"><div class="nodata">Nothing matching these filters was assembled in the chosen period.</div></div>';
+  applyFocus(el,'data-f','cost');redrawPlots();
+  const cols=lastPanels.flatMap(([f,ss])=>ss.map(s=>({f,s}))),cur=timeWin().axis;
+  document.getElementById('dh').innerHTML='<tr><th>Month</th>'+cols.map(({f,s})=>`<th class="n">${FNAME[f]}: ${s.ent.replace(/</g,'&lt;')} ${s.wlabel}</th>`).join('')+'</tr>';
+  document.getElementById('db').innerHTML=cur.map((m,i)=>`<tr><td>${timeWin().cal?MN[i].slice(0,3):mshort(m)}</td>`+cols.map(({s})=>`<td class="n">${s.pts[i].alc!=null?money(s.pts[i].alc):'n/a'}</td>`).join('')+'</tr>').reverse().join('');
+}
+function applyFocus(el,attr,scope){
+  const key=st.focus[scope],ps=[...el.querySelectorAll('.panel['+attr+']')],on=!!key&&ps.some(p=>p.getAttribute(attr)===key);
+  el.classList.toggle('one',on);
+  ps.forEach(p=>{const s=on&&p.getAttribute(attr)===key;p.classList.toggle('sel',s);const b=p.querySelector('.fbtn');if(b){b.textContent=s?'Show all graphs':'Show only this';b.hidden=ps.length<2}});
+}
+function wireFocus(id,attr,scope,redraw){
+  document.getElementById(id).addEventListener('click',e=>{const b=e.target.closest('.fbtn');if(!b)return;const p=b.closest('.panel'),k=p.getAttribute(attr);
+    st.focus[scope]=st.focus[scope]===k?null:k;applyFocus(document.getElementById(id),attr,scope);redraw()});
+}
+function redrawPlots(){document.querySelectorAll('#charts .panel[data-f]').forEach(p=>{const s=lastPanels.find(x=>x[0]===p.dataset.f);if(s)lineChart(p,s[1])})}
+function setFull(on,id,btn,redraw){
+  id=id||'gsec';btn=btn||'gfs';redraw=redraw||redrawPlots;
+  st.full=on?id:false;document.body.style.overflow=on?'hidden':'';
+  const g=document.getElementById(id);g.classList.toggle('full',on);document.getElementById(btn).textContent=on?'Exit full screen':'Full screen';
+  if(on){try{const r=g.requestFullscreen&&g.requestFullscreen();r&&r.catch&&r.catch(()=>{})}catch(e){}}
+  else if(document.fullscreenElement){try{document.exitFullscreen().catch(()=>{})}catch(e){}}
+  requestAnimationFrame(redraw);
+}
+const exitFull=()=>{if(st.full==='vgsec')setFull(false,'vgsec','vfs',drawVCharts);else if(st.full==='egsec')setFull(false,'egsec','efs',effChart);else setFull(false)};
+document.getElementById('gfs').onclick=()=>setFull(!st.full);
+$('vfs').onclick=()=>st.full?exitFull():setFull(true,'vgsec','vfs',drawVCharts);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('vxp').hidden){closeVol();return}if(!$('xp').hidden){closeExplain();return}if(st.full)exitFull()}});
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&st.full)exitFull()});
+
+/* ===== 5. EXPLAIN A POINT. Click a point: a cost breakdown from Unleashed, then Claude's short reading of it. ===== */
+const xf={ctl:null};
+const sgn=(n,d=2)=>n==null?'n/a':(n>0?'+':n<0?'-':'')+money(Math.abs(n));
+function closeExplain(){if(xf.ctl){xf.ctl.abort();xf.ctl=null}$('xp').hidden=true;$('xs').hidden=true;st.sel=null;redrawPlots()}
+function openExplain(sr,i){
+  const month=sr.pts[i].month,ex=Calc.explain(DATA.products,DATA.assemblies,DATA.fbBatches,month,sr.keep,sr.ent);
+  if(!ex)return;
+  st.sel={ent:sr.ent,off:sr.off,month};redrawPlots();
+  $('xt').textContent=sr.ent+', '+monthLabel(month);
+  const b=$('xb');b.replaceChildren();
+  const d=ex.change;
+  b.append(mk('div',{className:'kv'},mk('span',{textContent:'ALC '}),mk('b',{textContent:money(ex.alc)}),mk('span',{textContent:ex.priorTwelveMonths.alc!=null?'vs prior 12 months '+money(ex.priorTwelveMonths.alc):'no production in the prior 12 months'}),ex.change!=null?mk('b',{textContent:sgn(ex.change)}):mk('span'),mk('span',{textContent:num(ex.units)+' units made'})));
+  const tb=mk('table'),th=mk('thead'),tbd=mk('tbody');
+  th.innerHTML='<tr><th>Per unit</th><th class="n">This month</th><th class="n">Prior 12 mo</th><th class="n">Change</th></tr>';
+  ex.perUnit.forEach(r=>{const tr=mk('tr');[mk('td',{textContent:r.part}),mk('td',{className:'n',textContent:money(r.thisMonth)}),mk('td',{className:'n',textContent:r.prior12!=null?money(r.prior12):'n/a'}),mk('td',{className:'n',textContent:r.prior12!=null?sgn(r.thisMonth-r.prior12):'n/a'})].forEach(c=>tr.append(c));tbd.append(tr)});
+  tb.append(th,tbd);b.append(mk('div',{className:'tw'},tb));
+  const be=ex.beer;
+  b.append(mk('div',{className:'kv'},mk('span',{textContent:'Beer cost per litre '}),mk('b',{textContent:be.costPerL!=null?'$'+be.costPerL.toFixed(3):'n/a'}),mk('span',{textContent:be.priorCostPerL!=null?'(prior $'+be.priorCostPerL.toFixed(3)+')':''}),mk('span',{textContent:'Litres per unit incl. loss '}),mk('b',{textContent:be.litresPerUnitIncludingLoss!=null?String(be.litresPerUnitIncludingLoss):'n/a'}),mk('span',{textContent:be.lossPct!=null?'Beer lost '+be.lossPct+'% (prior '+(be.priorLossPct!=null?be.priorLossPct+'%':'n/a')+')':''})));
+  if(ex.effectsOnAlc){const e=ex.effectsOnAlc;b.append(mk('div',{className:'kv'},mk('span',{textContent:'What moved it: beer price '}),mk('b',{textContent:sgn(e.beerPrice)}),mk('span',{textContent:'beer volume and loss '}),mk('b',{textContent:sgn(e.beerLitres)}),mk('span',{textContent:'keg hardware '}),mk('b',{textContent:sgn(e.kegHardware)}),mk('span',{textContent:'cans and lids '}),mk('b',{textContent:sgn(e.cansAndLids)}),mk('span',{textContent:'other packaging '}),mk('b',{textContent:sgn(e.otherPackaging)})))}
+  if(ex.mixVsRate)b.append(mk('div',{className:'kv'},mk('span',{textContent:'Across SKUs: cost changes within SKUs '}),mk('b',{textContent:sgn(ex.mixVsRate.rateEffect)}),mk('span',{textContent:'change in the mix of SKUs made '}),mk('b',{textContent:sgn(ex.mixVsRate.mixEffect)})));
+  if(ex.beerBatches.length)b.append(mk('div',{className:'kv'},mk('span',{textContent:'Beer: '+ex.beerBatches.map(x=>x.beer+' $'+(x.costPerL_recent6m||0).toFixed(2)+'/L over 6 months'+(x.hopShareOfBeerCost!=null?', '+Math.round(x.hopShareOfBeerCost*100)+'% hops':'')).join('; ')})));
+  ex.beerBatches.filter(x=>x.priceDrivers).slice(0,2).forEach(x=>{const pd=x.priceDrivers;
+    const head=mk('div',{className:'kv'},mk('b',{textContent:x.beer}),mk('span',{textContent:'costs $'+pd.costPerL_recent6m.toFixed(3)+'/L over the last 6 months against $'+pd.costPerL_prior12m.toFixed(3)+'/L over the 12 months before. Batches: '+pd.batches.recent6m+' averaging '+num(pd.avgBatchLitres.recent6m)+' L, against '+pd.batches.prior12m+' averaging '+num(pd.avgBatchLitres.prior12m)+' L.'}));
+    const tb2=mk('table'),th2=mk('thead'),tb2d=mk('tbody');
+    th2.innerHTML='<tr><th>Ingredient group</th><th class="n">$/L now</th><th class="n">$/L before</th><th class="n">From price</th><th class="n">From quantity</th></tr>';
+    pd.groups.forEach(g=>{const tr=mk('tr');const sp=g.effectOfPricePerKg!=null;
+      [mk('td',{textContent:g.group}),mk('td',{className:'n',textContent:'$'+g.costPerL.toFixed(3)}),mk('td',{className:'n',textContent:'$'+g.priorCostPerL.toFixed(3)}),
+       mk('td',{className:'n',textContent:sp?(g.effectOfPricePerKg>=0?'+':'-')+'$'+Math.abs(g.effectOfPricePerKg).toFixed(3):''}),mk('td',{className:'n',textContent:sp?(g.effectOfQuantityPerL>=0?'+':'-')+'$'+Math.abs(g.effectOfQuantityPerL).toFixed(3):(g.change>=0?'+':'-')+'$'+Math.abs(g.change).toFixed(3)})].forEach(c=>tr.append(c));tb2d.append(tr)});
+    tb2.append(th2,tb2d);
+    const lis=mk('div',{className:'kv'},mk('span',{textContent:'Biggest ingredient moves: '+pd.biggestIngredientChanges.slice(0,4).map(r=>r.ingredient+' ('+(r.changePerL>=0?'+':'-')+'$'+Math.abs(r.changePerL).toFixed(3)+'/L, '+r.what+')').join('; ')}));
+    b.append(head,mk('div',{className:'tw'},tb2),lis)});
+  const why=mk('div',{className:'why'},mk('div',{className:'lab',textContent:'Why, in words'}),mk('div',{id:'xw'}),mk('div',{className:'seg'},mk('button',{type:'button',id:'xstop',textContent:'Stop',hidden:true})),mk('div',{className:'small',id:'xn'}));
+  b.append(why);
+  $('xs').hidden=false;$('xp').hidden=false;$('xc').focus();
+  if(!ai.sample){$('xw').textContent='The written explanation is not available in this view. The figures above come straight from Unleashed.';return}
+  const ctl=new AbortController();xf.ctl=ctl;$('xw').textContent='Thinking…';$('xstop').hidden=false;$('xstop').onclick=()=>ctl.abort();
+  const prompt=`You are explaining one data point on a cost chart for the monthly board report of Margaret River Beer Co, a brewery in Western Australia. The point is the average landed cost (ALC) per unit of ${sr.ent} assembled in ${monthLabel(month)}. ALC is the total component cost of units assembled in the month divided by units assembled, in Australian dollars, materials only (beer at its Unleashed cost per litre, keg hardware, cans and lids, other packaging); labour, overheads, energy and excise are excluded. "Prior 12 months" means the 12 months before this one. effectsOnAlc splits the change from the prior-12-month figure into beer price, beer volume and loss, keg hardware, cans and lids, and other packaging; they add up to the change. If mixVsRate is present, rateEffect is the part due to SKUs costing more or less and mixEffect is the part due to a different mix of SKUs being made. Beer is costed at the running average cost of beer in stock, so beer brewed in earlier months can drive this month's figure; notes tell you how many beer batches were recorded in the month.
+
+Write 90 to 140 words of plain prose (no bullets, no markdown): say whether the point is above or below its prior-12-month figure and by how much, name the one or two largest drivers with dollar amounts from the data, and, where beer price is one of them, say why the beer costs more or less per litre using the beerBatches priceDrivers (ingredient price per unit, including a switch to a different malt or hop, quantity used per litre, batch size, a new or dropped ingredient), and mention a caution only if it applies (a very small run, high beer loss, a large mix effect, or the beer lag). Do not speculate about causes beyond the data; if a component moved a lot, say what would be worth checking. Use only the numbers given. Use Australian spelling.
+
+DATA (JSON):
+${JSON.stringify(ex)}`;
+  ai.sample(prompt,{signal:ctl.signal,cache:{gcTime:86400000},onText:({text})=>{$('xw').textContent=text}}).then(r=>{$('xw').textContent=r.text;$('xn').textContent='Written by Claude from the figures above.'}).catch(e=>{
+    if(e&&e.text)$('xw').textContent=e.text;else if(e&&e.code==='cancelled')$('xw').textContent='Stopped.';else $('xw').textContent='The written explanation could not be produced. The figures above are still correct.';
+  }).finally(()=>{xf.ctl=null;const s=$('xstop');if(s)s.hidden=true});
+}
+$('xc').onclick=closeExplain;$('xs').onclick=closeExplain;
+function renderChips(){
+  const c=document.getElementById('chips');c.replaceChildren();
+  st.skus.forEach(code=>{const b=mk('button',{type:'button',textContent:'×',ariaLabel:'Remove '+code});b.setAttribute('aria-label','Remove '+code);b.onclick=()=>{st.skus=st.skus.filter(x=>x!==code);afterSkuChange()};c.append(mk('span',{className:'chip'},mk('span',{textContent:code}),b))});
+  document.getElementById('picksum').textContent=st.skus.length?`Compare SKUs (${st.skus.length})`:'Compare SKUs';
+  document.getElementById('totbtn').hidden=!st.skus.length;
+}
+function syncPicker(){document.querySelectorAll('#picklist label').forEach(l=>{const cb=l.querySelector('input');l.classList.toggle('off',!cb.checked&&st.skus.length>=MAXSKU);cb.disabled=!cb.checked&&st.skus.length>=MAXSKU;cb.checked=st.skus.includes(cb.value)})}
+function afterSkuChange(){renderChips();syncPicker();drawCharts()}
+function renderPicker(){
+  const list=document.getElementById('picklist');
+  const codes=DATA.products.filter(p=>scope(p)&&(st.fmt==='All'||p.fmt===st.fmt)&&p.code.toLowerCase().includes(st.pq)).map(p=>p.code).sort();
+  list.replaceChildren(...codes.map(c=>{const cb=mk('input',{type:'checkbox',value:c});cb.onchange=()=>{st.skus=cb.checked?[...st.skus,c]:st.skus.filter(x=>x!==c);afterSkuChange()};return mk('label',{},cb,mk('span',{textContent:c}))}));
+  if(!codes.length)list.append(mk('div',{className:'empty',textContent:'No SKUs match.'}));
+  renderChips();syncPicker();
+}
+function renderYears(){
+  ['yrs','vyrs','eyrs'].forEach(id=>{const el=$(id);if(!el)return;
+    const g1=mk('div',{className:'seg'}),g2=mk('div',{className:'seg'});g1.setAttribute('role','group');g1.setAttribute('aria-label','Timeframe');
+    [[12,'12 months'],[24,'24 months'],[99,'All time']].forEach(([v,l])=>{const b=mk('button',{type:'button',textContent:l});b.setAttribute('aria-pressed',!st.cal&&st.nm===v);b.onclick=()=>{st.nm=v;st.cal=false;renderYears();render()};g1.append(b)});
+    const ob=mk('button',{type:'button',textContent:'Overlay years'});ob.setAttribute('aria-pressed',st.cal);ob.onclick=()=>{st.cal=!st.cal;renderYears();render()};g2.append(ob);
+    el.replaceChildren(g1,g2);
+    if(st.cal){const g3=mk('div',{className:'seg'});g3.setAttribute('role','group');g3.setAttribute('aria-label','Years to overlay');
+      CYEARS.forEach(y=>{const b=mk('button',{type:'button',textContent:String(y)});b.setAttribute('aria-pressed',st.cyears.includes(y));b.onclick=()=>{if(st.cyears.includes(y)){if(st.cyears.length>1)st.cyears=st.cyears.filter(x=>x!==y)}else st.cyears=[...st.cyears,y].sort();renderYears();render()};g3.append(b)});el.append(g3)}
+  });
+}
+document.getElementById('pq').oninput=e=>{st.pq=e.target.value.trim().toLowerCase();renderPicker()};
+['avgbtn','vavgbtn'].forEach(id=>$(id).onclick=()=>{st.avg=!st.avg;['avgbtn','vavgbtn'].forEach(i=>$(i).setAttribute('aria-pressed',st.avg));if(st.tab==='vol')drawVCharts();else drawCharts()});
+document.getElementById('totbtn').onclick=e=>{st.total=!st.total;e.target.setAttribute('aria-pressed',st.total);drawCharts()};
+document.querySelectorAll('details.pick').forEach(d=>d.addEventListener('toggle',()=>{if(!d.open)return;const pb=d.querySelector('.pickbody');pb.style.left='';const r=pb.getBoundingClientRect(),sh=Math.max(0,Math.min(r.right-(innerWidth-8),r.left-8));if(sh)pb.style.left=-sh+'px'}));
+let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(redrawPlots,120)});
+const COLS=[['code','SKU',0],['fmt','Format',0],['size','Size',0],['range','Range',0],['units','Units made',1],['alc','ALC',1],['avg12','Prior 12-mo avg',1],['vsAvg','vs avg',1],['prevAlc','Prior run',1]];
+function render(){
+  if(st.tab==='eff'){renderEff();return}
+  if(st.tab==='vol'){renderVol();return}
+  if(typeof aiSync==='function'&&$ )aiSync();
+  renderPicker();
+  const all=Calc.skuRows(DATA.products,DATA.assemblies,st.month);
+  const base=all.filter(r=>made(r)&&scope(r));
+  const groups=[['All',st.rng==='All'?'All SKUs':st.rng,base],...['Keg','Cube','4-pack'].map(f=>[f,f==='4-pack'?'Four-packs':f+'s',base.filter(r=>r.fmt===f)])].filter(g=>g[0]==='All'||g[2].length);
+  const w=Calc.weightedAlc;
+  document.getElementById('tiles').innerHTML=groups.map(([f,l,a])=>`<div class="tile ${st.fmt===f?'on':''}"><button type="button" data-f="${f}" aria-pressed="${st.fmt===f}"><span class="lab">${l}</span><span class="big">${a.length?money(w(a)):'n/a'}</span><span class="small">${a.length} SKUs, ${num(Calc.totalUnits(a))} units assembled</span></button></div>`).join('')||'<div class="tile"><span class="lab">No production</span><span class="small">Nothing matching these filters was assembled in '+monthLabel(st.month)+'.</span></div>';
+  document.querySelectorAll('#tiles button').forEach(b=>b.onclick=()=>{st.fmt=b.dataset.f;render()});
+  seg('fmt',FORMATS,'fmt','All formats');seg('rng',RANGES,'rng','All ranges');
+  document.getElementById('head').innerHTML=COLS.map(([k,l,n])=>`<th class="${n?'n':''}" aria-sort="${st.sort===k?(st.dir>0?'ascending':'descending'):'none'}"><button type="button" data-k="${k}">${k==='alc'?'ALC '+monthLabel(st.month).slice(0,3):l}${st.sort===k?(st.dir>0?' ▲':' ▼'):''}</button></th>`).join('');
+  document.querySelectorAll('th button').forEach(b=>b.onclick=()=>{const k=b.dataset.k;st.dir=st.sort===k?-st.dir:(['code','fmt','size','range'].includes(k)?1:-1);st.sort=k;render()});
+  let a=all.filter(r=>(st.all||made(r))&&scope(r)&&(st.fmt==='All'||r.fmt===st.fmt)&&r.code.toLowerCase().includes(st.q));
+  a.sort((x,y)=>{const u=x[st.sort],v=y[st.sort];if(u==null&&v==null)return 0;if(u==null)return 1;if(v==null)return -1;return (typeof u==='number'?u-v:String(u).localeCompare(String(v)))*st.dir});
+  const mx=Math.max(1,...all.map(r=>r.alc||0));
+  const prod=a.filter(made);
+  document.getElementById('count').textContent=monthLabel(st.month)+': '+prod.length+' SKUs assembled'+(prod.length?', weighted average '+money(w(prod))+' per unit':'')+(st.all?'; '+(a.length-prod.length)+' not assembled shown':'');
+  document.getElementById('body').innerHTML=a.length?a.map(r=>{const d=r.vsAvg;const dc=d==null?'<span style="color:var(--muted)">n/a</span>':(d>0?'+':d<0?'-':'')+money(Math.abs(d));
+   return `<tr><td>${r.code.replace(/</g,'&lt;')}</td><td><span class="tag">${r.fmt}</span></td><td>${r.size||'<span style="color:var(--muted)">n/a</span>'}</td><td>${r.range}</td><td class="n">${made(r)?num(r.units):'0'}</td><td class="cost">${made(r)?`<div class="cb"><i style="width:${(r.alc/mx*100).toFixed(1)}%;max-width:calc(100% - 72px)"></i><span>${money(r.alc)}</span></div>`:'<span style="color:var(--muted)">Not assembled</span>'}</td><td class="n">${r.avg12!=null?money(r.avg12)+' <span class="mut">'+r.runs12+' run'+(r.runs12>1?'s':'')+'</span>':'<span class="mut">none</span>'}</td><td class="n">${dc}</td><td class="n">${r.prevAlc!=null?money(r.prevAlc)+' <span class="mut">'+mshort(r.prevRunMonth)+'</span>':'<span class="mut">none</span>'}</td></tr>`}).join(''):'<tr><td colspan="9" class="empty">No SKUs match these filters.</td></tr>';
+  drawCharts();
+}
+document.getElementById('q').oninput=e=>{st.q=e.target.value.trim().toLowerCase();render()};
+document.getElementById('allbtn').onclick=e=>{st.all=!st.all;e.target.setAttribute('aria-pressed',st.all);e.target.textContent=st.all?'Hide SKUs not assembled':'Show SKUs not assembled';render()};
+/* ===== 4. AI SUMMARY. Asks Claude via the sample capability; viewer-initiated, nothing runs on load. ===== */
+const ai={key:null,ctl:null,sample:null};
+const aiKey=()=>[st.month,st.fmt,st.rng,st.size].join('|');
+const aiScope=()=>monthLabel(st.month)+', '+(st.rng==='All'?'all ranges':st.rng)+(st.fmt==='All'?'':', '+st.fmt+' only')+(st.size==='All sizes'?', all keg sizes':', '+st.size+' kegs');
+function aiShow(text){$('aiout').replaceChildren(...text.split(/\n{2,}/).filter(s=>s.trim()).map(s=>mk('p',{textContent:s.trim()})))}
+function aiIdle(){
+  $('aiscope').textContent=aiScope();
+  if(!ai.ctl){$('aigo').textContent=ai.key?'Summarise again':'Summarise '+monthLabel(st.month);$('aigo').disabled=false;$('aistop').hidden=true}
+}
+function aiSync(){ /* called from render(): clear a summary that no longer matches what is shown */
+  if(ai.key&&ai.key!==aiKey()){if(ai.ctl)ai.ctl.abort();ai.key=null;$('aiout').replaceChildren();$('ainote').textContent=''}
+  aiIdle();
+}
+function aiPrompt(f){
+  return `You are writing the production cost commentary for the monthly board report of Margaret River Beer Co, a brewery in Western Australia. The figures below come from Unleashed for ${monthLabel(st.month)}. Scope: ${aiScope()}.
+
+ALC means average landed cost per unit: the total component cost of units assembled in the month divided by units assembled, in Australian dollars. It covers materials only (beer at its Unleashed cost per litre, kegs, caps, collars, packaging). It excludes labour, overheads, energy and excise. Average figures are weighted by units. Kegs without a size in their name are treated as 50L. The overall figure blends kegs and cubes, and a keg costs roughly four times a cube, so month-to-month movement in the overall figure mostly reflects the mix of units made. Lead with the keg and cube figures separately and treat the overall figure as secondary.
+
+"beerPriceDrivers" explains, beer by beer, why each beer costs what it does per litre: last 6 months of brewing batches compared with the 12 months before, by ingredient group (malt and hops split into price per unit, which includes switching to a different malt or hop, and quantity used per litre, which reflects recipe and batch size), plus the biggest individual ingredient changes and average batch size. Smaller batches spread fixed per-batch items over fewer litres. Each driver block shows why an ALC is what it is. "drivers.effectsOnAlc" splits the change from the prior-12-month figure into beer price, beer volume and loss, keg hardware, cans and lids, and other packaging; these add up to the change. "mixVsRate" splits a group's change into SKUs costing more or less (rateEffect) and a different mix of SKUs being made (mixEffect). Beer is costed at the running average cost of beer in stock, so beer brewed in earlier months drives this month's figure; "notes" tells you how many beer batches were recorded in the month.
+
+Write 260 to 340 words in four short paragraphs of plain prose: no headings, no bullet points, no bold, no markdown. Cover: (1) the overall picture for the month compared with the 12-month average and the same month last year (mention the calendar prior month only briefly, if at all), leading with kegs and cubes separately; (2) the main reasons, using the drivers: which SKUs sit furthest above or below their own prior-12-month average and what caused it (beer cost per litre, which usually follows how hop-heavy the beer is and, using beerPriceDrivers, name the actual ingredient reasons such as a cheaper or dearer base malt, hop price or quantity, or smaller batches; keg hardware cost, which varies month to month; cans; beer lost in packaging), with dollar amounts; (3) anything the board should treat with caution: very small runs, unusually high beer loss, SKUs with few runs in the past year, a large mix effect, SKUs not assembled this month, and the beer-cost lag. A SKU that was not made last month is NOT a first reading and must not be described as new or unprecedented: only call a SKU a first run if firstRunOnRecord is true. Judge each SKU against its own history. Do not speculate about causes beyond the data; where something moved a lot, say what would be worth checking. Use only numbers given here and do not invent any. Use Australian spelling and write $ amounts to two decimals.
+
+DATA (JSON):
+${JSON.stringify(f)}`;
+}
+async function aiRun(refresh){
+  const f=Calc.monthFacts(DATA.products,DATA.assemblies,DATA.fbBatches,st.month,p=>scope(p)&&(st.fmt==='All'||p.fmt===st.fmt));
+  if(!f.overall){$('aiout').replaceChildren(mk('p',{textContent:'Nothing matching the current filters was assembled in '+monthLabel(st.month)+', so there is nothing to summarise.'}));return}
+  const ctl=new AbortController();ai.ctl=ctl;ai.key=aiKey();
+  $('aigo').disabled=true;$('aistop').hidden=false;$('aiout').classList.add('busy');$('aiout').replaceChildren(mk('p',{textContent:'Thinking…'}));$('ainote').textContent='';
+  try{
+    const r=await ai.sample(aiPrompt(f),{signal:ctl.signal,cache:{gcTime:86400000,refresh:!!refresh},onText:({text})=>aiShow(text)});
+    aiShow(r.text);$('ainote').textContent='Written by Claude from the figures on this page. Read it before it goes in the board pack.'+(r.truncated?' The answer was cut short.':'');
+  }catch(e){
+    if(e&&e.text)aiShow(e.text);else $('aiout').replaceChildren();
+    const c=e&&e.code;
+    if(c==='not_granted'||c==='sampling_disabled'||c==='not_declared'||c==='capability_disabled'||c==='capability_removed'){$('ai').hidden=true}
+    else if(c!=='cancelled'){ai.key=null;$('ainote').textContent=c==='rate_limited'?'Claude is not available right now because a usage limit was reached. Try again later.':'The summary could not be written. Press Summarise to try again.'}
+    else ai.key=null;
+  }finally{ai.ctl=null;$('aiout').classList.remove('busy');aiIdle()}
+}
+$('aigo').onclick=()=>aiRun(!!ai.key);
+$('aistop').onclick=()=>{if(ai.ctl)ai.ctl.abort()};
+if(window.claude&&window.claude.use)window.claude.use('sample').then(s=>{if(s){ai.sample=s;$('ai').hidden=false;aiIdle();$('vai').hidden=false;vIdle();$('eai').hidden=false;eIdle()}}).catch(()=>{});
+
+/* ===== 6. VOLUMES TAB ===== */
+const VIX=Calc.volIndex(DATA.products,DATA.assemblies,DATA.fbBatches);
+const PULLED=(DATA.pulled||'').slice(0,7),LATE='9999-12';
+const beerKeep=c=>st.rng==='All'||DATA.beerRange[c]===st.rng;
+const skuKeep=p=>scope(p);
+const bname=c=>c.replace(/^FB\s*-?\s*/,'');
+const VK=[['Beer','Finished beer'],['Keg','Kegs'],['Cube','Cubes']];
+const keepFor=k=>k==='Beer'?beerKeep:skuKeep;
+const metricFor=k=>k==='Beer'?'litres':st.vmetric;
+const vf=(k,v)=>num(Math.round(v))+(metricFor(k)==='units'?'':' L');
+const pctTxt=(a,b)=>b>0?((a>=b?'+':'-')+Math.abs(Math.round((a-b)/b*100))+'%'):'n/a';
+const vmonth=$('vmonth'),vsize=$('vsize');
+vmonth.innerHTML=monthSel.innerHTML;vsize.innerHTML=sizeSel.innerHTML;
+vmonth.onchange=()=>{st.month=vmonth.value;monthSel.value=st.month;renderYears();render()};
+vsize.onchange=()=>{st.size=vsize.value;sizeSel.value=st.size;render()};
+monthSel.addEventListener('change',()=>{vmonth.value=st.month});sizeSel.addEventListener('change',()=>{vsize.value=st.size});
+function setTab(tab){
+  st.tab=tab;$('tab-cost').hidden=tab!=='cost';$('tab-vol').hidden=tab!=='vol';$('tab-eff').hidden=tab!=='eff';$('tabeff').setAttribute('aria-selected',tab==='eff');
+  $('tabcost').setAttribute('aria-selected',tab==='cost');$('tabvol').setAttribute('aria-selected',tab==='vol');
+  vmonth.value=st.month;vsize.value=st.size;render();
+}
+$('tabcost').onclick=()=>setTab('cost');$('tabvol').onclick=()=>setTab('vol');$('tabeff').onclick=()=>setTab('eff');
+/* ===== 7. EFFICIENCY TAB ===== */
+st.small=false;
+const emonth=$('emonth');emonth.innerHTML=monthSel.innerHTML;
+emonth.onchange=()=>{st.month=emonth.value;monthSel.value=st.month;vmonth.value=st.month;renderYears();render()};
+$('esmall').onclick=()=>{st.small=!st.small;render()};
+let OV={},SH={},SHI={},fvDoc=null,shDoc=null,fvSaved=null;
+const bkey=b=>(b.bn+'__'+b.beer[0]).replace(/[^A-Za-z0-9_-]+/g,'-');
+const effList=()=>DATA.eff.map(b=>{const k=bkey(b),o=OV[k],man=!!(o&&o.L>0),sh=SH[k]>0?SH[k]:0,base=sh||b.init;return Calc.effBatch({...b,auto:base,init:man?o.L:base,fv:man,fromSheet:!man&&!!sh},DATA.pulled,st.small?0:1500)}).filter(b=>st.rng==='All'||DATA.beerRange[b.beer[0]]===st.rng);
+let EL=[];
+const effIn=ms=>{const s=new Set(ms);return EL.filter(b=>s.has(b.m))};
+const effM=m=>Calc.effAgg(effIn([m]));
+const pc=v=>v==null?'n/a':(v*100).toFixed(1)+'%';
+const ppTxt=(a,b)=>a==null||b==null?'n/a':((a>=b?'+':'-')+Math.abs((a-b)*100).toFixed(1)+' pp');
+const escopeTxt=()=>monthLabel(st.month)+', '+(st.rng==='All'?'all ranges':st.rng);
+function etiles(){
+  const m=st.month,ly=Calc.shiftMonth(m,-12),a=effM(m),b=Calc.effAgg(effIn(Calc.monthsBack(Calc.prevMonth(m),12))),l=effM(ly);
+  const cmp=k=>`<span class="small">vs prior 12 months <b>${ppTxt(a[k],b[k])}</b> · vs ${mshort(ly)} <b>${ppTxt(a[k],l[k])}</b></span>`;
+  const tl=[
+   ['Transfer efficiency',pc(a.transfer),`${num(Math.round(a.L))} L completed of ${num(Math.round(a.init))} L in the fermenter`,cmp('transfer'),a.n?'':'No batches completed this month.'],
+   ['Brite to packaged',pc(a.pack),`${num(Math.round(a.pk))} L packaged of ${num(Math.round(a.pL))} L`,cmp('pack'),a.n>a.np?`${a.n-a.np} batch${a.n-a.np>1?'es':''} still being packaged, left out.`:''],
+   ['Overall efficiency',pc(a.overall),`${num(Math.round(a.pk))} L packaged of ${num(Math.round(a.pInit))} L in the fermenter`,cmp('overall'),''],
+   ['Batches counted',String(a.n),`${a.np} fully packaged`+(a.small?`, ${a.small} small brew${a.small>1?'s':''} left out`:''),'',a.flagged?`${a.flagged} batch${a.flagged>1?'es':''} to check (packaged volume looks wrong against the assembly).`:'']];
+  $('etiles').innerHTML=tl.map(([l,big,sub,c,w])=>`<div class="tile"><span class="lab">${l}</span><span class="big">${big}</span><span class="small">${sub}</span>${c}${w?`<span class="vnote">${w}</span>`:''}</div>`).join('');
+}
+const EMET={transfer:'Transfer to brite',pack:'Brite to packaged',overall:'Overall, from fermenter'};
+const efAllOk=()=>!((st.cal&&st.ebeers.length>1)||st.ebeers.length>4);
+const efMet=()=>st.emetric==='all'&&!efAllOk()?'transfer':st.emetric;
+function eseries(){
+  const T=timeWin(),ents=st.ebeers.length?st.ebeers:[null],em=efMet(),mets=em==='all'?['transfer','pack','overall']:[em],out=[];
+  ents.forEach((beer,ei)=>mets.forEach((k,mi)=>T.wins.forEach(w=>{
+    const pts=w.months.map(m=>{if(!w.ok(m))return {month:m,v:null,n:0,np:0};const a=Calc.effAgg(effIn([m]).filter(b=>!beer||b.beer[0]===beer));const ip=k!=='transfer'?a.n-a.np:0;return {month:m,v:a[k],n:a.n,np:a.np,ip}});
+    const solo=T.cal&&ents.length===1&&mets.length===1;
+    const color=mets.length>1?SC[mi]:(solo?SC[w.wi%SC.length]:SC[ei%SC.length]),dash=mets.length>1?(T.cal?YR_DASH[w.wi]:(ents.length>1?YR_DASH[ei%4]:'')):(solo?'':YR_DASH[w.wi]);
+    const label=[beer?bname(beer):(mets.length>1?'':'All beers'),mets.length>1?EMET[k]:'',T.cal?w.label:''].filter(Boolean).join(' · ');
+    out.push({label,k,color,dash,wlabel:w.label,pts});
+  })));
+  return out.filter(s=>s.pts.some(p=>p.v!=null));
+}
+function effChart(){
+  const panel=$('echarts').querySelector('.panel');if(!panel)return;
+  const plot=panel.querySelector('.plot');plot.replaceChildren();const series=eseries(),isFull=!!panel.closest('.gsec.full');
+  if(!series.length){plot.innerHTML='<div class="nodata">No batches in this period for these filters.</div>';panel.querySelector('.lgs').replaceChildren();return}
+  const TW=timeWin(),w=Math.max(260,plot.clientWidth),h=isFull?Math.max(240,plot.clientHeight):320,ml=46,mr=14,mt=12,mb=26,iw=w-ml-mr,ih=h-mt-mb,n=series[0].pts.length;
+  const all=series.flatMap(s=>s.pts.filter(p=>p.v!=null).map(p=>p.v*100));
+  const ticks=niceTicks(Math.min(...all),Math.max(...all)),lo=ticks[0],hi=ticks[ticks.length-1];
+  const X=i=>ml+i*iw/(n-1),Y=v=>mt+ih-(v-lo)/(hi-lo)*ih,cur=TW.axis,every=everyN(iw);
+  let s=`<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="Efficiency by month">`;
+  ticks.forEach(v=>{s+=`<line class="g" x1="${ml}" x2="${w-mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml-8}" y="${Y(v)+4}" text-anchor="end">${v}%</text>`});
+  cur.forEach((m,i)=>{if((n-1-i)%every===0)s+=`<text x="${X(i)}" y="${h-6}" text-anchor="middle">${TW.cal?mon3(m):mshort(m)}</text>`});
+  if(!TW.cal){const bw=iw/(n-1),x0=Math.max(ml,X(n-1)-bw/2),x1=Math.min(w-mr,X(n-1)+bw/2);s+=`<rect x="${x0}" y="${mt}" width="${x1-x0}" height="${ih}" fill="var(--hl)"/>`}
+  series.forEach(sr=>{const pts=sr.pts.map((p,i)=>p.v==null?null:X(i)+','+Y(p.v*100)).filter(Boolean);if(pts.length>1)s+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${sr.dash?`stroke-dasharray="${sr.dash}"`:''}/>`});
+  series.forEach(sr=>sr.pts.forEach((p,i)=>{if(p.v!=null)s+=`<circle cx="${X(i)}" cy="${Y(p.v*100)}" r="${dotR(n,!TW.cal&&i===n-1)}" fill="${sr.color}" stroke="var(--surface)" stroke-width="2"/>`}));
+  s+=`<line id="xh" class="g" y1="${mt}" y2="${mt+ih}" style="display:none"/><rect id="ov" x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent"/></svg>`;
+  plot.innerHTML=s;
+  const lg=panel.querySelector('.lgs');lg.replaceChildren();
+  series.forEach(sr=>{const k=mk('span');k.innerHTML=svgKey(sr.color,sr.dash);lg.append(mk('span',{className:'lg'},k,mk('span',{textContent:sr.label})))});
+  const svg=plot.querySelector('svg'),ov=svg.querySelector('#ov'),xh=svg.querySelector('#xh'),tt=panel.querySelector('.tt');
+  const idxAt=e=>{const r=svg.getBoundingClientRect(),x=(e.clientX-r.left)*(w/r.width)-ml;return Math.max(0,Math.min(n-1,Math.round(x/iw*(n-1))))};
+  const show=e=>{const i=idxAt(e);xh.setAttribute('x1',X(i));xh.setAttribute('x2',X(i));xh.style.display='';
+    tt.replaceChildren(mk('span',{textContent:TW.cal?MN[+cur[i].slice(5)-1]:monthLabel(cur[i])}));
+    series.forEach(sr=>{const p=sr.pts[i],k=mk('span');k.innerHTML=svgKey(sr.color,sr.dash);tt.append(mk('div',{className:'row'},k,mk('b',{textContent:pc(p.v)}),mk('span',{textContent:sr.label+' · '+p.n+' batch'+(p.n===1?'':'es')+(p.ip?', '+p.ip+' still being packaged, left out':'')})))});
+    tt.hidden=false;const pr=panel.getBoundingClientRect(),sr2=svg.getBoundingClientRect();let left=sr2.left-pr.left+X(i)*(sr2.width/w)+12;if(left+tt.offsetWidth>pr.width-8)left=Math.max(4,left-tt.offsetWidth-24);tt.style.left=left+'px';tt.style.top=(sr2.top-pr.top+mt)+'px'};
+  ov.addEventListener('pointermove',show);ov.addEventListener('pointerdown',show);ov.addEventListener('pointerleave',()=>{tt.hidden=true;xh.style.display='none'});
+}
+function drawECharts(){
+  const em=efMet();
+  $('echarts').innerHTML=`<div class="panel"><h2>Efficiency by month</h2><div class="small">${em==='all'?'Transfer, brite to packaged and overall':EMET[em]}${st.ebeers.length?' for '+st.ebeers.map(bname).join(', '):''}, weighted by litres, ${winDesc()}, by month the beer was completed. Batches still being packaged are left out of the packaging and overall lines. Months with no figure are joined across.</div><div class="lgs"></div><div class="plot"></div><div class="tt" hidden></div></div>`;
+  effChart();
+}
+function renderEctl(){
+  const beers=[...new Set(EL.map(b=>b.beer[0]))].sort((a,b)=>bname(a).localeCompare(bname(b)));
+  st.ebeers=st.ebeers.filter(c=>beers.includes(c));
+  $('emet').replaceChildren(...[['all','All three'],['transfer','Transfer'],['pack','Brite to packaged'],['overall','Overall']].map(([v,l])=>{const b=mk('button',{type:'button',textContent:l});b.setAttribute('aria-pressed',efMet()===v);if(v==='all'&&!efAllOk()){b.disabled=true;b.title='Not available with several beers and years overlaid together, or with more than 4 beers. Pick one measure.'}b.onclick=()=>{st.emetric=v;renderEff()};return b}));
+  const q=($('epq').value||'').trim().toLowerCase();
+  $('epicklist').replaceChildren(...beers.filter(c=>bname(c).toLowerCase().includes(q)).map(c=>{const cb=mk('input',{type:'checkbox',value:c});cb.checked=st.ebeers.includes(c);const off=!cb.checked&&st.ebeers.length>=MAXSKU;cb.disabled=off;cb.onchange=()=>{st.ebeers=cb.checked?[...st.ebeers,c]:st.ebeers.filter(x=>x!==c);renderEff()};const l=mk('label',{},cb,mk('span',{textContent:bname(c)}));l.classList.toggle('off',off);return l}));
+  $('epicksum').textContent=st.ebeers.length?`Compare beers (${st.ebeers.length})`:'Compare beers';
+  chipsInto('echips',st.ebeers,bname,c=>{st.ebeers=st.ebeers.filter(x=>x!==c);renderEff()});
+}
+$('epq').oninput=()=>{if(st.tab==='eff')renderEctl()};
+const estat=b=>b.small?'Small brew, left out':b.inprog?'Packaging in progress':b.check?'Check batch numbers':'';
+function etables(){
+  const m=st.month,rows=EL.filter(b=>b.m===m).sort((a,b)=>a.done<b.done?-1:a.done>b.done?1:0);
+  $('emlab').textContent=monthLabel(m);$('emlab2').textContent=monthLabel(m);
+  $('ebh').innerHTML='<tr><th>Batch</th><th>Beer</th><th>Brewed</th><th>Completed</th><th class="n">FV litres (editable)</th><th class="n">Transferred L</th><th class="n">Transfer</th><th class="n">Kegs</th><th class="n">Cubes</th><th class="n">Packaged L</th><th class="n">Brite to packaged</th><th class="n">Overall</th><th>Note</th></tr>';
+  $('ebb').innerHTML=rows.length?rows.map(b=>`<tr><td>${b.bn}</td><td>${b.beer.map(bname).join(', ').replace(/</g,'&lt;')}</td><td>${b.brew.slice(5)}</td><td>${b.done.slice(5)}</td><td class="n"><input class="fvin${b.fv?' ed':b.fromSheet?' sh':''}" type="number" inputmode="numeric" min="0" step="500" value="${b.init}" data-k="${bkey(b)}" aria-label="Fermenter litres for batch ${b.bn}"/>${b.fv?`<button type="button" class="fvx" data-k="${bkey(b)}" title="Back to ${b.fromSheet||SH[bkey(b)]>0?'the brewsheet':'the assumed'} ${num(b.auto)} L" aria-label="Reset to assumed volume">&#8634;</button>`:''}</td><td class="n">${num(b.L)}</td><td class="n">${pc(b.tr)}</td><td class="n">${num(Math.round(b.keg))}</td><td class="n">${num(Math.round(b.cube))}</td><td class="n">${num(b.pk)}</td><td class="n">${pc(b.pr)}</td><td class="n">${pc(b.ov)}</td><td>${estat(b)?`<span class="tag">${estat(b)}</span>`:''}</td></tr>`).join(''):'<tr><td colspan="13" class="empty">No batches completed in this month for this range.</td></tr>';
+  const by=new Map();effIn(Calc.monthsBack(m,12)).forEach(b=>{const k=b.beer[0];if(!by.has(k))by.set(k,[]);by.get(k).push(b)});
+  const br=[...by.entries()].map(([k,l])=>({k,...Calc.effAgg(l)})).filter(x=>x.n).sort((a,b)=>b.L-a.L);
+  $('ebeh').innerHTML='<tr><th>Beer</th><th class="n">Batches</th><th class="n">Litres transferred</th><th class="n">Transfer</th><th class="n">Brite to packaged</th><th class="n">Overall</th></tr>';
+  $('ebeb').innerHTML=br.length?br.map(x=>`<tr><td>${bname(x.k).replace(/</g,'&lt;')}</td><td class="n">${x.n}</td><td class="n">${num(Math.round(x.L))}</td><td class="n">${pc(x.transfer)}</td><td class="n">${pc(x.pack)}</td><td class="n">${pc(x.overall)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No batches in these 12 months.</td></tr>';
+  return br;
+}
+const eai={key:null,ctl:null};
+const eKey=()=>[st.month,st.rng,st.small].join('|');
+function eIdle(){$('escope').textContent=escopeTxt();if(!eai.ctl){$('ego').textContent=eai.key?'Summarise again':'Summarise '+monthLabel(st.month);$('ego').disabled=false;$('estop').hidden=true}}
+function eShow(text){$('eout').replaceChildren(...text.split(/\n{2,}/).filter(x=>x.trim()).map(x=>mk('p',{textContent:x.trim()})))}
+function eFacts(br){
+  const m=st.month,r=a=>({batches:a.n,fullyPackaged:a.np,transferPct:a.transfer==null?null:+(a.transfer*100).toFixed(1),briteToPackagedPct:a.pack==null?null:+(a.pack*100).toFixed(1),overallPct:a.overall==null?null:+(a.overall*100).toFixed(1),litresCompleted:Math.round(a.L),litresInFermenter:Math.round(a.init),litresPackaged:Math.round(a.pk)});
+  return {month:m,scope:escopeTxt(),partMonth:m>=PULLED,dataPulled:DATA.pulled,thisMonth:r(effM(m)),sameMonthLastYear:r(effM(Calc.shiftMonth(m,-12))),average12MonthsBefore:r(Calc.effAgg(effIn(Calc.monthsBack(Calc.prevMonth(m),12)))),
+    batchesThisMonth:EL.filter(b=>b.m===m).map(b=>({batch:b.bn,beers:b.beer.map(bname),fermenterL:b.init,completedL:b.L,transferPct:+(b.tr*100).toFixed(1),packagedL:b.pk,briteToPackagedPct:+(b.pr*100).toFixed(1),overallPct:+(b.ov*100).toFixed(1),note:estat(b)||null,fermenterVolumeSource:b.fv?'entered by the team':b.fromSheet?'recorded in the brewsheet':'assumed by rounding up'})),
+    byBeerLast12Months:br.slice(0,12).map(x=>({beer:bname(x.k),batches:x.n,transferPct:+(x.transfer*100).toFixed(1),briteToPackagedPct:x.pack==null?null:+(x.pack*100).toFixed(1)})),
+    last12Months:Calc.monthsBack(m,12).map(mm=>{const a=effM(mm);return {month:mm,batches:a.n,transferPct:a.transfer==null?null:+(a.transfer*100).toFixed(1),briteToPackagedPct:a.pack==null?null:+(a.pack*100).toFixed(1),overallPct:a.overall==null?null:+(a.overall*100).toFixed(1)}})};
+}
+function ePrompt(f){return `You are writing the brewhouse efficiency commentary for the monthly board report of Margaret River Beer Co, a brewery in Western Australia. The figures are from Unleashed for ${monthLabel(st.month)}. Scope: ${f.scope}.
+
+Method: each batch is a finished beer assembly. The litres that went into the fermenter are not recorded in Unleashed, so by default they are assumed to be the completed volume rounded up to the next 2,500 L (a 10,000 L brew that yields 8,500 L is 85% transfer efficiency); where a batch's fermenterVolumeSource says recorded in the brewsheet or entered by the team, the real recorded figure is used instead. "transferPct" is litres completed in the assembly divided by litres in the fermenter. "briteToPackagedPct" is nominal litres packaged in kegs (at their size) and cubes (6 L each) divided by litres completed. "overallPct" is litres packaged divided by litres in the fermenter. Monthly and 12-month figures are weighted by litres. Batches are counted in the month the assembly was completed. Small brews under 1,500 L are left out, and batches still being packaged are left out of the packaging and overall figures (see each batch's note).
+
+Write 200 to 280 words in three or four short paragraphs of plain prose: no headings, no bullet points, no bold, no markdown. Cover: (1) transfer, brite to packaged and overall efficiency for the month against the 12-month average and the same month last year (lead with those, keep the prior month brief); (2) which batches or beers pulled the figures up or down, using the batch and beer figures; (3) cautions: the fermenter volume (a batch that actually started below the rounded figure will read low on transfer), few batches in the month, batches still being packaged, and any batch flagged to check. Do not speculate about causes you cannot see in the data; say what the numbers show and what would be worth checking. Use only the numbers given and do not invent any. Use Australian spelling.
+
+DATA (JSON):
+${JSON.stringify(f)}`}
+async function eRun(refresh){
+  const f=eFacts(etables());
+  const ctl=new AbortController();eai.ctl=ctl;eai.key=eKey();
+  $('ego').disabled=true;$('estop').hidden=false;$('eout').classList.add('busy');$('eout').replaceChildren(mk('p',{textContent:'Thinking…'}));$('enote').textContent='';
+  try{const r=await ai.sample(ePrompt(f),{signal:ctl.signal,cache:{gcTime:86400000,refresh:!!refresh},onText:({text})=>eShow(text)});
+    eShow(r.text);$('enote').textContent='Written by Claude from the figures on this page. Read it before it goes in the board pack.'+(r.truncated?' The answer was cut short.':'')}
+  catch(e){if(e&&e.text)eShow(e.text);else $('eout').replaceChildren();const c=e&&e.code;
+    if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(c))$('eai').hidden=true;
+    else if(c!=='cancelled'){eai.key=null;$('enote').textContent=c==='rate_limited'?'Claude is not available right now because a usage limit was reached. Try again later.':'The summary could not be written. Press Summarise to try again.'}else eai.key=null}
+  finally{eai.ctl=null;$('eout').classList.remove('busy');eIdle()}
+}
+$('ego').onclick=()=>eRun(!!eai.key);$('estop').onclick=()=>{if(eai.ctl)eai.ctl.abort()};
+$('efs').onclick=()=>st.full?exitFull():setFull(true,'egsec','efs',effChart);
+async function fvWrite(key,L){
+  if(!fvDoc){fvSaved=false;return}
+  const body={o:{[key]:L==null?null:{L,at:new Date().toISOString().slice(0,10)}}};
+  try{try{await fvDoc.update(body)}catch(e){if(e&&e.code==='invalid_argument')await fvDoc.set(body);else throw e}fvSaved=true}catch(e){fvSaved=false}
+  fvNote();
+}
+function fvNote(){
+  const n=Object.keys(SH).length,i=SHI;
+  let s='Type the real fermenter litres where you know them (highlighted cells). Dashed cells come from the Brewery Efficiency Tracking sheet (batches completed before 1 Sep 2026); the rest are assumed by rounding up. The arrow returns a batch to the sheet or assumed figure.';
+  s+=n?` ${n} batches have sheet litres${i.at?' (loaded '+i.at.slice(0,10)+')':''}${i.unmatched?'; '+i.unmatched+' sheet entries could not be matched to an Unleashed batch':''}.`:' No sheet litres loaded yet.';
+  if(i.error)s+=' '+i.error;
+  s+=fvDoc?(fvSaved===false?' The last edit could not be saved.':' Edits are saved for everyone who opens this page.'):' Edits are not being saved on this view and will be lost when the page closes.';
+  $('fvnote').textContent=s;
+}
+/* Brewery Efficiency Tracking: horizontal blocks, row labels in column A (Date, Beer, Batch, Volume to FV ...), one batch per column. Read-only. */
+const SHEET_ID='1Rswmc9Agcd78NfS5b9_W52DpSlAVRC9Wdxvwy6vem4k';
+function csvRows(s){const rows=[];let r=[],c='',q=false;for(let i=0;i<s.length;i++){const ch=s[i];
+  if(q){if(ch==='"'){if(s[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}
+  else if(ch==='"')q=true;else if(ch===','){r.push(c);c=''}
+  else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&s[i+1]==='\n')i++;r.push(c);rows.push(r);r=[];c=''}else c+=ch}
+  if(c!==''||r.length){r.push(c);rows.push(r)}return rows}
+function sheetEntries(csv){
+  const rows=csvRows(csv),out=[];let beer=null,cur=null;
+  for(const row of rows){const lab=(row[0]||'').trim().toLowerCase();
+    if(lab==='beer')beer=row;
+    else if(lab==='batch'){cur={batch:row,beer}}
+    else if(lab.startsWith('volume to fv')&&cur){
+      for(let j=1;j<cur.batch.length;j++){
+        const s=(cur.batch[j]||'').trim();let nums=null,m;
+        if(/^\d+$/.test(s))nums=[s];
+        else if(/^\d+(\s*\+\s*\d+)+$/.test(s))nums=s.split('+').map(x=>x.trim());
+        else if((m=s.match(/^(\d+)\s*-\s*(\d+)$/))&&+m[2]>+m[1]&&+m[2]-+m[1]<=6){nums=[];for(let k=+m[1];k<=+m[2];k++)nums.push(String(k))}
+        const fv=parseFloat(String(row[j]||'').replace(/[,$\s]/g,''));
+        if(nums&&fv>0)out.push({nums,fv,beer:cur.beer?(cur.beer[j]||'').trim():''});
+      }
+      cur=null}
+  }
+  return out;
+}
+const nb=s=>String(s||'').toLowerCase().replace(/^fb\s*-?\s*/,'').replace(/[^a-z0-9]/g,'');
+const SHEET_BEFORE='2026-09-01'; /* sheet litres are used for batches completed before this date */
+const BEER_ALIAS={btp:'beyondthepines',xpa:'drift',chillpils:'czechpilsner',nzipl:'nzipa'};
+const beerMatch=(sb,ub)=>{const a=nb(sb),u=nb(ub);return !!a&&!!u&&(u.includes(a)||a.includes(u)||(BEER_ALIAS[a]&&u.includes(BEER_ALIAS[a])))};
+function sheetMatch(entries){
+  const map={};let unmatched=0;
+  entries.forEach(e=>{
+    let c=DATA.eff.filter(b=>e.nums.includes(b.bn));
+    if(c.length&&c.every(b=>b.done>=SHEET_BEFORE))return;
+    c=c.filter(b=>b.done<SHEET_BEFORE);
+    if(c.length>1){const f=c.filter(b=>b.beer.some(x=>beerMatch(e.beer,x)));if(f.length)c=f}
+    const totL=c.reduce((s,b)=>s+b.L,0),r=totL/e.fv;
+    if(!c.length||!(r>=0.5&&r<=1.08)){unmatched++;return}
+    c.forEach(b=>{map[bkey(b)]=Math.round(e.fv*(b.L/totL))});
+  });
+  return {map,unmatched};
+}
+async function loadSheet(){
+  const btn=$('fvload');btn.disabled=true;SHI={...SHI,error:''};
+  try{
+    const mcp=await window.claude.use('mcp');if(!mcp)throw {code:'none'};
+    const r=await mcp.callTool('Google Drive','download_file_content',{fileId:SHEET_ID,exportMimeType:'text/csv'},{cache:false});
+    let p=r.payload;if(typeof p==='string'){try{p=JSON.parse(p)}catch(e){}}
+    if(!(p&&p.content)){const tb=(r.content||[]).find(x=>x.type==='text');if(tb){try{p=JSON.parse(tb.text)}catch(e){}}}
+    if(!(p&&p.content))throw {code:'shape'};
+    const csv=new TextDecoder().decode(Uint8Array.from(atob(p.content),c=>c.charCodeAt(0)));
+    const res=sheetMatch(sheetEntries(csv));
+    if(!Object.keys(res.map).length)throw {code:'empty'};
+    SH=res.map;SHI={at:new Date().toISOString(),unmatched:res.unmatched,error:''};
+    if(shDoc){try{await shDoc.set({o:SH,at:SHI.at,unmatched:res.unmatched})}catch(e){}}
+  }catch(e){
+    const c=e&&e.code;
+    SHI={...SHI,error:c==='needs_reauth'||c==='server_not_connected'||c==='selection_required'?'Google Drive is not connected for this view, so the sheet could not be read.':c==='not_in_manifest'||c==='consent_required'?'Reading the sheet was not allowed for this page.':c==='none'?'Reading Google Drive is not available on this view.':c==='empty'||c==='shape'?'The sheet came back in a layout I could not read.':'The sheet could not be read just now. Try again in a moment.'};
+  }
+  btn.disabled=false;renderEff();
+}
+$('fvload').onclick=loadSheet;
+function fvCommit(key,L){OV={...OV};if(L==null)delete OV[key];else OV[key]={L,at:new Date().toISOString().slice(0,10)};renderEff();fvWrite(key,L)}
+$('ebb').addEventListener('change',e=>{const i=e.target.closest('.fvin');if(!i)return;const b=EL.find(x=>bkey(x)===i.dataset.k),v=Math.round(+i.value);if(!b)return;
+  if(!(v>0)||v===b.auto){fvCommit(i.dataset.k,null);return}fvCommit(i.dataset.k,v)});
+$('ebb').addEventListener('click',e=>{const x=e.target.closest('.fvx');if(x)fvCommit(x.dataset.k,null)});
+if(window.claude&&window.claude.use)window.claude.use('db').then(db=>{if(!db)return;fvDoc=db.doc('eff/fvOverrides');
+  shDoc=db.doc('eff/fvSheet');shDoc.onSnapshot(s=>{const d=s.exists?s.data():null;SH=(d&&d.o)||{};SHI={at:(d&&d.at)||'',unmatched:(d&&d.unmatched)||0,error:SHI.error};if(st.tab==='eff'&&!(document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('fvin')))renderEff()},()=>{});
+  fvDoc.onSnapshot(s=>{const o=(s.exists&&s.data().o)||{};OV=Object.fromEntries(Object.entries(o).filter(([,v])=>v&&v.L>0));if(st.tab==='eff'&&!(document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('fvin')))renderEff();else fvNote()},()=>{fvDoc=null;fvNote()});fvNote()}).catch(()=>{});
+let shTried=false;
+function renderEff(){
+  if(!shTried&&st.tab==='eff'){shTried=true;if(!Object.keys(SH).length&&window.claude&&window.claude.use){setTimeout(()=>{if(!Object.keys(SH).length)loadSheet()},1200)}}
+  if(eai.key&&eai.key!==eKey()){if(eai.ctl)eai.ctl.abort();eai.key=null;$('eout').replaceChildren();$('enote').textContent=''}
+  EL=effList();emonth.value=st.month;$('esmall').setAttribute('aria-pressed',st.small);
+  seg('erng',RANGES,'rng','All ranges');renderEctl();eIdle();fvNote();etiles();drawECharts();etables();
+}
+const vscopeTxt=()=>monthLabel(st.month)+', '+(st.rng==='All'?'all ranges':st.rng)+(st.size==='All sizes'?', all keg sizes':', '+st.size+' kegs');
+function vtiles(){
+  const m=st.month,pm=Calc.prevMonth(m),ly=Calc.shiftMonth(m,-12),late=m>=LATE;
+  const comp=(k,metric)=>{const keep=keepFor(k),v=Calc.volSum(VIX,k,m,keep,metric);return {v,p:Calc.volSum(VIX,k,pm,keep,metric),l:Calc.volSum(VIX,k,ly,keep,metric)}};
+  const tiles=[];
+  const b=comp('Beer','litres'),bi=Calc.volItems(VIX,'Beer',m,beerKeep),bn=bi.reduce((s,x)=>s+x.n,0);
+  tiles.push(['Finished beer made',num(Math.round(b.v))+' L',`${bn} batches${bn?', average '+num(Math.round(b.v/bn))+' L':''}`,b,(DATA.parked&&DATA.parked[m]?num(DATA.parked[m].L)+' L more is parked (not completed) in Unleashed for this month, all ranges.':'')]);
+  let pk=0;
+  ['Keg','Cube'].forEach(k=>{const u=comp(k,'units'),l=comp(k,'litres');pk+=l.v;tiles.push([k==='Keg'?'Kegs made':'Cubes made',num(Math.round(u.v)),num(Math.round(l.v))+' L of beer',u,'']);});
+  tiles.push(['Packaged (kegs and cubes)',num(Math.round(pk))+' L',b.v>0?Math.round(pk/b.v*100)+'% of the litres of beer made in the month':'No finished beer completed in the month',null,'Packaging draws on beer brewed in earlier months, so this ratio swings.']);
+  $('vtiles').innerHTML=tiles.map(([l,big,sub,c,warn])=>`<div class="tile"><span class="lab">${l}</span><span class="big">${big}</span><span class="small">${sub}</span>${c?`<span class="small">vs ${mshort(pm)} <b>${pctTxt(c.v,c.p)}</b> · vs ${mshort(ly)} <b>${pctTxt(c.v,c.l)}</b></span>`:''}${warn?`<span class="vnote">${warn}</span>`:''}</tile>`.replace('</tile>','</div>')).join('');
+}
+function vents(k){
+  const sel=st.vskus.filter(c=>vkind(c)===k),ents=[];
+  if(!sel.length||st.vtotal)ents.push({label:null,keep:keepFor(k)});
+  sel.forEach(c=>ents.push({label:c,keep:k==='Beer'?(x=>x===c):(p=>p.code===c)}));
+  return ents;
+}
+function vseries(k){
+  const metric=metricFor(k),T=timeWin(),ents=vents(k),out=[];
+  ents.forEach((e,ei)=>T.wins.forEach(w=>{
+    const pts=Calc.volSeries(VIX,k,w.months,e.keep,metric).map(p=>w.ok(p.month)?p:{month:p.month,value:null}),vals=pts.filter(p=>p.value!=null);
+    const solo=T.cal&&ents.length===1;
+    out.push({entKey:e.label,off:w.wi,wlabel:w.label,keep:e.keep,color:solo?SC[w.wi%SC.length]:SC[ei%SC.length],dash:solo?'':YR_DASH[w.wi],pts,avg:vals.length?vals.reduce((a,p)=>a+p.value,0)/vals.length:0});
+  }));
+  return out.filter(s=>s.pts.some(p=>p.value!=null));
+}
+function barChart(panel,k,series){
+  const plot=panel.querySelector('.plot');plot.replaceChildren();
+  const TW=timeWin(),isFull=!!panel.closest('.gsec.full');const w=Math.max(260,plot.clientWidth),h=isFull?Math.max(240,plot.clientHeight):(panel.closest('.charts.one')?380:210),ml=50,mr=14,mt=12,mb=26,iw=w-ml-mr,ih=h-mt-mb,n=series[0].pts.length,multi=TW.cal;
+  const lab=sr=>[sr.entKey?(k==='Beer'?bname(sr.entKey):sr.entKey):(series.some(x=>x.entKey)?'Total':''),multi?sr.wlabel:''].filter(Boolean).join(' · ');
+  const mx=Math.max(1,...series.flatMap(s=>s.pts.filter(p=>p.value!=null).map(p=>p.value)),...(st.avg?series.map(s=>s.avg):[0]));
+  const ticks=niceTicks(0,mx),hi=ticks[ticks.length-1];
+  const X=i=>ml+i*iw/(n-1),Y=v=>mt+ih-v/hi*ih,cur=TW.axis,every=everyN(iw);
+  const ax=v=>v>=1000?(v/1000)+'k':String(v);
+  let s=`<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${k==='Beer'?'Litres made':'Production'} by month">`;
+  ticks.forEach(v=>{s+=`<line class="g" x1="${ml}" x2="${w-mr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${ml-8}" y="${Y(v)+4}" text-anchor="end">${ax(v)}</text>`});
+  cur.forEach((m,i)=>{if((n-1-i)%every===0)s+=`<text x="${X(i)}" y="${h-6}" text-anchor="middle">${multi?mon3(m):mshort(m)}</text>`});
+  if(!multi){const bw=iw/(n-1),x0=Math.max(ml,X(n-1)-bw/2),x1=Math.min(w-mr,X(n-1)+bw/2);s+=`<rect x="${x0}" y="${mt}" width="${x1-x0}" height="${ih}" fill="var(--hl)"/>`;}
+  if(st.avg)series.forEach(sr=>{s+=`<line x1="${ml}" x2="${w-mr}" y1="${Y(sr.avg)}" y2="${Y(sr.avg)}" stroke="${sr.color}" stroke-width="1" opacity=".7" stroke-dasharray="${sr.dash||'2 4'}"/>`});
+  series.forEach(sr=>{const pp=sr.pts.map((p,i)=>p.value==null?null:X(i)+','+Y(p.value)).filter(Boolean);if(pp.length>1)s+=`<polyline points="${pp.join(' ')}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${sr.dash?`stroke-dasharray="${sr.dash}"`:''}/>`});
+  series.forEach(sr=>sr.pts.forEach((p,i)=>{if(p.value==null)return;s+=`<circle cx="${X(i)}" cy="${Y(p.value)}" r="${dotR(n,!multi&&i===n-1)}" fill="${sr.color}" stroke="var(--surface)" stroke-width="2"/>`;
+    if(st.vsel&&st.vsel.kind===k&&st.vsel.off===sr.off&&st.vsel.ent===sr.entKey&&st.vsel.month===p.month)s+=`<circle cx="${X(i)}" cy="${Y(p.value)}" r="10" fill="none" stroke="var(--ink)" stroke-width="2"/>`}));
+  if(series.length===1&&!multi){const sr=series[0],p=sr.pts[n-1];
+    if(p.value!=null)s+=`<text x="${X(n-1)}" y="${Y(p.value)-12}" text-anchor="end" style="fill:var(--ink);font-weight:500;stroke:var(--surface);stroke-width:4px;paint-order:stroke">${vf(k,p.value)}</text>`;
+    if(st.avg)s+=`<text x="${ml+4}" y="${Y(sr.avg)-5}" style="fill:var(--ink2)">avg ${vf(k,sr.avg)}</text>`}
+  s+=`<line id="xh" class="g" y1="${mt}" y2="${mt+ih}" style="display:none"/><rect id="ov" x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="transparent" style="cursor:pointer"/></svg>`;
+  plot.innerHTML=s;
+  const lg=panel.querySelector('.lgs');lg.replaceChildren();
+  series.forEach(sr=>{const kx=mk('span');kx.innerHTML=svgKey(sr.color,sr.dash);
+    lg.append(mk('span',{className:'lg'},kx,mk('span',{textContent:lab(sr)||('Monthly '+(metricFor(k)==='units'?'units':'litres'))}),mk('b',{textContent:st.avg?'avg '+vf(k,sr.avg)+' a month':''})))});
+  const svg=plot.querySelector('svg'),ov=svg.querySelector('#ov'),xh=svg.querySelector('#xh'),tt=panel.querySelector('.tt');
+  const pos=e=>{const r=svg.getBoundingClientRect(),x=(e.clientX-r.left)*(w/r.width)-ml,y=(e.clientY-r.top)*(h/r.height),i=Math.max(0,Math.min(n-1,Math.round(x/iw*(n-1))));
+    let si=0,bd=1e9;series.forEach((sr,j)=>{const v=sr.pts[i].value;const d=v==null?1e9:Math.abs(Y(v)-y);if(d<bd){bd=d;si=j}});return {i,si}};
+  const show=e=>{const {i}=pos(e);xh.setAttribute('x1',X(i));xh.setAttribute('x2',X(i));xh.style.display='';
+    tt.replaceChildren(mk('span',{textContent:multi?MN[+cur[i].slice(5)-1]:monthLabel(cur[i])}));
+    series.forEach(sr=>{const p=sr.pts[i],kx=mk('span');kx.innerHTML=svgKey(sr.color,sr.dash);
+      let extra='';if(k!=='Beer'&&p.value!=null){const o=Calc.volSum(VIX,k,p.month,sr.keep,metricFor(k)==='units'?'litres':'units');extra=num(Math.round(o))+(metricFor(k)==='units'?' L':' units')}
+      tt.append(mk('div',{className:'row'},kx,mk('b',{textContent:p.value==null?'n/a':(p.value>0?vf(k,p.value):'none')}),mk('span',{textContent:[series.length>1?lab(sr):'',multi?mshort(p.month):'',extra].filter(Boolean).join(' · ')})))});
+    tt.hidden=false;const pr=panel.getBoundingClientRect(),sr2=svg.getBoundingClientRect();let left=sr2.left-pr.left+X(i)*(sr2.width/w)+12;if(left+tt.offsetWidth>pr.width-8)left=Math.max(4,left-tt.offsetWidth-24);tt.style.left=left+'px';tt.style.top=(sr2.top-pr.top+mt)+'px'};
+  ov.addEventListener('pointermove',show);ov.addEventListener('pointerdown',show);ov.addEventListener('pointerleave',()=>{tt.hidden=true;xh.style.display='none'});
+  ov.addEventListener('click',e=>{const {i,si}=pos(e),sr=series[si],p=sr.pts[i];if(p.value==null)return;openVol(k,p.month,sr.off,sr.keep,sr.entKey)});
+}
+let vSeries=[];
+wireFocus('charts','data-f','cost',()=>redrawPlots());wireFocus('vcharts','data-k','vol',()=>drawVCharts());
+function drawVCharts(){
+  const el=$('vcharts');
+  const kinds=VK.filter(([k])=>!st.vskus.length||st.vtotal||st.vskus.some(c=>vkind(c)===k));
+  vSeries=kinds.map(([k,label])=>[k,label,vseries(k)]).filter(x=>x[2].length);
+  el.innerHTML=vSeries.length?vSeries.map(([k,label])=>`<div class="panel" data-k="${k}"><h2>${label}<button type="button" class="fbtn">Show only this</button></h2><div class="small">${k==='Beer'?'Litres made':(st.vmetric==='units'?'Units made':'Litres of beer packaged')}, ${winDesc()}. Click a point for an explanation.</div><div class="lgs"></div><div class="plot"></div><div class="tt" hidden></div></div>`).join(''):'<div class="panel"><div class="nodata">Nothing was made in this period for these filters.</div></div>';
+  applyFocus(el,'data-k','vol');
+  el.querySelectorAll('.panel[data-k]').forEach(p=>barChart(p,p.dataset.k,vSeries.find(x=>x[0]===p.dataset.k)[2]));
+}
+function renderVctl(){
+  const q=($('vpq').value||'').trim().toLowerCase(),nm=c=>vkind(c)==='Beer'?bname(c):c;
+  const beers=[...new Set(DATA.fbBatches.map(b=>b.code))].filter(beerKeep).sort((a,b)=>bname(a).localeCompare(bname(b)));
+  const grp=f=>DATA.products.filter(p=>p.fmt===f&&skuKeep(p)).map(p=>p.code).sort();
+  const full=st.vskus.length>=MAXSKU,out=[];
+  [['Beers',beers],['Kegs',grp('Keg')],['Cubes',grp('Cube')]].forEach(([g,codes])=>{
+    const cs=codes.filter(c=>nm(c).toLowerCase().includes(q));if(!cs.length)return;
+    out.push(mk('div',{className:'pgh',textContent:g}));
+    cs.forEach(c=>{const cb=mk('input',{type:'checkbox',value:c});cb.checked=st.vskus.includes(c);const off=!cb.checked&&full;cb.disabled=off;cb.onchange=()=>{st.vskus=cb.checked?[...st.vskus,c]:st.vskus.filter(x=>x!==c);renderVol()};const l=mk('label',{},cb,mk('span',{textContent:nm(c)}));l.classList.toggle('off',off);out.push(l)})});
+  $('vpicklist').replaceChildren(...out);
+  $('vpicksum').textContent=st.vskus.length?`Compare SKUs and beers (${st.vskus.length})`:'Compare SKUs and beers';
+  $('vtotbtn').hidden=!st.vskus.length;$('vtotbtn').setAttribute('aria-pressed',st.vtotal);
+  chipsInto('vchips',st.vskus,nm,c=>{st.vskus=st.vskus.filter(x=>x!==c);renderVol()});
+}
+$('vpq').oninput=()=>{if(st.tab==='vol')renderVctl()};
+$('vtotbtn').onclick=()=>{st.vtotal=!st.vtotal;renderVol()};
+function vtables(){
+  const m=st.month,base=Calc.monthsBack(Calc.prevMonth(m),12);
+  const avgOf=(kind,code,metric)=>base.reduce((s,mm)=>{const x=(kind==='Beer'?VIX.beer:VIX.pkg).get(mm)?.get(code);return s+(x?(metric==='units'?x.u:x.l):0)},0)/12;
+  const dcell=(v,a)=>a>0?(v>=a?'+':'-')+Math.abs(Math.round((v-a)/a*100))+'%':'<span class="mut">new</span>';
+  const bi=Calc.volItems(VIX,'Beer',m,beerKeep),bt=bi.reduce((s,x)=>s+x.l,0)||1;
+  $('vbh').innerHTML='<tr><th>Beer</th><th>Range</th><th class="n">Batches</th><th class="n">Litres</th><th class="n">Share</th><th class="n">Avg month, prior 12</th><th class="n">vs avg</th></tr>';
+  $('vbb').innerHTML=bi.length?bi.map(x=>{const a=avgOf('Beer',x.code,'litres');return `<tr><td>${bname(x.code).replace(/</g,'&lt;')}</td><td>${DATA.beerRange[x.code]||'Unassigned'}</td><td class="n">${x.n}</td><td class="n">${num(Math.round(x.l))}</td><td class="n">${Math.round(x.l/bt*100)}%</td><td class="n">${num(Math.round(a))}</td><td class="n">${dcell(x.l,a)}</td></tr>`}).join(''):'<tr><td colspan="7" class="empty">No beer batches recorded in '+monthLabel(m)+' for this range. Batches are often entered weeks after the batch date.</td></tr>';
+  const rows=[];['Keg','Cube'].forEach(k=>Calc.volItems(VIX,k,m,skuKeep).forEach(x=>rows.push({k,...x})));
+  const ft={Keg:0,Cube:0};rows.forEach(r=>ft[r.k]+=r.l);
+  $('vsh').innerHTML='<tr><th>SKU</th><th>Format</th><th class="n">Units</th><th class="n">Litres</th><th class="n">Share of format</th><th class="n">Avg units a month, prior 12</th><th class="n">vs avg</th></tr>';
+  $('vsb').innerHTML=rows.length?rows.sort((a,b)=>a.k===b.k?b.l-a.l:(a.k==='Keg'?-1:1)).map(x=>{const a=avgOf(x.k,x.code,'units');return `<tr><td>${x.code.replace(/</g,'&lt;')}</td><td><span class="tag">${x.k}</span></td><td class="n">${num(Math.round(x.u))}</td><td class="n">${num(Math.round(x.l))}</td><td class="n">${Math.round(x.l/(ft[x.k]||1)*100)}%</td><td class="n">${a>=10?num(Math.round(a)):a.toFixed(1)}</td><td class="n">${dcell(x.u,a)}</td></tr>`}).join(''):'<tr><td colspan="7" class="empty">No kegs or cubes made in '+monthLabel(m)+' for these filters.</td></tr>';
+}
+const vai={key:null,ctl:null};
+const vKey=()=>[st.month,st.rng,st.size].join('|');
+function vIdle(){$('vscope').textContent=vscopeTxt();if(!vai.ctl){$('vgo').textContent=vai.key?'Summarise again':'Summarise '+monthLabel(st.month);$('vgo').disabled=false;$('vstop').hidden=true}}
+function vShow(text){$('vout').replaceChildren(...text.split(/\n{2,}/).filter(x=>x.trim()).map(x=>mk('p',{textContent:x.trim()})))}
+function vFacts(){
+  const f={month:st.month,scope:vscopeTxt(),partMonth:st.month>=PULLED,dataPulled:DATA.pulled,notes:{beerCountedInMonthAssemblyWasCompleted:true,parkedNotCompletedBeerLitresForMonthAllRanges:(DATA.parked&&DATA.parked[st.month]&&DATA.parked[st.month].L)||0}};
+  VK.forEach(([k,label])=>{const metrics=k==='Beer'?['litres']:['units','litres'];f[k]={};metrics.forEach(me=>{f[k][me]=Calc.volExplain(VIX,k,st.month,keepFor(k),me,label)})});
+  const pk=['Keg','Cube'].reduce((s,k)=>s+Calc.volSum(VIX,k,st.month,keepFor(k),'litres'),0),br=Calc.volSum(VIX,'Beer',st.month,beerKeep,'litres');
+  f.packagedLitres=Math.round(pk);f.beerMadeLitres=Math.round(br);
+  f.last12Months=Calc.monthsBack(st.month,12).map(m=>({month:m,beerLitres:Math.round(Calc.volSum(VIX,'Beer',m,beerKeep,'litres')),kegs:Math.round(Calc.volSum(VIX,'Keg',m,skuKeep,'units')),cubes:Math.round(Calc.volSum(VIX,'Cube',m,skuKeep,'units'))}));
+  return f;
+}
+function vPrompt(f){return `You are writing the production volume commentary for the monthly board report of Margaret River Beer Co, a brewery in Western Australia. The figures are from Unleashed for ${monthLabel(st.month)}. Scope: ${f.scope}.
+
+Definitions: "Beer" is finished beer made, in litres, counted in the month the Unleashed finished-beer assembly was completed (which can be weeks after the brew date). "Keg" and "Cube" are units made (a cube is 16 cans of 375 ml) and the litres of beer used. Each block gives the month's value, the prior month, the same month last year, the average month over the prior 12 months, the lowest and highest month in those 12, the share held by the top item, and the top items with their own prior-12-month monthly average. Parked assemblies are not counted (see notes.parkedNotCompletedBeerLitresForMonthAllRanges). Kegs and cubes are counted by production date. Packaging draws on beer brewed in earlier months, so packaged litres and brewed litres in one month need not match. Beer is assigned to a range by the SKUs that use it most.
+
+Write 200 to 280 words in three or four short paragraphs of plain prose: no headings, no bullet points, no bold, no markdown. Cover: (1) beer made, kegs made and cubes made against their prior 12-month averages, the same month last year and the prior month (lead with the 12-month average and last year; keep the prior month brief); (2) what makes up each figure: how concentrated it is in a few beers or SKUs, which items ran well above or below their own average, and any item that was not made in the prior 12 months; (3) cautions: a part month, lumpy batch timing (beer completed in bulk on one day), very few batches, beer parked and not yet completed. Do not speculate about sales, demand or commercial reasons; say what the numbers show and, where useful, what would be worth checking. Use only the numbers given and do not invent any. Use Australian spelling.
+
+DATA (JSON):
+${JSON.stringify(f)}`}
+async function vRun(refresh){
+  const f=vFacts();
+  const ctl=new AbortController();vai.ctl=ctl;vai.key=vKey();
+  $('vgo').disabled=true;$('vstop').hidden=false;$('vout').classList.add('busy');$('vout').replaceChildren(mk('p',{textContent:'Thinking…'}));$('vnote').textContent='';
+  try{const r=await ai.sample(vPrompt(f),{signal:ctl.signal,cache:{gcTime:86400000,refresh:!!refresh},onText:({text})=>vShow(text)});
+    vShow(r.text);$('vnote').textContent='Written by Claude from the figures on this page. Read it before it goes in the board pack.'+(r.truncated?' The answer was cut short.':'')}
+  catch(e){if(e&&e.text)vShow(e.text);else $('vout').replaceChildren();const c=e&&e.code;
+    if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(c))$('vai').hidden=true;
+    else if(c!=='cancelled'){vai.key=null;$('vnote').textContent=c==='rate_limited'?'Claude is not available right now because a usage limit was reached. Try again later.':'The summary could not be written. Press Summarise to try again.'}else vai.key=null}
+  finally{vai.ctl=null;$('vout').classList.remove('busy');vIdle()}
+}
+$('vgo').onclick=()=>vRun(!!vai.key);$('vstop').onclick=()=>{if(vai.ctl)vai.ctl.abort()};
+function renderVol(){
+  if(vai.key&&vai.key!==vKey()){if(vai.ctl)vai.ctl.abort();vai.key=null;$('vout').replaceChildren();$('vnote').textContent=''}
+  vIdle();
+  seg('vrng',RANGES,'rng','All ranges');
+  const me=$('vmet');me.replaceChildren(...[['units','Kegs and cubes in units'],['litres','Kegs and cubes in litres']].map(([v,l])=>{const b=mk('button',{type:'button',textContent:l});b.setAttribute('aria-pressed',st.vmetric===v);b.onclick=()=>{st.vmetric=v;renderVol()};return b}));
+  renderVctl();vtiles();drawVCharts();vtables();
+}
+/* point explanation */
+const vx={ctl:null};
+function closeVol(){if(vx.ctl){vx.ctl.abort();vx.ctl=null}$('vxp').hidden=true;$('vxs').hidden=true;st.vsel=null;if(st.tab==='vol')drawVCharts()}
+function openVol(k,month,off,keepFn,ent){
+  const metric=metricFor(k),label=VK.find(x=>x[0]===k)[1]+(ent?' · '+(k==='Beer'?bname(ent):ent):'');
+  const ex=Calc.volExplain(VIX,k,month,keepFn||keepFor(k),metric,label);
+  st.vsel={kind:k,off,month,ent:ent||null};drawVCharts();
+  $('vxt').textContent=label+', '+monthLabel(month);
+  const b=$('vxb');b.replaceChildren();
+  const unit=metric==='units'?' units':' L',pc=x=>x==null?'n/a':(x>=0?'+':'')+x+'%';
+  b.append(mk('div',{className:'kv'},mk('b',{textContent:num(ex.value)+unit}),mk('span',{textContent:'vs prior month '+num(ex.priorMonth)+' ('+pc(ex.priorMonthChangePct)+'); same month last year '+num(ex.sameMonthLastYear)+' ('+pc(ex.sameMonthLastYearChangePct)+'); average month over the prior 12 '+num(ex.avgMonthPrior12)+' ('+pc(ex.vsAvgPct)+'); range '+num(ex.lowestMonthPrior12)+' to '+num(ex.highestMonthPrior12)})));
+  const tb=mk('table'),th=mk('thead'),tbd=mk('tbody');
+  th.innerHTML=`<tr><th>${k==='Beer'?'Beer':'SKU'}</th><th class="n">This month</th><th class="n">Share</th><th class="n">Own avg, prior 12</th><th class="n">vs avg</th></tr>`;
+  ex.topItems.forEach(r=>{const tr=mk('tr');[mk('td',{textContent:k==='Beer'?bname(r.item)+(r.assemblies>1?' ('+r.assemblies+' batches)':''):r.item}),mk('td',{className:'n',textContent:num(r.thisMonth)}),mk('td',{className:'n',textContent:r.sharePct+'%'}),mk('td',{className:'n',textContent:num(r.ownMonthlyAvgPrior12)}),mk('td',{className:'n',textContent:r.vsOwnAvgPct==null?'new':pc(Math.round(r.vsOwnAvgPct))})].forEach(c=>tr.append(c));tbd.append(tr)});
+  tb.append(th,tbd);b.append(mk('div',{className:'tw'},tb));
+  const why=mk('div',{className:'why'},mk('div',{className:'lab',textContent:'Why, in words'}),mk('div',{id:'vxw'}),mk('div',{className:'seg'},mk('button',{type:'button',id:'vxstop',textContent:'Stop',hidden:true})),mk('div',{className:'small',id:'vxn'}));
+  b.append(why);$('vxs').hidden=false;$('vxp').hidden=false;$('vxc').focus();
+  if(!ai.sample){$('vxw').textContent='The written explanation is not available in this view. The figures above come straight from Unleashed.';return}
+  const ctl=new AbortController();vx.ctl=ctl;$('vxw').textContent='Thinking…';$('vxstop').hidden=false;$('vxstop').onclick=()=>ctl.abort();
+  const prompt=`You are explaining one point on a production volume line chart for the monthly board report of Margaret River Beer Co, a brewery in Western Australia. The point is ${label} (${metric==='units'?'units made':'litres'}) for ${monthLabel(month)}. Scope: ${vscopeTxt()}. Beer is finished beer made in litres, counted in the month its Unleashed assembly was completed (often weeks after the brew date). Kegs and cubes are counted by production date. Packaging draws on beer brewed in earlier months. Each item in topItems has its own average monthly figure over the prior 12 months.
+
+Write 70 to 110 words of plain prose (no bullets, no markdown): say whether the point is above or below its prior-12-month average and by how much, compare briefly with the same month last year, name the items that explain it with figures, and mention a caution only if it applies (a part month, possible incomplete beer batches, one item dominating, very few batches). Do not speculate about sales or demand; if something stands out, say what would be worth checking. Use only the numbers given. Use Australian spelling.
+
+DATA (JSON):
+${JSON.stringify(ex)}`;
+  ai.sample(prompt,{signal:ctl.signal,cache:{gcTime:86400000},onText:({text})=>{$('vxw').textContent=text}}).then(r=>{$('vxw').textContent=r.text;$('vxn').textContent='Written by Claude from the figures above.'}).catch(e=>{
+    if(e&&e.text)$('vxw').textContent=e.text;else if(e&&e.code==='cancelled')$('vxw').textContent='Stopped.';else $('vxw').textContent='The written explanation could not be produced. The figures above are still correct.';
+  }).finally(()=>{vx.ctl=null;const s=$('vxstop');if(s)s.hidden=true});
+}
+$('vxc').onclick=closeVol;$('vxs').onclick=closeVol;
+let vrz;window.addEventListener('resize',()=>{clearTimeout(vrz);vrz=setTimeout(()=>{if(st.tab==='vol')drawVCharts();if(st.tab==='eff')effChart()},120)});
+
+renderYears();render();
+</script>
+</body></html>
