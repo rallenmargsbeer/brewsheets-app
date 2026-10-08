@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-#tabeff,#ai,#vai,#eai{display:none!important}
+#ai,#vai,#eai,#fvload{display:none!important}
 /* Layout: one summary band (by format), one filter row, one ranked table with inline cost bars. */
 :root{--bg:#f6f5f1;--surface:#fff;--ink:#1d2421;--ink2:#505a55;--muted:#818a85;--line:#dfddd4;--accent:#b4691a;--accent-soft:#f3e4d0;--bar:#c98a3e;--hl:#fbf3e6;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;
 --font:'Schibsted Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
@@ -717,9 +717,10 @@ st.small=false;
 const emonth=$('emonth');emonth.innerHTML=monthSel.innerHTML;
 emonth.onchange=()=>{st.month=emonth.value;monthSel.value=st.month;vmonth.value=st.month;renderYears();render()};
 $('esmall').onclick=()=>{st.small=!st.small;render()};
-let OV={},SH={},SHI={},fvDoc=null,shDoc=null,fvSaved=null;
+const FVI=__FV__;
+let OV=FVI.OV||{},SH=FVI.SH||{},SHI=FVI.SHI||{},AP=FVI.AP||{},fvDoc=true,fvSaved=null;
 const bkey=b=>(b.bn+'__'+b.beer[0]).replace(/[^A-Za-z0-9_-]+/g,'-');
-const effList=()=>DATA.eff.map(b=>{const k=bkey(b),o=OV[k],man=!!(o&&o.L>0),sh=SH[k]>0?SH[k]:0,base=sh||b.init;return Calc.effBatch({...b,auto:base,init:man?o.L:base,fv:man,fromSheet:!man&&!!sh},DATA.pulled,st.small?0:1500)}).filter(b=>st.rng==='All'||DATA.beerRange[b.beer[0]]===st.rng);
+const effList=()=>DATA.eff.map(b=>{const k=bkey(b),o=OV[k],man=!!(o&&o.L>0),ap=AP[k]>0?AP[k]:0,sh=SH[k]>0?SH[k]:0,base=ap||sh||b.init;return Calc.effBatch({...b,auto:base,init:man?o.L:base,fv:man,fromSheet:!man&&!!(ap||sh)},DATA.pulled,st.small?0:1500)}).filter(b=>st.rng==='All'||DATA.beerRange[b.beer[0]]===st.rng);
 let EL=[];
 const effIn=ms=>{const s=new Set(ms);return EL.filter(b=>s.has(b.m))};
 const effM=m=>Calc.effAgg(effIn([m]));
@@ -796,7 +797,7 @@ function etables(){
   const m=st.month,rows=EL.filter(b=>b.m===m).sort((a,b)=>a.done<b.done?-1:a.done>b.done?1:0);
   $('emlab').textContent=monthLabel(m);$('emlab2').textContent=monthLabel(m);
   $('ebh').innerHTML='<tr><th>Batch</th><th>Beer</th><th>Brewed</th><th>Completed</th><th class="n">FV litres (editable)</th><th class="n">Transferred L</th><th class="n">Transfer</th><th class="n">Kegs</th><th class="n">Cubes</th><th class="n">Packaged L</th><th class="n">Brite to packaged</th><th class="n">Overall</th><th>Note</th></tr>';
-  $('ebb').innerHTML=rows.length?rows.map(b=>`<tr><td>${b.bn}</td><td>${b.beer.map(bname).join(', ').replace(/</g,'&lt;')}</td><td>${b.brew.slice(5)}</td><td>${b.done.slice(5)}</td><td class="n"><input class="fvin${b.fv?' ed':b.fromSheet?' sh':''}" type="number" inputmode="numeric" min="0" step="500" value="${b.init}" data-k="${bkey(b)}" aria-label="Fermenter litres for batch ${b.bn}"/>${b.fv?`<button type="button" class="fvx" data-k="${bkey(b)}" title="Back to ${b.fromSheet||SH[bkey(b)]>0?'the brewsheet':'the assumed'} ${num(b.auto)} L" aria-label="Reset to assumed volume">&#8634;</button>`:''}</td><td class="n">${num(b.L)}</td><td class="n">${pc(b.tr)}</td><td class="n">${num(Math.round(b.keg))}</td><td class="n">${num(Math.round(b.cube))}</td><td class="n">${num(b.pk)}</td><td class="n">${pc(b.pr)}</td><td class="n">${pc(b.ov)}</td><td>${estat(b)?`<span class="tag">${estat(b)}</span>`:''}</td></tr>`).join(''):'<tr><td colspan="13" class="empty">No batches completed in this month for this range.</td></tr>';
+  $('ebb').innerHTML=rows.length?rows.map(b=>`<tr><td>${b.bn}</td><td>${b.beer.map(bname).join(', ').replace(/</g,'&lt;')}</td><td>${b.brew.slice(5)}</td><td>${b.done.slice(5)}</td><td class="n"><input class="fvin${b.fv?' ed':b.fromSheet?' sh':''}" type="number" inputmode="numeric" min="0" step="500" value="${b.init}" data-k="${bkey(b)}" aria-label="Fermenter litres for batch ${b.bn}"/>${b.fv?`<button type="button" class="fvx" data-k="${bkey(b)}" title="Back to ${b.fromSheet||AP[bkey(b)]>0||SH[bkey(b)]>0?'the recorded':'the assumed'} ${num(b.auto)} L" aria-label="Reset to assumed volume">&#8634;</button>`:''}</td><td class="n">${num(b.L)}</td><td class="n">${pc(b.tr)}</td><td class="n">${num(Math.round(b.keg))}</td><td class="n">${num(Math.round(b.cube))}</td><td class="n">${num(b.pk)}</td><td class="n">${pc(b.pr)}</td><td class="n">${pc(b.ov)}</td><td>${estat(b)?`<span class="tag">${estat(b)}</span>`:''}</td></tr>`).join(''):'<tr><td colspan="13" class="empty">No batches completed in this month for this range.</td></tr>';
   const by=new Map();effIn(Calc.monthsBack(m,12)).forEach(b=>{const k=b.beer[0];if(!by.has(k))by.set(k,[]);by.get(k).push(b)});
   const br=[...by.entries()].map(([k,l])=>({k,...Calc.effAgg(l)})).filter(x=>x.n).sort((a,b)=>b.L-a.L);
   $('ebeh').innerHTML='<tr><th>Beer</th><th class="n">Batches</th><th class="n">Litres transferred</th><th class="n">Transfer</th><th class="n">Brite to packaged</th><th class="n">Overall</th></tr>';
@@ -835,18 +836,16 @@ async function eRun(refresh){
 }
 $('ego').onclick=()=>eRun(!!eai.key);$('estop').onclick=()=>{if(eai.ctl)eai.ctl.abort()};
 $('efs').onclick=()=>st.full?exitFull():setFull(true,'egsec','efs',effChart);
-async function fvWrite(key,L){
-  if(!fvDoc){fvSaved=false;return}
-  const body={o:{[key]:L==null?null:{L,at:new Date().toISOString().slice(0,10)}}};
-  try{try{await fvDoc.update(body)}catch(e){if(e&&e.code==='invalid_argument')await fvDoc.set(body);else throw e}fvSaved=true}catch(e){fvSaved=false}
-  fvNote();
+function fvWrite(key,L){
+  fvSaved=null;fvNote();
+  try{parent.postMessage({type:'fv-save',key,L},'*')}catch(e){fvSaved=false;fvNote()}
 }
+window.addEventListener('message',e=>{const d=e.data;if(d&&d.type==='fv-result'){fvSaved=!!d.ok;fvNote()}});
 function fvNote(){
-  const n=Object.keys(SH).length,i=SHI;
-  let s='Type the real fermenter litres where you know them (highlighted cells). Dashed cells come from the Brewery Efficiency Tracking sheet (batches completed before 1 Sep 2026); the rest are assumed by rounding up. The arrow returns a batch to the sheet or assumed figure.';
-  s+=n?` ${n} batches have sheet litres${i.at?' (loaded '+i.at.slice(0,10)+')':''}${i.unmatched?'; '+i.unmatched+' sheet entries could not be matched to an Unleashed batch':''}.`:' No sheet litres loaded yet.';
-  if(i.error)s+=' '+i.error;
-  s+=fvDoc?(fvSaved===false?' The last edit could not be saved.':' Edits are saved for everyone who opens this page.'):' Edits are not being saved on this view and will be lost when the page closes.';
+  const na=Object.keys(AP).length,n=Object.keys(SH).length,i=SHI;
+  let s='Type the real fermenter litres where you know them (highlighted cells). Dashed cells are recorded figures: '+(na?'batches logged in the brewsheets app, and ':'')+'the Brewery Efficiency Tracking sheet (batches completed before 1 Sep 2026); the rest are assumed by rounding up. The arrow returns a batch to the recorded or assumed figure.';
+  s+=n?` ${n} batches have sheet litres${i.at?' (imported '+i.at.slice(0,10)+')':''}${i.unmatched?'; '+i.unmatched+' sheet entries could not be matched to an Unleashed batch':''}. To bring in newer sheet entries, ask Claude to re-import the sheet.`:' No sheet litres imported yet.';
+  s+=fvSaved===false?' The last edit could not be saved.':fvSaved===true?' Saved. Edits are shared with everyone who signs in.':' Edits are shared with everyone who signs in.';
   $('fvnote').textContent=s;
 }
 /* Brewery Efficiency Tracking: horizontal blocks, row labels in column A (Date, Beer, Batch, Volume to FV ...), one batch per column. Read-only. */
@@ -910,15 +909,11 @@ async function loadSheet(){
   }
   btn.disabled=false;renderEff();
 }
-$('fvload').onclick=loadSheet;
 function fvCommit(key,L){OV={...OV};if(L==null)delete OV[key];else OV[key]={L,at:new Date().toISOString().slice(0,10)};renderEff();fvWrite(key,L)}
 $('ebb').addEventListener('change',e=>{const i=e.target.closest('.fvin');if(!i)return;const b=EL.find(x=>bkey(x)===i.dataset.k),v=Math.round(+i.value);if(!b)return;
   if(!(v>0)||v===b.auto){fvCommit(i.dataset.k,null);return}fvCommit(i.dataset.k,v)});
 $('ebb').addEventListener('click',e=>{const x=e.target.closest('.fvx');if(x)fvCommit(x.dataset.k,null)});
-if(window.claude&&window.claude.use)window.claude.use('db').then(db=>{if(!db)return;fvDoc=db.doc('eff/fvOverrides');
-  shDoc=db.doc('eff/fvSheet');shDoc.onSnapshot(s=>{const d=s.exists?s.data():null;SH=(d&&d.o)||{};SHI={at:(d&&d.at)||'',unmatched:(d&&d.unmatched)||0,error:SHI.error};if(st.tab==='eff'&&!(document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('fvin')))renderEff()},()=>{});
-  fvDoc.onSnapshot(s=>{const o=(s.exists&&s.data().o)||{};OV=Object.fromEntries(Object.entries(o).filter(([,v])=>v&&v.L>0));if(st.tab==='eff'&&!(document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('fvin')))renderEff();else fvNote()},()=>{fvDoc=null;fvNote()});fvNote()}).catch(()=>{});
-let shTried=false;
+let shTried=true;
 function renderEff(){
   if(!shTried&&st.tab==='eff'){shTried=true;if(!Object.keys(SH).length&&window.claude&&window.claude.use){setTimeout(()=>{if(!Object.keys(SH).length)loadSheet()},1200)}}
   if(eai.key&&eai.key!==eKey()){if(eai.ctl)eai.ctl.abort();eai.key=null;$('eout').replaceChildren();$('enote').textContent=''}
