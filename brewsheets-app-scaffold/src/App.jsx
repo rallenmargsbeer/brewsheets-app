@@ -1,6 +1,7 @@
-import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
+import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import RecipesPage from './pages/RecipesPage.jsx'
 import RecipeEditPage from './pages/RecipeEditPage.jsx'
+import BrewDayPage from './pages/BrewDayPage.jsx'
 import BatchesPage from './pages/BatchesPage.jsx'
 import AddBrewPage from './pages/AddBrewPage.jsx'
 import BatchDetailPage from './pages/BatchDetailPage.jsx'
@@ -14,6 +15,8 @@ import { AuthProvider, RequireAuth } from './auth.jsx'
 const navClass = ({ isActive }) => 'nav-link' + (isActive ? ' active' : '')
 
 export default function App() {
+  // Adding a brew (/batches/new) belongs to the Brew Day tab, not Batches
+  const addingBrew = useLocation().pathname === '/batches/new'
   return (
     <AuthProvider>
     <div>
@@ -23,7 +26,10 @@ export default function App() {
           <NavLink to="/recipes" className={navClass}>
             Recipes
           </NavLink>
-          <NavLink to="/batches" className={navClass}>
+          <NavLink to="/brew-day" className={(p) => navClass({ isActive: p.isActive || addingBrew })}>
+            Brew Day
+          </NavLink>
+          <NavLink to="/batches" className={(p) => navClass({ isActive: p.isActive && !addingBrew })}>
             Batches
           </NavLink>
           <NavLink to="/tanks" className={navClass}>
@@ -39,10 +45,11 @@ export default function App() {
       </header>
       <main style={{ padding: '1.5rem', maxWidth: 1100, margin: '0 auto' }}>
         <Routes>
-          <Route path="/" element={<Navigate to="/batches" replace />} />
+          <Route path="/" element={<Navigate to="/brew-day" replace />} />
           <Route path="/recipes" element={<RecipesPage />} />
           <Route path="/recipes/new" element={<RecipeEditPage />} />
           <Route path="/recipes/:id" element={<RecipeEditPage />} />
+          <Route path="/brew-day" element={<BrewDayPage />} />
           <Route path="/batches" element={<BatchesPage />} />
           <Route path="/batches/new" element={<AddBrewPage />} />
           <Route path="/batches/:id" element={<BatchDetailPage />} />
