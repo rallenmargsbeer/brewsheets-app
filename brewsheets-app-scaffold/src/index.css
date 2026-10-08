@@ -287,3 +287,45 @@ tbody tr:hover td {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* ---- Packaging session cards ---- */
+.pk-session {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+.pk-session-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1d2421;
+  border-bottom: 3px solid #e0a156;
+  padding: 0.6rem 1rem;
+}
+.pk-session-head h3 { margin: 0; color: #fff; }
+.pk-litres {
+  background: #e0a156;
+  color: #1d2421;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+}
+.pk-session-body { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.pk-group { border-radius: 6px; padding: 0.75rem; border-left: 4px solid; }
+.pk-group-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; }
+.pk-group-head h4 { margin: 0; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.8rem; }
+.pk-chip { font-size: 0.8rem; font-weight: 600; background: rgba(255, 255, 255, 0.7); border-radius: 999px; padding: 0.1rem 0.6rem; }
+.pk-tank { background: #eaf1fb; border-color: #1d4f91; }
+.pk-tank h4 { color: #1d4f91; }
+.pk-pack { background: #fdf3dc; border-color: #b07d00; }
+.pk-pack h4 { color: #7a5600; }
+.pk-do { background: #e7f4ec; border-color: #11603f; }
+.pk-do h4 { color: #11603f; }
+.pk-finish { background: var(--accent-soft); border-color: var(--accent); display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: space-between; align-items: center; }
+.pk-heads { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.5rem; }
+@media (max-width: 640px) {
+  .pk-heads { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.pk-group input { background: #fff; }

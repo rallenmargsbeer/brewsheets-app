@@ -17,18 +17,30 @@ const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', 
 const field = { display: 'flex', flexDirection: 'column', gap: 2, flex: '1 1 110px', minWidth: 0 }
 const box = { background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: '1rem', marginBottom: '1rem' }
 
+// The canner has 6 fill heads; each DO check samples one can from every head.
+const HEADS = [1, 2, 3, 4, 5, 6]
+const headValues = (c) => HEADS.map((h) => c[`head_${h}`]).filter((v) => v != null).map(Number)
+const avg = (vs) => (vs.length ? vs.reduce((a, v) => a + v, 0) / vs.length : null)
+
 function DoChecks({ session, onChanged }) {
-  const [ppb, setPpb] = useState('')
+  const blank = Object.fromEntries(HEADS.map((h) => [h, '']))
+  const [heads, setHeads] = useState(blank)
   const [initials, setInitials] = useState('')
   const [error, setError] = useState(null)
   const checks = [...(session.packaging_do_checks ?? [])].sort((a, b) => a.checked_at.localeCompare(b.checked_at))
+  const all = checks.flatMap(headValues)
+  const anyEntered = HEADS.some((h) => heads[h] !== '')
 
   async function add() {
-    if (ppb === '') return
+    if (!anyEntered) return
     setError(null)
     try {
-      await addDoCheck({ session_id: session.id, do_ppb: Number(ppb), initials: initials || null })
-      setPpb('')
+      await addDoCheck({
+        session_id: session.id,
+        initials: initials || null,
+        ...Object.fromEntries(HEADS.map((h) => [`head_${h}`, heads[h] === '' ? null : Number(heads[h])])),
+      })
+      setHeads(blank)
       onChanged()
     } catch (e) {
       setError(e.message)
@@ -42,29 +54,53 @@ function DoChecks({ session, onChanged }) {
   }
 
   return (
-    <div style={{ borderTop: '1px solid var(--line)', marginTop: '0.75rem', paddingTop: '0.75rem' }}>
-      <h4 style={{ margin: '0 0 0.5rem' }}>DO checks during the run</h4>
+    <div className="pk-group pk-do">
+      <div className="pk-group-head">
+        <h4>DO checks · 6 fill heads</h4>
+        {all.length > 0 && (
+          <span className="pk-chip">Avg {avg(all).toFixed(0)} · Max {Math.max(...all)} ppb</span>
+        )}
+      </div>
       {checks.length > 0 && (
-        <table style={{ marginBottom: '0.5rem' }}>
-          <thead>
-            <tr><th>Time</th><th>DO (ppb)</th><th>Initials</th><th></th></tr>
-          </thead>
-          <tbody>
-            {checks.map((c) => (
-              <tr key={c.id}>
-                <td>{timeOf(c.checked_at)}</td>
-                <td>{c.do_ppb}</td>
-                <td>{c.initials ?? ''}</td>
-                <td><button className="secondary" onClick={() => remove(c)} aria-label="Delete DO check" style={{ padding: '0.2rem 0.5rem' }}>✕</button></td>
+        <div style={{ overflowX: 'auto', marginBottom: '0.5rem' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                {HEADS.map((h) => <th key={h}>H{h}</th>)}
+                <th>Avg</th>
+                <th>Initials</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {checks.map((c) => {
+                const vs = headValues(c)
+                return (
+                  <tr key={c.id}>
+                    <td>{timeOf(c.checked_at)}</td>
+                    {HEADS.map((h) => <td key={h}>{c[`head_${h}`] ?? '—'}</td>)}
+                    <td><strong>{vs.length ? avg(vs).toFixed(0) : '—'}</strong></td>
+                    <td>{c.initials ?? ''}</td>
+                    <td><button className="secondary" onClick={() => remove(c)} aria-label="Delete DO check" style={{ padding: '0.2rem 0.5rem' }}>✕</button></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-end' }}>
-        <label style={{ ...field, flex: '0 1 120px' }}>DO (ppb)<input type="number" inputMode="decimal" value={ppb} onChange={(e) => setPpb(e.target.value)} /></label>
-        <label style={{ ...field, flex: '0 1 100px' }}>Initials<input value={initials} onChange={(e) => setInitials(e.target.value)} /></label>
-        <button className="secondary" onClick={add} disabled={ppb === ''}>+ Add DO check (now)</button>
+      <div className="pk-heads">
+        {HEADS.map((h) => (
+          <label key={h} style={field}>
+            Head {h} (ppb)
+            <input type="number" inputMode="decimal" value={heads[h]} onChange={(e) => setHeads({ ...heads, [h]: e.target.value })} />
+          </label>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-end', marginTop: '0.5rem' }}>
+        <label style={{ ...field, flex: '0 1 110px' }}>Initials<input value={initials} onChange={(e) => setInitials(e.target.value)} /></label>
+        <button onClick={add} disabled={!anyEntered}>+ Add DO check (now)</button>
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
     </div>
@@ -122,39 +158,51 @@ function SessionCard({ number, session, batch, onChanged }) {
   }
 
   return (
-    <div style={box}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <h3 style={{ margin: 0 }}>Session {number}</h3>
-        <span style={{ color: 'var(--ink2)', fontSize: '0.9rem' }}>{Math.round(t.litres).toLocaleString()} L this session</span>
+    <div className="pk-session">
+      <div className="pk-session-head">
+        <h3>Session {number}{s.package_date ? ` · ${s.package_date}` : ''}</h3>
+        <span className="pk-litres">{Math.round(t.litres).toLocaleString()} L</span>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <label style={field}>Date<input type="date" value={s.package_date ?? ''} onChange={set('package_date')} /></label>
-        <label style={field}>Operator<input value={s.operator ?? ''} onChange={set('operator')} /></label>
-        <label style={field}>CO₂ in tank (vols)<input type="number" inputMode="decimal" step="0.01" value={s.co2_vols ?? ''} onChange={set('co2_vols')} /></label>
-        <label style={field}>DO in tank (ppb)<input type="number" inputMode="decimal" value={s.do_ppb ?? ''} onChange={set('do_ppb')} /></label>
+      <div className="pk-session-body">
+        <div className="pk-group pk-tank">
+          <div className="pk-group-head"><h4>In tank</h4></div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <label style={field}>Date<input type="date" value={s.package_date ?? ''} onChange={set('package_date')} /></label>
+            <label style={field}>Operator<input value={s.operator ?? ''} onChange={set('operator')} /></label>
+            <label style={field}>CO₂ (vols)<input type="number" inputMode="decimal" step="0.01" value={s.co2_vols ?? ''} onChange={set('co2_vols')} /></label>
+            <label style={field}>DO (ppb)<input type="number" inputMode="decimal" value={s.do_ppb ?? ''} onChange={set('do_ppb')} /></label>
+          </div>
+        </div>
+
+        <div className="pk-group pk-pack">
+          <div className="pk-group-head">
+            <h4>Packed</h4>
+            <span className="pk-chip">{t.kegs} kegs · {t.cubes} cubes ({(t.cubes * CANS_PER_CUBE).toLocaleString()} cans)</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {KEG_SIZES.map((size) => (
+              <label key={size} style={field}>{size} L kegs<input type="number" inputMode="numeric" min="0" value={s[`kegs_${size}`] ?? 0} onChange={set(`kegs_${size}`)} /></label>
+            ))}
+            <label style={field}>Cubes ({CANS_PER_CUBE} × 375 mL)<input type="number" inputMode="numeric" min="0" value={s.cubes ?? 0} onChange={set('cubes')} /></label>
+          </div>
+          <label style={{ ...field, marginTop: '0.5rem' }}>Notes<input value={s.notes ?? ''} onChange={set('notes')} /></label>
+        </div>
+
+        <DoChecks session={session} onChanged={onChanged} />
+
+        <div className="pk-group pk-finish">
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 600, color: 'var(--ink)' }}>
+            <input type="checkbox" checked={!!s.tank_empty} onChange={set('tank_empty')} /> Tank empty (batch fully packaged)
+          </label>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save session'}</button>
+            <button className="secondary" onClick={remove}>Delete</button>
+            {msg && <span style={{ color: '#11603f', fontWeight: 600 }}>✓ {msg}</span>}
+          </div>
+        </div>
+        {error && <p style={{ color: 'crimson' }}>{error}</p>}
       </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
-        {KEG_SIZES.map((size) => (
-          <label key={size} style={field}>{size} L kegs<input type="number" inputMode="numeric" min="0" value={s[`kegs_${size}`] ?? 0} onChange={set(`kegs_${size}`)} /></label>
-        ))}
-        <label style={field}>Cubes ({CANS_PER_CUBE} × 375 mL)<input type="number" inputMode="numeric" min="0" value={s.cubes ?? 0} onChange={set('cubes')} /></label>
-      </div>
-
-      <label style={{ ...field, marginTop: '0.5rem' }}>Notes<input value={s.notes ?? ''} onChange={set('notes')} /></label>
-
-      <DoChecks session={session} onChanged={onChanged} />
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginTop: '0.75rem' }}>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 600, color: 'var(--ink)' }}>
-          <input type="checkbox" checked={!!s.tank_empty} onChange={set('tank_empty')} /> Tank empty (batch fully packaged)
-        </label>
-        <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save session'}</button>
-        <button className="secondary" onClick={remove}>Delete</button>
-        {msg && <span style={{ color: '#1a7a1a' }}>{msg}</span>}
-      </div>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
     </div>
   )
 }
