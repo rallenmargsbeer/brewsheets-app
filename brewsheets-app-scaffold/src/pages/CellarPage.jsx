@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listTanks, listBatchesInTanks, upsertBatch, upsertFermentationReading } from '../lib/api'
-import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
+import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -149,7 +149,7 @@ function TankPanel({ tank, batch, emptyBbts, onClose, onChanged }) {
     try {
       await upsertBatch({ id: batch.id, status, ...(status === 'packaged' ? { package_date: today() } : {}) })
       if (status === 'packaged') onClose()
-      done(`Status set to ${status}`)
+      done(`Status set to ${statusLabel(status)}`)
     } catch (e) {
       setError(e.message)
     }
@@ -194,7 +194,7 @@ function TankPanel({ tank, batch, emptyBbts, onClose, onChanged }) {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 {['fermenting', 'conditioning', 'packaged'].map((s) => (
                   <button key={s} className={batch.status === s ? '' : 'secondary'} onClick={() => setStatus(s)}>
-                    {s[0].toUpperCase() + s.slice(1)}
+                    {statusLabel(s)}
                   </button>
                 ))}
               </div>
