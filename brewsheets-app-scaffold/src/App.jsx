@@ -1,6 +1,7 @@
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom'
 import RecipesPage from './pages/RecipesPage.jsx'
 import RecipeEditPage from './pages/RecipeEditPage.jsx'
+import BrewDayPage from './pages/BrewDayPage.jsx'
 import BatchesPage from './pages/BatchesPage.jsx'
 import AddBrewPage from './pages/AddBrewPage.jsx'
 import BatchDetailPage from './pages/BatchDetailPage.jsx'
@@ -23,6 +24,9 @@ export default function App() {
           <NavLink to="/recipes" className={navClass}>
             Recipes
           </NavLink>
+          <NavLink to="/brew-day" className={navClass}>
+            Brew Day
+          </NavLink>
           <NavLink to="/batches" className={navClass}>
             Batches
           </NavLink>
@@ -43,6 +47,7 @@ export default function App() {
           <Route path="/recipes" element={<RecipesPage />} />
           <Route path="/recipes/new" element={<RecipeEditPage />} />
           <Route path="/recipes/:id" element={<RecipeEditPage />} />
+          <Route path="/brew-day" element={<BrewDayPage />} />
           <Route path="/batches" element={<BatchesPage />} />
           <Route path="/batches/new" element={<AddBrewPage />} />
           <Route path="/batches/:id" element={<BatchDetailPage />} />
