@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { tankLabel } from '../lib/tanks'
 import FermentationSection from '../components/FermentationSection.jsx'
 import {
@@ -904,6 +904,10 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
   const turnNumbers = Array.from({ length: turnCount }, (_, i) => i + 1)
 
   const [activeTurn, setActiveTurn] = useState(1)
+  // Sheet opens on Fermentation; the Add Brew wizard links straight to ?view=brewday.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = searchParams.get('view') === 'brewday' ? 'brewday' : 'fermentation'
+  const brewDay = view === 'brewday'
 
   async function addAnotherTurn() {
     const nextNumber = turnCount + 1
@@ -927,7 +931,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
       {/* Fixed to the viewport (not the page) — stays halfway up the screen as you
           scroll, so a turn is always one tap away regardless of where you are on the
           brewsheet. Labelled with the turn they'd take you to; hidden at either end. */}
-      {activeTurn > 1 && (
+      {brewDay && activeTurn > 1 && (
         <button
           onClick={() => setActiveTurn(activeTurn - 1)}
           style={{ position: 'fixed', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}
@@ -935,7 +939,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
           ← Turn {activeTurn - 1}
         </button>
       )}
-      {activeTurn < turnCount && (
+      {brewDay && activeTurn < turnCount && (
         <button
           onClick={() => setActiveTurn(activeTurn + 1)}
           style={{ position: 'fixed', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', zIndex: 10 }}
@@ -952,7 +956,23 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
           : ''}
       </p>
 
-      <h2 style={{ marginBottom: '0.5rem' }}>Brew Day</h2>
+      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid var(--line)', marginBottom: '1rem' }}>
+        {[['fermentation', 'Fermentation'], ['brewday', 'Brew Day']].map(([key, label]) => (
+          <button
+            key={key}
+            className={view === key ? '' : 'secondary'}
+            onClick={() => setSearchParams(key === 'brewday' ? { view: 'brewday' } : {}, { replace: true })}
+            style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0, marginBottom: -2 }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {!brewDay && <FermentationSection batch={batch} onChanged={refresh} />}
+
+      {brewDay && (
+      <>
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         {turnNumbers.map((n) => {
           const run = runsByNumber[n]
@@ -992,6 +1012,8 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
           />
         </div>
       ))}
+      </>
+      )}
 
       <h2>Batch Details</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
@@ -1106,11 +1128,11 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
         <button className="secondary" onClick={remove}>Delete Batch</button>
       </div>
 
-      <FermentationSection batch={batch} onChanged={refresh} />
-
-      <div style={{ marginBottom: '2rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
-        <ScaledIngredients recipe={batch.recipes} volumeL={batch.target_volume_l} />
-      </div>
+      {brewDay && (
+        <div style={{ marginBottom: '2rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
+          <ScaledIngredients recipe={batch.recipes} volumeL={batch.target_volume_l} />
+        </div>
+      )}
     </div>
   )
 }
