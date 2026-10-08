@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { tankLabel } from '../lib/tanks'
 import {
   getBatch,
   upsertBatch,
@@ -1008,7 +1009,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
           <select value={batch.tank_id ?? ''} onChange={(e) => set('tank_id', e.target.value || null)}>
             <option value="">—</option>
             {tanks.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+              <option key={t.id} value={t.id}>{tankLabel(t.name)}</option>
             ))}
           </select>
         </label>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listRecipes, getRecipe, listBatches, upsertBatch, initializeBrewRuns } from '../lib/api'
+import { listRecipes, getRecipe, listBatches, listTanks, upsertBatch, initializeBrewRuns } from '../lib/api'
+import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
 
 // Fixed brewhouse turn sizes — tell me the values to use if this ever changes.
 const TURN_VOLUMES = [
@@ -93,7 +94,7 @@ function needsBagReview(item, turnVolumeL, turnQuantity) {
 
 // One row per bagged grist item (pack_size_kg set), one column per turn. Shown only when
 // the recipe has at least one such item — otherwise Add Brew behaves exactly as before.
-function BagAllocationStep({ items, turnVolumeL, turnQuantity, allocations, setAllocations, onCreate, creating }) {
+function BagAllocationStep({ items, turnVolumeL, turnQuantity, allocations, setAllocations, onNext }) {
   function setCount(itemId, turnIndex, value) {
     setAllocations((prev) => {
       const row = prev[itemId] ? [...prev[itemId]] : Array(turnQuantity).fill(0)
@@ -149,7 +150,43 @@ function BagAllocationStep({ items, turnVolumeL, turnQuantity, allocations, setA
           })}
         </tbody>
       </table>
-      <button onClick={onCreate} disabled={creating} style={{ marginTop: '0.75rem' }}>
+      <button onClick={onNext} style={{ marginTop: '0.75rem' }}>
+        Next
+      </button>
+    </div>
+  )
+}
+
+// Last step: pick the fermenter. Tanks smaller than the batch are disabled; tanks that
+// still hold an unfinished batch are flagged but stay pickable (statuses can lag behind).
+function TankStep({ tanks, batches, batchVolumeL, tankId, setTankId, onCreate, creating }) {
+  const occupant = (t) => batches.find((b) => b.tank_id === t.id && IN_TANK_STATUSES.includes(b.status))
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {tanks.map((t) => {
+          const tooSmall = t.capacity_l != null && Number(t.capacity_l) < batchVolumeL
+          const inUse = occupant(t)
+          return (
+            <button
+              key={t.id}
+              className={tankId === t.id ? '' : 'secondary'}
+              disabled={tooSmall || creating}
+              onClick={() => setTankId(t.id)}
+              title={tooSmall ? 'Too small for this batch' : inUse ? `In use: batch ${inUse.batch_number}` : ''}
+              style={{ minWidth: 96, lineHeight: 1.2 }}
+            >
+              {tankLabel(t.name)}
+              <br />
+              <small style={{ fontWeight: 400 }}>
+                {t.capacity_l != null ? `${Number(t.capacity_l).toLocaleString()} L` : ''}
+                {tooSmall ? ' · too small' : inUse ? ` · in use (${inUse.batch_number})` : ''}
+              </small>
+            </button>
+          )
+        })}
+      </div>
+      <button onClick={onCreate} disabled={!tankId || creating} style={{ marginTop: '0.75rem' }}>
         {creating ? '…' : 'Create Brew'}
       </button>
     </div>
@@ -164,11 +201,20 @@ export default function AddBrewPage() {
   const [turnVolumeL, setTurnVolumeL] = useState(null)
   const [turnQuantity, setTurnQuantity] = useState(null)
   const [allocations, setAllocations] = useState({})
+  const [bagsDone, setBagsDone] = useState(false)
+  const [tanks, setTanks] = useState([])
+  const [batches, setBatches] = useState([])
+  const [tankId, setTankId] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     listRecipes().then(setRecipes).catch((e) => setError(e.message))
+    // BBTs aren't fermenters, so they're left out of the brew-day tank choice.
+    listTanks()
+      .then((t) => setTanks(t.filter((x) => x.is_active !== false && x.tank_type !== 'BBT')))
+      .catch((e) => setError(e.message))
+    listBatches().then(setBatches).catch((e) => setError(e.message))
   }, [])
 
   // Full recipe (with nested grist/water/kettle/whirlpool/fermenter arrays) is needed as
@@ -203,6 +249,7 @@ export default function AddBrewPage() {
         batch_number: batchNumber,
         beer_style: recipe?.name,
         status: 'brewing',
+        tank_id: tankId,
         date_brewed: new Date().toISOString().slice(0, 10),
         turn_volume_l: turnVolumeL,
         turn_quantity: quantity,
@@ -216,34 +263,27 @@ export default function AddBrewPage() {
     }
   }
 
-  // Picking a turn quantity no longer creates the batch straight away — if the recipe has
-  // bagged grist items whose split needs a decision, an Allocate Grist Bags step comes first.
+  // Picking a turn quantity doesn't create the batch — if the recipe has bagged grist items
+  // whose split needs a decision, an Allocate Grist Bags step comes next, then Select Tank.
   // Every bagged item (reviewed or not) still gets the even split seeded in — items that
   // don't need review are simply never shown, since that split is already the only sensible
   // answer for them.
   function pickTurnQuantity(quantity) {
     setTurnQuantity(quantity)
-    if (baggedGristItems.length === 0) {
-      createBrew(quantity, {})
-      return
-    }
+    setTankId('')
     const seeded = Object.fromEntries(
       baggedGristItems.map((item) => [item.id, evenBagSplit(bagsNeededFor(item, turnVolumeL, quantity), quantity)])
     )
-    const needsReview = baggedGristItems.some((item) => needsBagReview(item, turnVolumeL, quantity))
-    if (!needsReview) {
-      createBrew(quantity, seeded)
-      return
-    }
     setAllocations(seeded)
+    setBagsDone(!baggedGristItems.some((item) => needsBagReview(item, turnVolumeL, quantity)))
   }
 
   return (
     <div style={{ maxWidth: 640 }}>
       <h1>Add Brew</h1>
       <p style={{ color: '#666', marginTop: '-0.5rem' }}>
-        Set up today's brew day — pick the recipe, the size of each brewhouse turn, and how many
-        turns you're running, and you'll land straight in the brewsheet.
+        Set up today's brew day — pick the recipe, the size of each brewhouse turn, how many
+        turns you're running and the tank, and you'll land straight in the brewsheet.
       </p>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
@@ -255,6 +295,7 @@ export default function AddBrewPage() {
             setTurnVolumeL(null)
             setTurnQuantity(null)
             setAllocations({})
+            setTankId('')
           }}
           style={{ width: '100%' }}
         >
@@ -277,6 +318,7 @@ export default function AddBrewPage() {
                 setTurnVolumeL(v.litres)
                 setTurnQuantity(null)
                 setAllocations({})
+                setTankId('')
               }}
             >
               {v.label}
@@ -285,11 +327,11 @@ export default function AddBrewPage() {
         </div>
       </StepCard>
 
-      <StepCard number={3} title="Select Brew Turn Quantity" active={turnVolumeL != null}>
+      <StepCard number={3} title="Select Brew Turn Quantity" done={turnQuantity != null} active={turnVolumeL != null}>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {TURN_QUANTITIES.map((q) => (
-            <button key={q} disabled={creating} onClick={() => pickTurnQuantity(q)}>
-              {creating ? '…' : `${q} turn${q === 1 ? '' : 's'}`}
+            <button key={q} className={turnQuantity === q ? '' : 'secondary'} disabled={creating} onClick={() => pickTurnQuantity(q)}>
+              {`${q} turn${q === 1 ? '' : 's'}`}
             </button>
           ))}
         </div>
@@ -302,13 +344,26 @@ export default function AddBrewPage() {
       </StepCard>
 
       {turnQuantity != null && reviewGristItems.length > 0 && (
-        <StepCard number={4} title="Allocate Grist Bags" active>
+        <StepCard number={4} title="Allocate Grist Bags" done={bagsDone} active={!bagsDone}>
           <BagAllocationStep
             items={reviewGristItems}
             turnVolumeL={turnVolumeL}
             turnQuantity={turnQuantity}
             allocations={allocations}
             setAllocations={setAllocations}
+            onNext={() => setBagsDone(true)}
+          />
+        </StepCard>
+      )}
+
+      {turnQuantity != null && bagsDone && (
+        <StepCard number={reviewGristItems.length > 0 ? 5 : 4} title="Select Tank" active>
+          <TankStep
+            tanks={tanks}
+            batches={batches}
+            batchVolumeL={turnVolumeL * turnQuantity}
+            tankId={tankId}
+            setTankId={setTankId}
             onCreate={() => createBrew(turnQuantity, allocations)}
             creating={creating}
           />

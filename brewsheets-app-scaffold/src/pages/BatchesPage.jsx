@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { tankLabel } from '../lib/tanks'
 import { Link } from 'react-router-dom'
 import { listBatches } from '../lib/api'
 
@@ -46,7 +47,7 @@ export default function BatchesPage() {
                 </td>
                 <td>{b.recipes?.name}</td>
                 <td><span className={'pill pill-' + b.status}>{b.status}</span></td>
-                <td>{b.tanks?.name ?? '—'}</td>
+                <td>{tankLabel(b.tanks?.name)}</td>
                 <td>{b.target_volume_l ?? '—'}</td>
                 <td>{b.date_brewed ?? '—'}</td>
                 <td>{b.package_date ?? '—'}</td>
