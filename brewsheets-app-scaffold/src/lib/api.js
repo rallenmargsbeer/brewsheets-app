@@ -205,7 +205,7 @@ export async function listBatches() {
 export async function listBatchesInTanks(statuses) {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, brewhouse_yield_l, fv_to_bbt_l, tanks(name, tank_type)')
     .not('tank_id', 'is', null)
     .in('status', statuses)
     .order('date_brewed', { ascending: false })
@@ -407,5 +407,54 @@ export async function upsertCellarTask(task) {
 
 export async function deleteCellarTask(id) {
   const { error } = await supabase.from('cellar_tasks').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---- Packaging ----
+
+export async function listPackagingSessions(batchId) {
+  const { data, error } = await supabase
+    .from('packaging_sessions')
+    .select('*, packaging_do_checks(*)')
+    .eq('batch_id', batchId)
+    .order('package_date')
+    .order('created_at')
+  if (error) throw error
+  return data
+}
+
+// Totals per batch for the Packaging list.
+export async function listPackagingTotals(batchIds) {
+  if (batchIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('packaging_sessions')
+    .select('batch_id, kegs_20, kegs_30, kegs_50, cubes')
+    .in('batch_id', batchIds)
+  if (error) throw error
+  return data
+}
+
+export async function upsertPackagingSession(session) {
+  const { id, packaging_do_checks, ...fields } = session
+  const query = id
+    ? supabase.from('packaging_sessions').update(fields).eq('id', id)
+    : supabase.from('packaging_sessions').insert(fields)
+  const { data, error } = await query.select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deletePackagingSession(id) {
+  const { error } = await supabase.from('packaging_sessions').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function addDoCheck(check) {
+  const { error } = await supabase.from('packaging_do_checks').insert(check)
+  if (error) throw error
+}
+
+export async function deleteDoCheck(id) {
+  const { error } = await supabase.from('packaging_do_checks').delete().eq('id', id)
   if (error) throw error
 }
