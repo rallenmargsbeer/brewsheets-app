@@ -117,8 +117,10 @@ summary{cursor:pointer;font-weight:500}
 .xp .why{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
 .xp .why p{margin:0}
 .xp .pos{color:var(--ink)}
-#tab-cost,#tab-vol,#tab-eff{display:flex;flex-direction:column;gap:24px}
-#tab-cost[hidden],#tab-vol[hidden],#tab-eff[hidden]{display:none}
+#tab-cost,#tab-vol,#tab-eff,#tab-rep{display:flex;flex-direction:column;gap:24px}
+#tab-cost[hidden],#tab-vol[hidden],#tab-eff[hidden],#tab-rep[hidden]{display:none}
+.rp{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 16px;display:flex;flex-direction:column;gap:6px}.rp h3{margin:0;font-size:14px}.rp p{margin:0;max-width:80ch}
+.rbig{font-size:15px;padding:11px 18px;border-color:var(--accent);background:var(--accent-soft);color:var(--ink);font-weight:500}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
 .tabs button{font:inherit;background:none;color:var(--ink2);border:0;border-bottom:3px solid transparent;padding:8px 14px;cursor:pointer;margin-bottom:-1px}
 .tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:500}
@@ -133,7 +135,7 @@ summary{cursor:pointer;font-weight:500}
   <p class="sub">Materials landed cost per unit of what was assembled in the chosen month, from completed assemblies in Unleashed. It is total component cost divided by units assembled, weighted across assemblies of the same SKU.</p>
   <div class="meta"><span>Margaret River Beer Co</span><span>Monthly board report</span><span>Unleashed data pulled <b id="asof"></b></span></div>
  </header>
- <nav class="tabs" role="tablist" aria-label="Report sections"><button type="button" role="tab" id="tabcost" aria-selected="true">Landed cost</button><button type="button" role="tab" id="tabvol" aria-selected="false">Volumes</button><button type="button" role="tab" id="tabeff" aria-selected="false">Efficiency</button></nav>
+ <nav class="tabs" role="tablist" aria-label="Report sections"><button type="button" role="tab" id="tabcost" aria-selected="true">Landed cost</button><button type="button" role="tab" id="tabvol" aria-selected="false">Volumes</button><button type="button" role="tab" id="tabeff" aria-selected="false">Efficiency</button><button type="button" role="tab" id="tabrep" aria-selected="false">Board report</button></nav>
  <div id="tab-cost">
  <section class="tiles" id="tiles" aria-label="Summary by format"></section>
 
@@ -217,7 +219,20 @@ summary{cursor:pointer;font-weight:500}
   <div class="xs" id="vxs" hidden></div>
   <div class="xp" id="vxp" hidden role="dialog" aria-modal="true" aria-labelledby="vxt"><div class="xh2"><h2 id="vxt"></h2><button type="button" id="vxc" aria-label="Close">×</button></div><div id="vxb"></div></div>
  </div>
+<div id="tab-rep" hidden>
+  <section class="note"><div><b>Board report.</b> Pick the month and press the button. You get a six-slide PowerPoint file (cover, summary, landed cost, production volumes, brewhouse efficiency, and basis of preparation) built from the same figures as the other tabs. In Canva use Create a design, then Import files, and choose the .pptx; text and charts stay editable. Commentary on each slide is a plain summary of the figures, so read and edit it before it goes to the board.</div></section>
+  <div class="bar">
+   <label class="sel"><span class="lab">Month</span><select id="rmonth"></select></label>
+   <div class="seg" id="rrng" role="group" aria-label="Range"></div>
+   <label hidden style="display:none"><input type="checkbox" id="rai"> Include Claude commentary</label>
+  </div>
+  <div class="small" id="rscope"></div>
+  <div class="bar"><div class="seg"><button type="button" id="rgo" class="rbig">Generate board report</button><button type="button" id="rstop" hidden>Stop</button><button type="button" id="rdl" hidden>Download PowerPoint</button></div></div>
+  <div class="small" id="rstatus" aria-live="polite"></div><div class="small" id="rnote" aria-live="polite"></div>
+  <section style="display:flex;flex-direction:column;gap:10px" id="rprev"></section>
+ </div>
 </div>
+<script>const ASSETS={};</script>
 <script>
 /* ===== 1. DATA. Same shape as the future Supabase tables: products (one row per SKU), assemblies (one row per completed assembly). ===== */
 const DATA=__DATA__;
@@ -621,6 +636,7 @@ document.querySelectorAll('details.pick').forEach(d=>d.addEventListener('toggle'
 let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(redrawPlots,120)});
 const COLS=[['code','SKU',0],['fmt','Format',0],['size','Size',0],['range','Range',0],['units','Units made',1],['alc','ALC',1],['avg12','Prior 12-mo avg',1],['vsAvg','vs avg',1],['prevAlc','Prior run',1]];
 function render(){
+  if(st.tab==='rep'){renderRep();return}
   if(st.tab==='eff'){renderEff();return}
   if(st.tab==='vol'){renderVol();return}
   if(typeof aiSync==='function'&&$ )aiSync();
@@ -707,11 +723,11 @@ vmonth.onchange=()=>{st.month=vmonth.value;monthSel.value=st.month;renderYears()
 vsize.onchange=()=>{st.size=vsize.value;sizeSel.value=st.size;render()};
 monthSel.addEventListener('change',()=>{vmonth.value=st.month});sizeSel.addEventListener('change',()=>{vsize.value=st.size});
 function setTab(tab){
-  st.tab=tab;$('tab-cost').hidden=tab!=='cost';$('tab-vol').hidden=tab!=='vol';$('tab-eff').hidden=tab!=='eff';$('tabeff').setAttribute('aria-selected',tab==='eff');
+  st.tab=tab;$('tab-rep').hidden=tab!=='rep';$('tabrep').setAttribute('aria-selected',tab==='rep');$('tab-cost').hidden=tab!=='cost';$('tab-vol').hidden=tab!=='vol';$('tab-eff').hidden=tab!=='eff';$('tabeff').setAttribute('aria-selected',tab==='eff');
   $('tabcost').setAttribute('aria-selected',tab==='cost');$('tabvol').setAttribute('aria-selected',tab==='vol');
   vmonth.value=st.month;vsize.value=st.size;render();
 }
-$('tabcost').onclick=()=>setTab('cost');$('tabvol').onclick=()=>setTab('vol');$('tabeff').onclick=()=>setTab('eff');
+$('tabcost').onclick=()=>setTab('cost');$('tabvol').onclick=()=>setTab('vol');$('tabeff').onclick=()=>setTab('eff');$('tabrep').onclick=()=>setTab('rep');
 /* ===== 7. EFFICIENCY TAB ===== */
 st.small=false;
 const emonth=$('emonth');emonth.innerHTML=monthSel.innerHTML;
@@ -1091,6 +1107,218 @@ ${JSON.stringify(ex)}`;
 }
 $('vxc').onclick=closeVol;$('vxs').onclick=closeVol;
 let vrz;window.addEventListener('resize',()=>{clearTimeout(vrz);vrz=setTimeout(()=>{if(st.tab==='vol')drawVCharts();if(st.tab==='eff')effChart()},120)});
+
+/* ===== 8. BOARD REPORT. One button builds a PowerPoint (.pptx, opens and edits in Canva) for the chosen month. ===== */
+const BRAND={name:'Margaret River Beer Co',cream:'ECE8DD',deep:'112520',teal:'005676',orange:'F2703B',sage:'72956B',ink:'111110',grey:'5B5A52',card:'F6F3EA',line:'B9B4A6',head:'Montserrat',body:'IBM Plex Sans'};
+const rep={busy:false,blob:null,name:'',ctl:null,summary:null};
+const fmtD=d=>{const p=(d||'').split('-');return p.length<3?'':(+p[2])+' '+MN[+p[1]-1].slice(0,3)+' '+p[0]};
+const dM=(a,b)=>a==null||b==null?'n/a':(a>=b?'+':'-')+'$'+Math.abs(a-b).toFixed(2);
+const dP=(a,b)=>b>0?((a>=b?'+':'-')+Math.abs(Math.round((a-b)/b*100))+'%'):'n/a';
+const cleanTxt=t=>(t||'').replace(/[*_#`]/g,'').replace(/[ \t]+\n/g,'\n').trim();
+function withState(patch,fn){const keep={};Object.keys(patch).forEach(k=>keep[k]=st[k]);const el=EL;Object.assign(st,patch);try{EL=effList();return fn()}finally{Object.assign(st,keep);EL=el}}
+function repData(month){
+  return withState({month,fmt:'All'},()=>{
+    const m=month,pm=Calc.prevMonth(m),ly=Calc.shiftMonth(m,-12),mb=Calc.monthsBack(m,12),pri=Calc.monthsBack(pm,12);
+    const D={month:m,label:monthLabel(m),ly,lyLabel:mshort(ly),pmLabel:mshort(pm),mb,labels:mb.map(mshort),pulled:fmtD(DATA.pulled),part:m>=PULLED,
+      scope:(st.rng==='All'?'All ranges':st.rng)+', '+(st.size==='All sizes'?'all keg sizes':st.size+' kegs')};
+    const cf=Calc.monthFacts(DATA.products,DATA.assemblies,DATA.fbBatches,m,p=>scope(p));
+    D.cost={has:!!cf.overall,prompt:cf.overall?aiPrompt(cf):'',overall:cf.overall};
+    ['Keg','Cube'].forEach(f=>{const tr=Calc.trend(DATA.products,DATA.assemblies,mb,p=>scope(p)&&p.fmt===f),b=cf.byFormat[f];
+      D.cost[f]={vals:tr.map(x=>x.alc==null?null:Math.round(x.alc*100)/100),alc:b?b.alc:null,avg:b?b.twelveMonthAvgAlc:null,ly:b?b.sameMonthLastYearAlc:null,units:b?b.unitsAssembled:0,skus:b?b.skusAssembled:0}});
+    D.cost.top=Calc.skuRows(DATA.products,DATA.assemblies,m).filter(r=>made(r)&&scope(r)).sort((a,b)=>b.units*b.alc-a.units*a.alc).slice(0,6);
+    const vs=(k,me,mm)=>Calc.volSum(VIX,k,mm,keepFor(k),me),V={};
+    V.beer=[m,pm,ly].map(x=>vs('Beer','litres',x));V.keg=[m,pm,ly].map(x=>vs('Keg','units',x));V.cube=[m,pm,ly].map(x=>vs('Cube','units',x));
+    V.kegL=vs('Keg','litres',m);V.cubeL=vs('Cube','litres',m);V.pk=V.kegL+V.cubeL;
+    V.beerSeries=mb.map(x=>Math.round(vs('Beer','litres',x)));V.pkSeries=mb.map(x=>Math.round(vs('Keg','litres',x)+vs('Cube','litres',x)));
+    V.top=Calc.volItems(VIX,'Beer',m,beerKeep).slice(0,4);V.parked=(DATA.parked&&DATA.parked[m]&&DATA.parked[m].L)||0;
+    V.prompt=vPrompt(vFacts());D.vol=V;
+    const a=effM(m),b=Calc.effAgg(effIn(pri)),l=effM(ly),rows=EL.filter(x=>x.m===m).sort((x,y)=>y.L-x.L);
+    const by=new Map();effIn(Calc.monthsBack(m,12)).forEach(x=>{const k=x.beer[0];if(!by.has(k))by.set(k,[]);by.get(k).push(x)});
+    const br=[...by.entries()].map(([k,li])=>({k,...Calc.effAgg(li)})).filter(x=>x.n).sort((x,y)=>y.L-x.L);
+    const ser=k=>mb.map(x=>{const v=effM(x)[k];return v==null?null:Math.round(v*1000)/10});
+    D.eff={a,b,l,rows,series:{transfer:ser('transfer'),pack:ser('pack'),overall:ser('overall')},prompt:ePrompt(eFacts(br)),
+      src:{typed:rows.filter(x=>!x.small&&x.fv).length,sheet:rows.filter(x=>!x.small&&!x.fv&&x.fromSheet).length,assumed:rows.filter(x=>!x.small&&!x.fv&&!x.fromSheet).length},
+      small:rows.filter(x=>x.small).length,inprog:rows.filter(x=>!x.small&&x.inprog).length,check:rows.filter(x=>!x.small&&x.check).length};
+    return D;
+  });
+}
+function repFallback(D){
+  const k=D.cost.Keg,c=D.cost.Cube,V=D.vol,a=D.eff.a,b=D.eff.b;
+  const cost=D.cost.has?`Kegs averaged ${k.alc!=null?money(k.alc):'n/a'} per unit (${dM(k.alc,k.avg)} against the prior 12-month average) and cubes ${c.alc!=null?money(c.alc):'n/a'} (${dM(c.alc,c.avg)}). Materials only; labour, overheads and excise are excluded.`:'Nothing matching this scope was assembled in the month.';
+  const vol=`${num(Math.round(V.beer[0]))} L of finished beer was completed (${dP(V.beer[0],V.beer[2])} on ${D.lyLabel}). ${num(Math.round(V.keg[0]))} kegs and ${num(Math.round(V.cube[0]))} cubes were made, using ${num(Math.round(V.pk))} L of beer.`;
+  const eff=`Transfer efficiency was ${pc(a.transfer)} (${ppTxt(a.transfer,b.transfer)} on the prior 12 months), brite to packaged ${pc(a.pack)} and overall ${pc(a.overall)}, from ${a.n} batches.`;
+  return {cost,vol,eff,heads:[cost.split('. ')[0]+'.',vol.split('. ')[0]+'.',eff.split(', from')[0]+'.']};
+}
+const REP_LIMIT='\n\nSLIDE LIMIT: this commentary goes on a single slide. Ignore any longer length given above. Write no more than 80 words in two short paragraphs of plain prose, covering only the two or three points the board most needs to see, with the key figures. No headings, bullets or markdown.';
+function repStatus(t,busy){$('rstatus').textContent=t;$('rgo').disabled=!!busy;$('rstop').hidden=!busy}
+async function repGenerate(){
+  if(rep.busy)return;rep.busy=true;rep.blob=null;$('rdl').hidden=true;$('rprev').replaceChildren();
+  const ctl=new AbortController();rep.ctl=ctl;
+  try{
+    repStatus('Preparing figures for '+monthLabel(st.month)+'…',true);
+    await new Promise(r=>setTimeout(r,30));
+    const D=repData(st.month),fb=repFallback(D),T={cost:fb.cost,vol:fb.vol,eff:fb.eff,heads:fb.heads,ai:false};
+    if($('rai').checked&&ai.sample){
+      const ask=async(label,prompt)=>{repStatus('Claude is writing the '+label+' commentary…',true);const r=await ai.sample(prompt,{signal:ctl.signal,cache:{gcTime:86400000}});return cleanTxt(r.text)};
+      try{
+        if(D.cost.has)T.cost=await ask('landed cost',D.cost.prompt+REP_LIMIT);
+        T.vol=await ask('volume',D.vol.prompt+REP_LIMIT);
+        T.eff=await ask('efficiency',D.eff.prompt+REP_LIMIT);
+        repStatus('Claude is writing the headlines…',true);
+        const hp='Below are three short commentaries for a brewery board report, on landed cost, production volumes and brewhouse efficiency.\n\nLANDED COST:\n'+T.cost+'\n\nVOLUMES:\n'+T.vol+'\n\nEFFICIENCY:\n'+T.eff+'\n\nWrite exactly three lines, in that order. Each line is one sentence of at most 28 words stating the single most important point with a figure. Plain text only: no label, bullet, number or markdown. Use only figures that appear above. Australian spelling.';
+        const r=await ai.sample(hp,{signal:ctl.signal,cache:{gcTime:86400000}}),ls=cleanTxt(r.text).split(/\n+/).map(x=>x.trim()).filter(Boolean);
+        if(ls.length>=3)T.heads=ls.slice(0,3);T.ai=true;
+      }catch(e){if(e&&e.code==='cancelled')throw e;T.cost=fb.cost;T.vol=fb.vol;T.eff=fb.eff;T.heads=fb.heads;T.ai=false;T.aiErr=(e&&e.code)||'error'}
+    }
+    repStatus('Building the slides…',true);
+    await new Promise(r=>setTimeout(r,30));
+    const ab=await repBuild(D,T);
+    rep.blob=new Blob([ab],{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
+    rep.name='MRBC board report - '+monthLabel(D.month)+'.pptx';
+    repPreview(D,T);
+    repStatus('Ready: '+rep.name+(T.ai?'. Commentary was written by Claude from the figures: read it before it goes to the board.':(T.aiErr?'. Claude commentary was not available ('+T.aiErr+'), so the slides carry plain figure summaries.':'.')),false);
+    $('rdl').hidden=false;
+  }catch(e){
+    repStatus(e&&e.code==='cancelled'?'Stopped.':'The report could not be built: '+((e&&e.message)||e),false);
+    if(!(e&&e.code==='cancelled'))console.error(e);
+  }finally{rep.busy=false;rep.ctl=null}
+}
+async function repSave(){
+  if(!rep.blob)return;
+  const u=URL.createObjectURL(rep.blob),a=document.createElement('a');a.href=u;a.download=rep.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000);
+  $('rnote').textContent='Downloaded. In Canva choose Create a design, then Import files, and pick the .pptx.';
+}
+let repLibP=null;
+function loadRepLibs(){
+  if(repLibP)return repLibP;
+  repLibP=(async()=>{
+    for(const u of ['https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js','/report/pptxgen.bundle.js']){
+      if(typeof PptxGenJS!=='undefined')break;
+      await new Promise(ok=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=ok;document.head.appendChild(s)});}
+    const F={cover:'cover.jpg',tanks:'tanks.jpg',drift:'drift.jpg',vibes:'vibes.jpg',cans:'cans.jpg',badge:'badge.png'};
+    await Promise.all(Object.entries(F).map(async([k,f])=>{try{const r=await fetch('/report/'+f);if(!r.ok||!(r.headers.get('content-type')||'').startsWith('image/'))return;
+      const b=new Uint8Array(await r.arrayBuffer());let x='';for(let i=0;i<b.length;i+=32768)x+=String.fromCharCode.apply(null,b.subarray(i,i+32768));
+      ASSETS[k]=(f.endsWith('png')?'image/png':'image/jpeg')+';base64,'+btoa(x)}catch(e){}}));
+  })().catch(e=>{repLibP=null;throw e});
+  return repLibP;
+}
+function repPreview(D,T){
+  const sl=[['Summary',T.heads.join('\n')],['Landed cost',T.cost],['Production volumes',T.vol],['Brewhouse efficiency',T.eff]];
+  $('rprev').replaceChildren(...sl.map(([h,t])=>mk('div',{className:'rp'},mk('h3',{textContent:h}),...t.split(/\n+/).filter(Boolean).map(x=>mk('p',{textContent:x})))));
+}
+function renderRep(){
+  seg('rrng',RANGES,'rng','All ranges');
+  $('rmonth').value=st.month;
+  $('rscope').textContent=(st.rng==='All'?'All ranges':st.rng)+', '+(st.size==='All sizes'?'all keg sizes':st.size+' kegs')+(st.month>=PULLED?'. This month is only part complete.':'.');
+  $('rai').disabled=!ai.sample;if(!ai.sample)$('rai').checked=false;
+  if(!rep.busy&&!rep.blob)repStatus('',false);
+}
+$('rmonth').innerHTML=monthSel.innerHTML;
+$('rmonth').onchange=()=>{st.month=$('rmonth').value;monthSel.value=st.month;vmonth.value=st.month;emonth.value=st.month;rep.blob=null;$('rdl').hidden=true;$('rprev').replaceChildren();$('rnote').textContent='';renderYears();render()};
+$('rgo').onclick=()=>{$('rnote').textContent='';repGenerate()};$('rstop').onclick=()=>{if(rep.ctl)rep.ctl.abort()};$('rdl').onclick=()=>repSave();
+/* ---- the deck: styled after the June board deck (cream slides, teal Montserrat titles, photo strip, Made in Margs badge) ---- */
+async function repBuild(D,T){
+  await loadRepLibs();
+  if(typeof PptxGenJS==='undefined')throw new Error('The PowerPoint library did not load. Check your internet connection and try again.');
+  const FH=BRAND.head,FB=BRAND.body,P=new PptxGenJS();P.layout='LAYOUT_WIDE';P.title='Board report '+D.label;P.author=BRAND.name;P.company=BRAND.name;
+  const A=typeof ASSETS!=='undefined'?ASSETS:{};
+  const img=(s,k,o)=>{if(A[k])s.addImage(Object.assign({data:A[k]},o))};
+  const base=(title,sub,photo)=>{const s=P.addSlide();s.background={color:BRAND.cream};
+    const cw=photo?9.4:12.33;
+    s.addText(title,{x:0.5,y:0.3,w:cw,h:0.6,fontFace:FH,fontSize:26,color:BRAND.teal,align:'center',valign:'middle',charSpacing:4,margin:0});
+    s.addText(sub,{x:0.5,y:0.93,w:cw,h:0.3,fontFace:FB,fontSize:11,color:BRAND.grey,align:'center',margin:0});
+    if(photo)img(s,photo,{x:10.13,y:0,w:3.2,h:7.5});
+    img(s,'badge',{x:photo?11.8:11.75,y:6.5,w:1.35,h:0.8});
+    s.addText('Source: Unleashed, data pulled '+D.pulled+(D.part?'. Part-complete month.':'.'),{x:0.5,y:7.12,w:8,h:0.25,fontFace:FB,fontSize:8.5,color:BRAND.grey,margin:0});
+    return s};
+  const card=(s,x,y,w,h,label,value,l1,l2)=>{
+    s.addShape(P.ShapeType.rect,{x,y,w,h,fill:{color:BRAND.card},line:{color:BRAND.ink,width:1}});
+    s.addText(label.toUpperCase(),{x:x+0.15,y:y+0.1,w:w-0.3,h:0.25,fontFace:FB,fontSize:9,bold:true,color:BRAND.teal,margin:0});
+    s.addText(value,{x:x+0.15,y:y+0.36,w:w-0.3,h:0.5,fontFace:FB,fontSize:24,bold:true,color:BRAND.ink,margin:0,valign:'middle'});
+    const ls=[l1,l2].filter(Boolean);
+    if(ls.length)s.addText(ls.map((t,i)=>({text:t,options:{breakLine:i<ls.length-1}})),{x:x+0.15,y:y+0.9,w:w-0.3,h:h-0.95,fontFace:FB,fontSize:9.5,color:BRAND.grey,margin:0,valign:'top'});
+  };
+  const comm=(s,x,y,w,h,text,fs)=>{
+    s.addText('COMMENTARY',{x,y,w,h:0.25,fontFace:FB,fontSize:9,bold:true,color:BRAND.teal,margin:0});
+    const ps=(text||'').split(/\n+/).filter(Boolean);
+    s.addText(ps.map((t,i)=>({text:t,options:{breakLine:i<ps.length-1,paraSpaceAfter:6}})),{x,y:y+0.28,w,h:h-0.28,fontFace:FB,fontSize:fs||10.5,color:BRAND.ink,margin:0,valign:'top'});
+  };
+  const chart=(s,x,y,w,h,title,series,colors,fmt)=>{
+    s.addShape(P.ShapeType.rect,{x,y,w,h,fill:{color:'FFFFFF'},line:{color:'FFFFFF',width:0}});
+    const vals=series.flatMap(z=>z.values.filter(v=>v!=null));
+    if(!vals.length){s.addText(title+': nothing to plot for this period.',{x,y,w,h,fontFace:FB,fontSize:11,color:BRAND.grey,align:'center',valign:'middle'});return}
+    const t=niceTicks(Math.min(...vals),Math.max(...vals));
+    s.addChart(P.charts.LINE,series.map(z=>({name:z.name,labels:D.labels,values:z.values})),{x:x+0.05,y:y+0.05,w:w-0.1,h:h-0.1,chartColors:colors,lineSize:2,lineDataSymbolSize:6,showLegend:series.length>1,legendPos:'b',legendFontSize:10,legendFontFace:FB,
+      catAxisLabelFontSize:9,catAxisLabelFontFace:FB,valAxisLabelFontSize:9,valAxisLabelFontFace:FB,valAxisLabelFormatCode:fmt,valAxisMinVal:t[0],valAxisMaxVal:t[t.length-1],
+      valGridLine:{color:'E3DFD3',size:0.5},catGridLine:{style:'none'},showTitle:true,title,titleFontSize:11,titleFontFace:FB,titleColor:BRAND.ink});
+  };
+  const table=(s,x,y,colW,head,rows,fs,lc)=>{lc=lc||1;
+    const hd=head.map((t,i)=>({text:t,options:{bold:true,color:'FFFFFF',fill:{color:BRAND.sage},align:i<lc?'left':'right',fontFace:FB,fontSize:fs}}));
+    const body=rows.map(r=>r.map((t,i)=>({text:String(t),options:{align:i<lc?'left':'right',color:BRAND.ink,fontFace:FB,fontSize:fs}})));
+    s.addTable([hd,...body],{x,y,colW,rowH:fs>=10?0.27:0.235,border:{type:'solid',color:BRAND.ink,pt:1},margin:[0.02,0.06,0.02,0.06]});
+  };
+  /* 1 cover */
+  {const s=P.addSlide();s.background={color:BRAND.deep};
+   img(s,'cover',{x:0,y:0,w:13.33,h:7.5,sizing:{type:'cover',w:13.33,h:7.5}});
+   s.addShape(P.ShapeType.roundRect,{x:4.2,y:5.75,w:4.93,h:1.35,fill:{color:BRAND.deep},line:{color:BRAND.deep,width:0},rectRadius:0.3});
+   s.addText([{text:D.label,options:{breakLine:true}},{text:'Board Report'}],{x:4.2,y:5.75,w:4.93,h:1.35,fontFace:FH,fontSize:26,color:BRAND.orange,align:'center',valign:'middle',charSpacing:3,margin:0});}
+  /* 2 summary */
+  {const s=base('Summary',D.label+'  ·  '+D.scope,'vibes');const V=D.vol,a=D.eff.a,b=D.eff.b,k=D.cost.Keg,c=D.cost.Cube,w=3.0,g=0.2;
+   const cs=[
+    ['ALC per keg',k.alc!=null?money(k.alc):'n/a','vs prior 12 months '+dM(k.alc,k.avg),'vs '+D.lyLabel+' '+dM(k.alc,k.ly)],
+    ['ALC per cube',c.alc!=null?money(c.alc):'n/a','vs prior 12 months '+dM(c.alc,c.avg),'vs '+D.lyLabel+' '+dM(c.alc,c.ly)],
+    ['Finished beer made',num(Math.round(V.beer[0]))+' L','vs '+D.pmLabel+' '+dP(V.beer[0],V.beer[1]),'vs '+D.lyLabel+' '+dP(V.beer[0],V.beer[2])],
+    ['Packaged (kegs and cubes)',num(Math.round(V.pk))+' L',num(Math.round(V.keg[0]))+' kegs, '+num(Math.round(V.cube[0]))+' cubes','vs '+D.lyLabel+': kegs '+dP(V.keg[0],V.keg[2])+', cubes '+dP(V.cube[0],V.cube[2])],
+    ['Transfer efficiency',pc(a.transfer),'vs prior 12 months '+ppTxt(a.transfer,b.transfer),a.n+' batches counted'],
+    ['Overall efficiency',pc(a.overall),'vs prior 12 months '+ppTxt(a.overall,b.overall),'Brite to packaged '+pc(a.pack)]];
+   cs.forEach((c2,i)=>card(s,0.5+(i%3)*(w+g),1.5+Math.floor(i/3)*1.7,w,1.55,...c2));
+   s.addText('HEADLINES',{x:0.5,y:5.05,w:4,h:0.25,fontFace:FB,fontSize:9,bold:true,color:BRAND.teal,margin:0});
+   const lab=['Landed cost','Volumes','Efficiency'];
+   s.addText(T.heads.slice(0,3).flatMap((t,i)=>[{text:lab[i]+':  ',options:{bold:true,color:BRAND.teal}},{text:t,options:{breakLine:i<2,color:BRAND.ink}}]),{x:0.5,y:5.35,w:9.4,h:1.6,fontFace:FB,fontSize:12,margin:0,valign:'top',paraSpaceAfter:8});}
+  /* 3 landed cost */
+  {const s=base('Landed Cost','Average landed cost (ALC) per unit assembled: materials only, weighted by units.  ·  '+D.scope,'drift');const k=D.cost.Keg,c=D.cost.Cube;
+   chart(s,0.5,1.4,4.6,2.7,'Kegs: ALC per unit, 12 months',[{name:'Kegs',values:k.vals}],[BRAND.teal],'$#,##0.00');
+   chart(s,5.3,1.4,4.6,2.7,'Cubes: ALC per unit, 12 months',[{name:'Cubes',values:c.vals}],[BRAND.orange],'$#,##0.00');
+   s.addText('LARGEST SKUS BY COST ASSEMBLED',{x:0.5,y:4.3,w:5.2,h:0.25,fontFace:FB,fontSize:9,bold:true,color:BRAND.teal,margin:0});
+   table(s,0.5,4.6,[2.2,0.8,1.0,1.3],['SKU','Units','ALC','vs 12-mo avg'],D.cost.top.map(r=>[r.code,num(r.units),money(r.alc),r.vsAvg==null?'n/a':(r.vsAvg>=0?'+':'-')+'$'+Math.abs(r.vsAvg).toFixed(2)]),9.5);
+   comm(s,6.0,4.3,3.9,2.75,T.cost,10);}
+  /* 4 volumes */
+  {const s=base('Production Volumes','Finished beer by completion date; kegs and cubes by production date.  ·  '+D.scope,'cans');const V=D.vol;
+   const t3=[['Finished beer',num(Math.round(V.beer[0]))+' L','vs '+D.pmLabel+' '+dP(V.beer[0],V.beer[1]),'vs '+D.lyLabel+' '+dP(V.beer[0],V.beer[2])],
+     ['Kegs made',num(Math.round(V.keg[0])),num(Math.round(V.kegL))+' L of beer','vs '+D.lyLabel+' '+dP(V.keg[0],V.keg[2])],
+     ['Cubes made',num(Math.round(V.cube[0])),num(Math.round(V.cubeL))+' L of beer','vs '+D.lyLabel+' '+dP(V.cube[0],V.cube[2])]];
+   t3.forEach((c2,i)=>card(s,0.5+i*3.2,1.4,3.0,1.4,...c2));
+   chart(s,0.5,2.95,9.4,2.15,'Litres by month: finished beer made, and beer packaged in kegs and cubes',[{name:'Finished beer made',values:V.beerSeries},{name:'Packaged (kegs and cubes)',values:V.pkSeries}],[BRAND.teal,BRAND.orange],'#,##0');
+   const tb=V.top.map(x=>[bname(x.code),x.n,num(Math.round(x.l))]);
+   table(s,0.5,5.3,[2.6,0.9,1.3],['Largest beers this month','Batches','Litres'],tb.length?tb:[['No finished beer completed this month','','']],9.5);
+   comm(s,5.6,5.25,4.3,1.8,T.vol,10);}
+  /* 5 efficiency */
+  {const s=base('Brewhouse Efficiency','Transfer = completed ÷ fermenter L.  Brite to packaged = packaged ÷ completed L.  Overall = packaged ÷ fermenter L.','tanks');const a=D.eff.a,b=D.eff.b,l=D.eff.l;
+   const t3=[['Transfer',pc(a.transfer),'vs prior 12 months '+ppTxt(a.transfer,b.transfer),'vs '+D.lyLabel+' '+ppTxt(a.transfer,l.transfer)],
+     ['Brite to packaged',pc(a.pack),'vs prior 12 months '+ppTxt(a.pack,b.pack),a.n>a.np?(a.n-a.np)+' batch'+(a.n-a.np>1?'es':'')+' still packaging, left out':''],
+     ['Overall',pc(a.overall),'vs prior 12 months '+ppTxt(a.overall,b.overall),'vs '+D.lyLabel+' '+ppTxt(a.overall,l.overall)]];
+   t3.forEach((c2,i)=>card(s,0.5+i*3.2,1.4,3.0,1.4,...c2));
+   chart(s,0.5,2.95,9.4,2.1,'Efficiency by month, weighted by litres',[{name:'Transfer',values:D.eff.series.transfer},{name:'Brite to packaged',values:D.eff.series.pack},{name:'Overall',values:D.eff.series.overall}],[BRAND.teal,BRAND.orange,BRAND.sage],'0"%"');
+   const rows=D.eff.rows.slice(0,5);
+   table(s,0.5,5.2,[0.55,1.45,0.95,0.8,0.95,0.8],['Batch','Beer','Completed L','Transfer','Brite to pkg','Overall'],rows.map(x=>[x.bn,x.beer.map(bname).join(', ')+(x.small?' (small)':''),num(x.L),pc(x.tr),x.inprog?'in progress':pc(x.pr),x.inprog?'in progress':pc(x.ov)]).concat(rows.length?[]:[['','No batches completed','','','','']]),8.5,2);
+   if(D.eff.rows.length>5)s.addText('Showing the 5 largest of '+D.eff.rows.length+' batches completed.',{x:0.5,y:6.95,w:5.5,h:0.18,fontFace:FB,fontSize:7.5,color:BRAND.grey,margin:0});
+   comm(s,6.2,5.2,3.7,1.85,T.eff,9.5);}
+  /* 6 basis and next */
+  {const s=base('Basis of Preparation','How to read the figures in this report, and what is not in it yet.',null);const E=D.eff,V=D.vol;
+   const bl=[
+    'Source: Unleashed, read-only export, data pulled '+D.pulled+'.'+(D.part?' This month is only part complete.':''),
+    'Finished beer is counted in the month its assembly was completed. Parked (not completed) assemblies are not counted'+(V.parked?': '+num(Math.round(V.parked))+' L were parked for this month (all ranges).':'.'),
+    'Landed cost covers materials only: beer at its Unleashed cost, keg hardware, cans, lids and other packaging. Labour, overheads, energy and excise are excluded.',
+    'Fermenter litres are not in Unleashed. Of '+(E.src.typed+E.src.sheet+E.src.assumed)+' batches counted this month, '+[E.src.assumed?E.src.assumed+' use the completed volume rounded up to the next 2,500 L':'',E.src.sheet?E.src.sheet+' use litres recorded in the brewsheet':'',E.src.typed?E.src.typed+' use litres entered by the team':''].filter(Boolean).join(', ')+'.'+(E.src.assumed?' Assumed litres can understate transfer efficiency.':''),
+    'Brews under 1,500 L ('+E.small+' this month) and batches still being packaged ('+E.inprog+') are left out of the efficiency figures'+(E.check?'; '+E.check+' batch'+(E.check>1?'es are':' is')+' flagged because packaged volume looks wrong against the assembly.':'.')];
+   const nx=['Margin by SKU','Sales by channel','Inventory health','Quality results (QC and sensory)','Fermenter litres fed directly from the brewsheets'];
+   s.addText('BASIS OF PREPARATION',{x:0.5,y:1.5,w:7.4,h:0.25,fontFace:FB,fontSize:9,bold:true,color:BRAND.teal,margin:0});
+   s.addText(bl.map((t,i)=>({text:t,options:{bullet:{indent:14},breakLine:i<bl.length-1,paraSpaceAfter:8}})),{x:0.5,y:1.85,w:7.4,h:4.9,fontFace:FB,fontSize:12,color:BRAND.ink,margin:0,valign:'top'});
+   s.addShape(P.ShapeType.rect,{x:8.4,y:1.5,w:4.43,h:3.4,fill:{color:BRAND.card},line:{color:BRAND.ink,width:1}});
+   s.addText('NOT YET IN THIS REPORT',{x:8.6,y:1.62,w:4,h:0.25,fontFace:FB,fontSize:9,bold:true,color:BRAND.teal,margin:0});
+   s.addText(nx.map((t,i)=>({text:t,options:{bullet:{indent:14},breakLine:i<nx.length-1,paraSpaceAfter:8}})),{x:8.6,y:1.95,w:4.05,h:2.8,fontFace:FB,fontSize:12,color:BRAND.ink,margin:0,valign:'top'});}
+  return await P.write({outputType:'arraybuffer'});
+}
 
 renderYears();render();
 </script>
