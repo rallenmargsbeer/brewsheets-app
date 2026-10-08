@@ -280,3 +280,10 @@ tbody tr:hover td {
 .pill-conditioning { background: #d9e7fa; color: #1d4f91; }
 .pill-packaged { background: #d4efe2; color: #11603f; }
 .pill-archived { background: #ece9e1; color: #6b6f6c; }
+
+/* Batch Details fields fill their grid cell instead of overflowing it */
+.details-grid input:not([type='checkbox']),
+.details-grid select {
+  width: 100%;
+  box-sizing: border-box;
+}

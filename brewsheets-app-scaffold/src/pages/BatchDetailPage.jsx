@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { tankLabel } from '../lib/tanks'
+import { tankLabel, statusLabel } from '../lib/tanks'
 import FermentationSection from '../components/FermentationSection.jsx'
 import {
   getBatch,
@@ -906,7 +906,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
   const [activeTurn, setActiveTurn] = useState(1)
   // Sheet opens on Fermentation; the Add Brew wizard links straight to ?view=brewday.
   const [searchParams, setSearchParams] = useSearchParams()
-  const view = searchParams.get('view') === 'brewday' ? 'brewday' : 'fermentation'
+  const view = ['brewday', 'details'].includes(searchParams.get('view')) ? searchParams.get('view') : 'fermentation'
   const brewDay = view === 'brewday'
 
   async function addAnotherTurn() {
@@ -957,11 +957,11 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
       </p>
 
       <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid var(--line)', marginBottom: '1rem' }}>
-        {[['fermentation', 'Fermentation'], ['brewday', 'Brew Day']].map(([key, label]) => (
+        {[['fermentation', 'Fermentation'], ['brewday', 'Brew Day'], ['details', 'Batch Details']].map(([key, label]) => (
           <button
             key={key}
             className={view === key ? '' : 'secondary'}
-            onClick={() => setSearchParams(key === 'brewday' ? { view: 'brewday' } : {}, { replace: true })}
+            onClick={() => setSearchParams(key === 'fermentation' ? {} : { view: key }, { replace: true })}
             style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0, marginBottom: -2 }}
           >
             {label}
@@ -969,7 +969,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
         ))}
       </div>
 
-      {!brewDay && <FermentationSection batch={batch} onChanged={refresh} />}
+      {view === 'fermentation' && <FermentationSection batch={batch} onChanged={refresh} />}
 
       {brewDay && (
       <>
@@ -1015,14 +1015,15 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
       </>
       )}
 
-      <h2>Batch Details</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
+      {view === 'details' && (
+      <>
+      <div className="details-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
         <label>
           Status
           <br />
           <select value={batch.status} onChange={(e) => set('status', e.target.value)}>
             {['planned', 'brewing', 'fermenting', 'conditioning', 'packaged', 'archived'].map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>{statusLabel(s)}</option>
             ))}
           </select>
         </label>
@@ -1127,6 +1128,8 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
         <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Batch'}</button>
         <button className="secondary" onClick={remove}>Delete Batch</button>
       </div>
+      </>
+      )}
 
       {brewDay && (
         <div style={{ marginBottom: '2rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
