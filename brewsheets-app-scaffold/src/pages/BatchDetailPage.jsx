@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { tankLabel } from '../lib/tanks'
+import FermentationSection from '../components/FermentationSection.jsx'
 import {
   getBatch,
   upsertBatch,
@@ -1104,6 +1105,8 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
         <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Batch'}</button>
         <button className="secondary" onClick={remove}>Delete Batch</button>
       </div>
+
+      <FermentationSection batch={batch} onChanged={refresh} />
 
       <div style={{ marginBottom: '2rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
         <ScaledIngredients recipe={batch.recipes} volumeL={batch.target_volume_l} />
