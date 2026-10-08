@@ -61,7 +61,7 @@ export default function ReportsPage() {
       </div>
 
       <p>
-        <Link to="/reports/dashboard" style={{ fontWeight: 600 }}>Open the board dashboard (Landed cost, Volumes) →</Link>
+        <Link to="/reports/dashboard" style={{ fontWeight: 600 }}>Open the board dashboard (Landed cost, Volumes, Efficiency) →</Link>
       </p>
 
       <h2>Unleashed data</h2>
