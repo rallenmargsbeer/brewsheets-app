@@ -8,7 +8,7 @@ export default function BatchesPage() {
 
   function refresh() {
     listBatches()
-      .then(setBatches)
+      .then((rows) => setBatches([...rows].sort((a, b) => String(b.batch_number).localeCompare(String(a.batch_number), undefined, { numeric: true }))))
       .finally(() => setLoading(false))
   }
 
