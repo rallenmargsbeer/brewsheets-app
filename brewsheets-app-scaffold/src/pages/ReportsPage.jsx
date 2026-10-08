@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../auth'
 
@@ -58,6 +59,10 @@ export default function ReportsPage() {
           {session?.user?.email} · <a href="#out" onClick={(e) => { e.preventDefault(); supabase.auth.signOut() }}>Sign out</a>
         </span>
       </div>
+
+      <p>
+        <Link to="/reports/dashboard" style={{ fontWeight: 600 }}>Open the board dashboard (Landed cost, Volumes) →</Link>
+      </p>
 
       <h2>Unleashed data</h2>
       <p style={{ color: '#666', maxWidth: 640 }}>
