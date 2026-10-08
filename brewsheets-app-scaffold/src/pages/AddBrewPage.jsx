@@ -256,7 +256,7 @@ export default function AddBrewPage() {
         target_volume_l: turnVolumeL * quantity,
       })
       await initializeBrewRuns(batch.id, quantity, fullRecipe, turnVolumeL, bagAllocations)
-      navigate(`/batches/${batch.id}`)
+      navigate(`/batches/${batch.id}?view=brewday`)
     } catch (e) {
       setError(e.message)
       setCreating(false)

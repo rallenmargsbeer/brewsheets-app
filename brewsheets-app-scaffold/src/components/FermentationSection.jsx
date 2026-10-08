@@ -86,10 +86,9 @@ export default function FermentationSection({ batch, onChanged }) {
   const box = { marginBottom: '2rem', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: '1rem' }
   return (
     <>
-      <h2>Fermentation</h2>
       <div style={box}>
         {readings.length === 0 ? (
-          <p style={{ color: 'var(--ink2)', margin: 0 }}>No readings yet. Log them from the Tanks board: tap this batch's tank.</p>
+          <p style={{ color: 'var(--ink2)', margin: 0 }}>No readings yet. Log them from the Cellar tab: tap this batch's tank.</p>
         ) : (
           <>
             {points.length >= 2 && (

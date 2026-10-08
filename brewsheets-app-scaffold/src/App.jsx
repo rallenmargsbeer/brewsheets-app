@@ -6,6 +6,7 @@ import BatchesPage from './pages/BatchesPage.jsx'
 import AddBrewPage from './pages/AddBrewPage.jsx'
 import BatchDetailPage from './pages/BatchDetailPage.jsx'
 import TanksPage from './pages/TanksPage.jsx'
+import CellarPage from './pages/CellarPage.jsx'
 import IngredientsPage from './pages/IngredientsPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
@@ -32,6 +33,9 @@ export default function App() {
           <NavLink to="/batches" className={(p) => navClass({ isActive: p.isActive && !addingBrew })}>
             Batches
           </NavLink>
+          <NavLink to="/cellar" className={navClass}>
+            Cellar
+          </NavLink>
           <NavLink to="/tanks" className={navClass}>
             Tanks
           </NavLink>
@@ -53,6 +57,7 @@ export default function App() {
           <Route path="/batches" element={<BatchesPage />} />
           <Route path="/batches/new" element={<AddBrewPage />} />
           <Route path="/batches/:id" element={<BatchDetailPage />} />
+          <Route path="/cellar" element={<CellarPage />} />
           <Route path="/tanks" element={<TanksPage />} />
           <Route path="/ingredients" element={<IngredientsPage />} />
           <Route path="/login" element={<LoginPage />} />
