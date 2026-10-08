@@ -10,7 +10,7 @@ const KEYS = ['products', 'assemblies', 'fbBatches', 'beerRange', 'parked', 'eff
 const bkey = (b) => (b.bn + '__' + b.beer[0]).replace(/[^A-Za-z0-9_-]+/g, '-')
 
 // Unleashed entries filed under the wrong batch number (can't be changed there): Unleashed key -> real batch number.
-const ALIAS = { '396__FB-Drift-XPA': '395' }
+const ALIAS = { '396__FB-Drift-XPA': '395', '397__FB-ITP': '398' }
 
 // Match an Unleashed beer code (e.g. FB-ITP, FB-Draught) to a brewsheets-app beer name (e.g. In The Pines, Draught).
 const nbn = (x) => String(x).trim().replace(/^0+(?=\d)/, '')
