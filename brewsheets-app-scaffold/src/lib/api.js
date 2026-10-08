@@ -201,6 +201,18 @@ export async function listBatches() {
   return data
 }
 
+// Batches currently sitting in a tank, for the Tanks board.
+export async function listBatchesInTanks(statuses) {
+  const { data, error } = await supabase
+    .from('batches')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id')
+    .not('tank_id', 'is', null)
+    .in('status', statuses)
+    .order('date_brewed', { ascending: false })
+  if (error) throw error
+  return data
+}
+
 export async function getBatch(id) {
   const { data, error } = await supabase
     .from('batches')
