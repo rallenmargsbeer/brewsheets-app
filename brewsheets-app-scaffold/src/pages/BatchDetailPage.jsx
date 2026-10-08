@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { tankLabel, statusLabel } from '../lib/tanks'
 import FermentationSection from '../components/FermentationSection.jsx'
+import IngredientPicker from '../components/IngredientPicker.jsx'
 import {
   getBatch,
   upsertBatch,
@@ -255,7 +256,7 @@ function formatQty(qty) {
 // confirmed/locked — ingredient edits are deliberately decoupled from stage
 // gating. Saves trigger a full page refresh (onSaved) rather than local
 // state patching, same as everywhere else on this page.
-function IngredientList({ title, items, onSaved }) {
+function IngredientList({ title, items, ingredients, onSaved }) {
   if (!items || items.length === 0) return null
   return (
     <div style={{ marginTop: '0.75rem' }}>
@@ -273,7 +274,7 @@ function IngredientList({ title, items, onSaved }) {
         </thead>
         <tbody>
           {items.map((item) => (
-            <IngredientRow key={item.id} item={item} onSaved={onSaved} />
+            <IngredientRow key={item.id} item={item} ingredients={ingredients} onSaved={onSaved} />
           ))}
         </tbody>
       </table>
@@ -289,15 +290,14 @@ function usesKg(section) {
   return section === 'grist' || section === 'kettle' || section === 'whirlpool'
 }
 
-function IngredientRow({ item, onSaved }) {
+function IngredientRow({ item, ingredients, onSaved }) {
   const kg = usesKg(item.section)
   const toDisplay = (g) => (g == null ? '' : kg ? +(g / 1000).toFixed(3) : g)
 
-  const [name, setName] = useState(item.item_name)
   const [actual, setActual] = useState(toDisplay(item.actual_qty))
   const [saving, setSaving] = useState(false)
 
-  async function saveName() {
+  async function saveName(name) {
     if (name === item.item_name) return
     setSaving(true)
     try {
@@ -325,7 +325,7 @@ function IngredientRow({ item, onSaved }) {
   return (
     <tr>
       <td>
-        <input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} style={{ width: 160 }} disabled={saving} />
+        <IngredientPicker value={item.item_name} section={item.section} ingredients={ingredients ?? []} onCommit={saveName} disabled={saving} width={180} />
       </td>
       <td style={{ color: '#666', fontSize: '0.85rem' }}>{item.timing_note ?? '—'}</td>
       <td style={{ color: '#666' }}>
@@ -572,8 +572,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
                       onSaved={applySaved}
                     />
                   </div>
-                  <IngredientList title="Grist" items={gristItems} onSaved={onSaved} />
-                  <IngredientList title="Water (Mash)" items={mashWaterItems} onSaved={onSaved} />
+                  <IngredientList title="Grist" items={gristItems} ingredients={masterIngredients} onSaved={onSaved} />
+                  <IngredientList title="Water (Mash)" items={mashWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
               )}
 
@@ -653,8 +653,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
                   {fld('preboil_gravity', 'Pre-Boil Grav. (actual)', 'number', 130)}
                   {fld('postboil_volume_l', 'Post-Boil Vol (L)', 'number', 130)}
                   {fld('postboil_gravity', 'Post-Boil Grav.', 'number', 120)}
-                  <IngredientList title="Kettle" items={kettleItems} onSaved={onSaved} />
-                  <IngredientList title="Water (Kettle)" items={kettleWaterItems} onSaved={onSaved} />
+                  <IngredientList title="Kettle" items={kettleItems} ingredients={masterIngredients} onSaved={onSaved} />
+                  <IngredientList title="Water (Kettle)" items={kettleWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
               )}
 
@@ -691,7 +691,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
                   {fld('ko_flowmeter_l', 'Flowmeter (L)', 'number', 120)}
                   {fld('whirlpool_gravity', 'Gravity', 'number', 110)}
                   {fld('whirlpool_ph', 'pH', 'number', 100)}
-                  <IngredientList title="Whirlpool Additions" items={whirlpoolItems} onSaved={onSaved} />
+                  <IngredientList title="Whirlpool Additions" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
               )}
             </div>
@@ -730,7 +730,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
           <p style={{ color: '#666', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
             Not gated to a stage — visible any time so you can see what's coming, or confirm what got pitched.
           </p>
-          <IngredientList items={fermenterItems} onSaved={onSaved} />
+          <IngredientList items={fermenterItems} ingredients={masterIngredients} onSaved={onSaved} />
         </div>
       )}
 
