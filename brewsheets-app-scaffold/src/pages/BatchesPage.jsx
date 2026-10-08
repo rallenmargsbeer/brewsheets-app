@@ -45,7 +45,7 @@ export default function BatchesPage() {
                   <Link to={`/batches/${b.id}`}>{b.batch_number}</Link>
                 </td>
                 <td>{b.recipes?.name}</td>
-                <td>{b.status}</td>
+                <td><span className={'pill pill-' + b.status}>{b.status}</span></td>
                 <td>{b.tanks?.name ?? '—'}</td>
                 <td>{b.target_volume_l ?? '—'}</td>
                 <td>{b.date_brewed ?? '—'}</td>
