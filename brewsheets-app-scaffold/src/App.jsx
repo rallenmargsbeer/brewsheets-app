@@ -8,6 +8,7 @@ import TanksPage from './pages/TanksPage.jsx'
 import IngredientsPage from './pages/IngredientsPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
 import { AuthProvider, RequireAuth } from './auth.jsx'
 
 const navStyle = ({ isActive }) => ({
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/ingredients" element={<IngredientsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/reports" element={<RequireAuth><ReportsPage /></RequireAuth>} />
+          <Route path="/reports/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
         </Routes>
       </main>
     </div>
