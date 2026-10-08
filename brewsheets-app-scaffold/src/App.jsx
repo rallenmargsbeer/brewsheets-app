@@ -11,44 +11,28 @@ import ReportsPage from './pages/ReportsPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import { AuthProvider, RequireAuth } from './auth.jsx'
 
-const navStyle = ({ isActive }) => ({
-  padding: '0.5rem 1rem',
-  textDecoration: 'none',
-  color: isActive ? '#fff' : '#1a1a1a',
-  background: isActive ? '#1a1a1a' : 'transparent',
-  borderRadius: 4,
-  fontWeight: 600,
-})
+const navClass = ({ isActive }) => 'nav-link' + (isActive ? ' active' : '')
 
 export default function App() {
   return (
     <AuthProvider>
     <div>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '1rem',
-          padding: '1rem 1.5rem',
-          borderBottom: '1px solid #ddd',
-          background: '#fff',
-        }}
-      >
-        <strong style={{ fontSize: '1.1rem' }}>🍺 Brewsheets</strong>
-        <nav style={{ display: 'flex', gap: '0.5rem' }}>
-          <NavLink to="/recipes" style={navStyle}>
+      <header className="app-header">
+        <strong className="brand">Brew<span>sheets</span></strong>
+        <nav className="app-nav">
+          <NavLink to="/recipes" className={navClass}>
             Recipes
           </NavLink>
-          <NavLink to="/batches" style={navStyle}>
+          <NavLink to="/batches" className={navClass}>
             Batches
           </NavLink>
-          <NavLink to="/tanks" style={navStyle}>
+          <NavLink to="/tanks" className={navClass}>
             Tanks
           </NavLink>
-          <NavLink to="/ingredients" style={navStyle}>
+          <NavLink to="/ingredients" className={navClass}>
             Ingredients
           </NavLink>
-          <NavLink to="/reports" style={navStyle}>
+          <NavLink to="/reports" className={navClass}>
             Reports
           </NavLink>
         </nav>
