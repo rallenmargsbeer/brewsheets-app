@@ -6,6 +6,9 @@ import AddBrewPage from './pages/AddBrewPage.jsx'
 import BatchDetailPage from './pages/BatchDetailPage.jsx'
 import TanksPage from './pages/TanksPage.jsx'
 import IngredientsPage from './pages/IngredientsPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import ReportsPage from './pages/ReportsPage.jsx'
+import { AuthProvider, RequireAuth } from './auth.jsx'
 
 const navStyle = ({ isActive }) => ({
   padding: '0.5rem 1rem',
@@ -18,6 +21,7 @@ const navStyle = ({ isActive }) => ({
 
 export default function App() {
   return (
+    <AuthProvider>
     <div>
       <header
         style={{
@@ -43,6 +47,9 @@ export default function App() {
           <NavLink to="/ingredients" style={navStyle}>
             Ingredients
           </NavLink>
+          <NavLink to="/reports" style={navStyle}>
+            Reports
+          </NavLink>
         </nav>
       </header>
       <main style={{ padding: '1.5rem', maxWidth: 1100, margin: '0 auto' }}>
@@ -56,8 +63,11 @@ export default function App() {
           <Route path="/batches/:id" element={<BatchDetailPage />} />
           <Route path="/tanks" element={<TanksPage />} />
           <Route path="/ingredients" element={<IngredientsPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/reports" element={<RequireAuth><ReportsPage /></RequireAuth>} />
         </Routes>
       </main>
     </div>
+    </AuthProvider>
   )
 }
