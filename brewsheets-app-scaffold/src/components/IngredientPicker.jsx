@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 // committed (typing is case-insensitive; the saved name always uses Unleashed's
 // spelling). Anything else reverts to the previous name on blur.
 export default function IngredientPicker({ value, section, ingredients, onCommit, disabled, width = 200 }) {
-  const [text, setText] = useState(value)
+  const [text, setText] = useState(value ?? '')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const [warning, setWarning] = useState(null)
@@ -22,6 +22,9 @@ export default function IngredientPicker({ value, section, ingredients, onCommit
       window.removeEventListener('resize', place)
     }
   }, [open])
+
+  // Follow outside changes to the value (e.g. a recipe row above this one removed).
+  useEffect(() => setText(value ?? ''), [value])
 
   const byLower = useMemo(() => new Map(ingredients.map((i) => [i.name.toLowerCase(), i.name])), [ingredients])
 
@@ -47,7 +50,7 @@ export default function IngredientPicker({ value, section, ingredients, onCommit
     setOpen(false)
     const exact = byLower.get(text.trim().toLowerCase())
     if (exact) commit(exact)
-    else if (text !== value) {
+    else if (text !== (value ?? '')) {
       setWarning(`"${text}" isn't an Unleashed ingredient`)
       setText(value)
     }
@@ -87,7 +90,7 @@ export default function IngredientPicker({ value, section, ingredients, onCommit
         style={{ width: '100%', boxSizing: 'border-box', ...(warning ? { borderColor: 'crimson' } : {}) }}
         autoComplete="off"
       />
-      {open && rect && matches.length > 0 && text !== value && (
+      {open && rect && matches.length > 0 && text !== (value ?? '') && (
         <ul
           role="listbox"
           style={{ position: 'fixed', zIndex: 1100, left: rect.left, top: rect.bottom + 2, minWidth: rect.width, width: 'max-content', maxWidth: 340, margin: 0, padding: 0, listStyle: 'none', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }}
