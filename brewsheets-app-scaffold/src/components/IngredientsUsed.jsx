@@ -1,7 +1,6 @@
 import { useState } from 'react'
 
 const SECTION_ORDER = ['grist', 'water', 'kettle', 'whirlpool', 'fermenter']
-const SECTION_LABEL = { grist: 'Grist', water: 'Water', kettle: 'Kettle', whirlpool: 'Whirlpool', fermenter: 'Fermenter' }
 
 // Brew-sheet quantities are stored in grams; convert to the Unleashed product's unit
 // where that's a weight. Litre / ml / EA products can't be converted from grams.
@@ -13,8 +12,8 @@ function toUnleashed(grams, baseUnit) {
 }
 
 // Same display units as the brew sheet: kg for malt and hops, g for salts and other small additions.
-const showQty = (grams, section) =>
-  ['grist', 'kettle', 'whirlpool'].includes(section) ? `${fmt(grams / 1000)} kg` : `${fmt(grams, 1)} g`
+const showQty = (grams, sections) =>
+  sections.some((s) => ['grist', 'kettle', 'whirlpool'].includes(s)) ? `${fmt(grams / 1000)} kg` : `${fmt(grams, 1)} g`
 
 const fmt = (n, dp = 3) => (n == null ? '—' : Number(n.toFixed(dp)).toLocaleString(undefined, { maximumFractionDigits: dp }))
 
@@ -27,11 +26,12 @@ export default function IngredientsUsed({ batch, ingredients }) {
   const totals = new Map()
   for (const run of batch.brew_runs ?? []) {
     for (const it of run.brew_run_ingredients ?? []) {
-      const key = `${it.section}|${it.item_name}`
-      const row = totals.get(key) ?? { section: it.section, name: it.item_name, planned: 0, actual: 0 }
+      // One line per ingredient, even if it went in at more than one stage (e.g. kettle and dry hop).
+      const row = totals.get(it.item_name) ?? { name: it.item_name, sections: [], planned: 0, actual: 0 }
+      if (!row.sections.includes(it.section)) row.sections.push(it.section)
       row.planned += Number(it.planned_qty) || 0
       row.actual += Number(it.actual_qty ?? it.planned_qty) || 0
-      totals.set(key, row)
+      totals.set(it.item_name, row)
     }
   }
   const rows = [...totals.values()]
@@ -39,7 +39,7 @@ export default function IngredientsUsed({ batch, ingredients }) {
       const ing = byName.get(r.name)
       return { ...r, code: ing?.unleashed_code ?? null, unleashed: toUnleashed(r.actual, ing?.base_unit), baseUnit: ing?.base_unit ?? null }
     })
-    .sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section) || a.name.localeCompare(b.name))
+    .sort((a, b) => SECTION_ORDER.indexOf(a.sections[0]) - SECTION_ORDER.indexOf(b.sections[0]) || a.name.localeCompare(b.name))
 
   async function copy() {
     const lines = rows.map((r) => [r.code ?? '', r.name, r.unleashed ? fmt(r.unleashed.qty) : `${fmt(r.actual, 1)} g`, r.unleashed?.unit ?? r.baseUnit ?? ''].join('\t'))
@@ -70,10 +70,7 @@ export default function IngredientsUsed({ batch, ingredients }) {
           <table>
             <thead>
               <tr>
-                <th>Section</th>
-                <th>Code</th>
                 <th>Ingredient</th>
-                <th style={{ textAlign: 'right' }}>Planned</th>
                 <th style={{ textAlign: 'right' }}>Actual</th>
                 <th style={{ textAlign: 'right' }}>Unleashed qty</th>
               </tr>
@@ -82,17 +79,19 @@ export default function IngredientsUsed({ batch, ingredients }) {
               {rows.map((r) => {
                 const changed = Math.abs(r.actual - r.planned) > 0.5
                 return (
-                  <tr key={`${r.section}|${r.name}`}>
-                    <td style={{ color: 'var(--ink2)' }}>{SECTION_LABEL[r.section] ?? r.section}</td>
-                    <td style={{ color: 'var(--ink2)' }}>{r.code ?? <span style={{ color: 'crimson' }}>not in Unleashed</span>}</td>
-                    <td>{r.name}</td>
-                    <td style={{ textAlign: 'right', color: 'var(--ink2)' }}>{showQty(r.planned, r.section)}</td>
-                    <td style={{ textAlign: 'right', fontWeight: changed ? 700 : 400, color: changed ? '#a66a00' : undefined }}>{showQty(r.actual, r.section)}</td>
+                  <tr key={r.name}>
+                    <td>
+                      {r.name}
+                      {!r.code && <span style={{ color: 'crimson', fontSize: '0.8rem' }}> · not in Unleashed</span>}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: changed ? 700 : 400, color: changed ? '#a66a00' : undefined }} title={changed ? `Planned ${showQty(r.planned, r.sections)}` : undefined}>
+                      {showQty(r.actual, r.sections)}
+                    </td>
                     <td style={{ textAlign: 'right' }}>
                       {r.unleashed ? (
                         <strong>{fmt(r.unleashed.qty)} {r.unleashed.unit}</strong>
                       ) : (
-                        <span style={{ color: '#a66a00' }}>{fmt(r.actual, 1)} g · check unit ({r.baseUnit ?? 'none'})</span>
+                        <span style={{ color: '#a66a00' }}>check unit ({r.baseUnit ?? 'none'})</span>
                       )}
                     </td>
                   </tr>
