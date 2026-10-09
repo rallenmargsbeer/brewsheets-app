@@ -12,7 +12,7 @@ export function unitFor(name, ingredients) {
 const toUnit = (grams, unit) => (grams == null ? '' : unit === 'kg' ? +(grams / 1000).toFixed(3) : +Number(grams).toFixed(1))
 const toGrams = (v, unit) => (v === '' || v == null ? null : Number(v) * (unit === 'kg' ? 1000 : 1))
 
-function PlannedRow({ a, unit, initials, onChanged }) {
+function PlannedRow({ a, unit, initials, ingredients, onChanged }) {
   const [qty, setQty] = useState(toUnit(a.planned_qty, unit))
   const [saving, setSaving] = useState(false)
   async function added() {
@@ -24,19 +24,32 @@ function PlannedRow({ a, unit, initials, onChanged }) {
       setSaving(false)
     }
   }
+  // Out of stock: swap to another Unleashed ingredient (planned amount kept) or drop it.
+  async function swap(name) {
+    await saveTankAddition({ id: a.id, item_name: name })
+    onChanged()
+  }
+  async function remove() {
+    if (!window.confirm(`Remove ${a.item_name}${a.timing_note ? ` (${a.timing_note})` : ''} from this tank's additions?`)) return
+    await deleteTankAddition(a.id)
+    onChanged()
+  }
   return (
     <div className="ta-row">
       <div style={{ flex: '1 1 160px' }}>
-        <strong>{a.item_name}</strong>
+        <IngredientPicker value={a.item_name} section="fermenter" ingredients={ingredients} onCommit={swap} width={190} />
         <div style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>
           {a.timing_note ? `${a.timing_note} · ` : ''}planned {a.planned_qty != null ? `${toUnit(a.planned_qty, unit)} ${unit}` : '—'}
         </div>
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <input type="number" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 90 }} />
-        {unit}
-      </label>
-      <button onClick={added} disabled={saving || qty === ''}>{saving ? '…' : '✓ Added'}</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <input type="number" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 80 }} />
+          {unit}
+        </label>
+        <button onClick={added} disabled={saving || qty === ''}>{saving ? '…' : '✓ Added'}</button>
+        <button className="secondary" onClick={remove} aria-label={`Remove ${a.item_name}`} style={{ padding: '0.4rem 0.6rem' }}>✕</button>
+      </div>
     </div>
   )
 }
@@ -102,7 +115,7 @@ export default function AddToTank({ batch, ingredients, onAdded }) {
       {planned.length > 0 && (
         <div className="ta-list">
           {planned.map((a) => (
-            <PlannedRow key={a.id} a={a} unit={unitFor(a.item_name, ingredients)} initials={initials} onChanged={changed} />
+            <PlannedRow key={a.id} a={a} unit={unitFor(a.item_name, ingredients)} initials={initials} ingredients={ingredients} onChanged={changed} />
           ))}
         </div>
       )}
