@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   getRecipe,
@@ -11,6 +11,7 @@ import {
   deleteRecipe,
   listIngredients,
 } from '../lib/api'
+import IngredientPicker from '../components/IngredientPicker.jsx'
 
 const emptyRecipe = {
   name: '',
@@ -72,7 +73,7 @@ function Field({ label, value, onChange, type = 'text', width }) {
   )
 }
 
-function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults }) {
+function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults, ingredients }) {
   function update(i, key, value) {
     const next = [...items]
     next[i] = { ...next[i], [key]: value }
@@ -83,12 +84,6 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults })
   }
   function remove(i) {
     setItems(items.filter((_, idx) => idx !== i))
-  }
-
-  // Stable per-field id for the shared <datalist> a field's inputs point at
-  // via list={...} — only fields with datalistOptions get one.
-  function datalistId(key) {
-    return `dl-${title}-${key}`.toLowerCase().replace(/[^a-z0-9]+/g, '-')
   }
 
   return (
@@ -119,13 +114,20 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults })
                         </option>
                       ))}
                     </select>
+                  ) : f.pickerSection ? (
+                    <IngredientPicker
+                      value={item[f.key] ?? ''}
+                      section={f.pickerSection}
+                      ingredients={ingredients}
+                      onCommit={(name) => update(i, f.key, name)}
+                      width={f.width ?? 180}
+                    />
                   ) : (
                     <input
                       type={f.type ?? 'text'}
                       value={item[f.key] ?? ''}
                       onChange={(e) => update(i, f.key, e.target.value)}
                       style={{ width: f.width ?? 100 }}
-                      list={f.datalistOptions ? datalistId(f.key) : undefined}
                       autoComplete="off"
                     />
                   )}
@@ -143,15 +145,6 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults })
       <button className="secondary" onClick={add} style={{ marginTop: '0.5rem' }}>
         + Add row
       </button>
-      {fields
-        .filter((f) => f.datalistOptions)
-        .map((f) => (
-          <datalist key={f.key} id={datalistId(f.key)}>
-            {f.datalistOptions.map((o) => (
-              <option key={o} value={o} />
-            ))}
-          </datalist>
-        ))}
     </Section>
   )
 }
@@ -182,19 +175,6 @@ export default function RecipeEditPage() {
         /* suggestions are a convenience, not required — fail quietly */
       })
   }, [])
-
-  // An ingredient can belong to more than one section (e.g. Hops is both
-  // kettle and fermenter — see the Ingredients page), so this groups by
-  // membership rather than a single category.
-  const ingredientNamesByCategory = useMemo(() => {
-    const byCategory = { grist: [], water: [], kettle: [], whirlpool: [], fermenter: [] }
-    for (const ing of ingredients) {
-      for (const section of ing.sections ?? []) {
-        if (byCategory[section]) byCategory[section].push(ing.name)
-      }
-    }
-    return byCategory
-  }, [ingredients])
 
   useEffect(() => {
     if (isNew) return
@@ -397,9 +377,10 @@ export default function RecipeEditPage() {
         subtitle="Pack Size is the bag weight this ingredient is bought in — leave it blank for anything not bought in fixed bags. It's what the Add Brew wizard uses to let you allocate whole bags per turn instead of a computed weight."
         items={grist}
         setItems={setGrist}
+        ingredients={ingredients}
         defaults={{ pack_size_kg: 25 }}
         fields={[
-          { key: 'ingredient_name', label: 'Ingredient', width: 200, datalistOptions: ingredientNamesByCategory.grist },
+          { key: 'ingredient_name', label: 'Ingredient', width: 200, pickerSection: 'grist' },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
           { key: 'pack_size_kg', label: 'Pack Size (kg)', type: 'number', width: 90 },
         ]}
@@ -409,8 +390,9 @@ export default function RecipeEditPage() {
         title="Water Chemistry"
         items={water}
         setItems={setWater}
+        ingredients={ingredients}
         fields={[
-          { key: 'additive_name', label: 'Additive', width: 200, datalistOptions: ingredientNamesByCategory.water },
+          { key: 'additive_name', label: 'Additive', width: 200, pickerSection: 'water' },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
           {
             key: 'addition_stage',
@@ -426,8 +408,9 @@ export default function RecipeEditPage() {
         subtitle="Everything added during the boil — hops, whirlfloc, yeast nutrient."
         items={kettle}
         setItems={setKettle}
+        ingredients={ingredients}
         fields={[
-          { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.kettle },
+          { key: 'item_name', label: 'Item', width: 180, pickerSection: 'kettle' },
           { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
         ]}
@@ -438,8 +421,9 @@ export default function RecipeEditPage() {
         subtitle="Everything added at knockout/whirlpool — late hop additions, whirlpool-timed items."
         items={whirlpool}
         setItems={setWhirlpool}
+        ingredients={ingredients}
         fields={[
-          { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.whirlpool },
+          { key: 'item_name', label: 'Item', width: 180, pickerSection: 'whirlpool' },
           { key: 'stand_time_min', label: 'Stand time (min)', type: 'number', width: 90 },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
         ]}
@@ -450,8 +434,9 @@ export default function RecipeEditPage() {
         subtitle='Everything added to the fermenter — pitched yeast, dry hops. Add one row per addition (e.g. two dry hop rows for a two-stage dry hop).'
         items={fermenter}
         setItems={setFermenter}
+        ingredients={ingredients}
         fields={[
-          { key: 'item_name', label: 'Item', width: 180, datalistOptions: ingredientNamesByCategory.fermenter },
+          { key: 'item_name', label: 'Item', width: 180, pickerSection: 'fermenter' },
           { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
           { key: 'timing_notes', label: 'Timing (e.g. "day 3")', width: 140 },
         ]}

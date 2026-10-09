@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { tankLabel, statusLabel } from '../lib/tanks'
 import FermentationSection from '../components/FermentationSection.jsx'
 import IngredientPicker from '../components/IngredientPicker.jsx'
+import IngredientsUsed from '../components/IngredientsUsed.jsx'
 import {
   getBatch,
   upsertBatch,
@@ -1128,6 +1129,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
         <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Batch'}</button>
         <button className="secondary" onClick={remove}>Delete Batch</button>
       </div>
+      <IngredientsUsed batch={batch} ingredients={ingredients} />
       </>
       )}
 
