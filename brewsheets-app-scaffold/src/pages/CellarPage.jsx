@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listTanks, listBatchesInTanks, upsertBatch, upsertFermentationReading } from '../lib/api'
-import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
+import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -136,23 +136,10 @@ function TransferForm({ batch, bbts, onSaved }) {
 
 function TankPanel({ tank, batch, emptyBbts, onClose, onChanged }) {
   const [msg, setMsg] = useState(null)
-  const [error, setError] = useState(null)
 
   function done(text) {
     setMsg(text)
     onChanged()
-  }
-
-  async function setStatus(status) {
-    if (status === 'packaged' && !window.confirm(`Mark #${batch.batch_number} as packaged? ${tankLabel(tank.name)} will show as empty.`)) return
-    setError(null)
-    try {
-      await upsertBatch({ id: batch.id, status, ...(status === 'packaged' ? { package_date: today() } : {}) })
-      if (status === 'packaged') onClose()
-      done(`Status set to ${statusLabel(status)}`)
-    } catch (e) {
-      setError(e.message)
-    }
   }
 
   const section = { borderTop: '1px solid var(--line)', paddingTop: '0.75rem', marginTop: '0.75rem' }
@@ -173,7 +160,6 @@ function TankPanel({ tank, batch, emptyBbts, onClose, onChanged }) {
           <button className="secondary" onClick={onClose} aria-label="Close">✕</button>
         </div>
         {msg && <p style={{ color: '#1a7a1a', marginBottom: 0 }}>{msg}</p>}
-        {error && <p style={{ color: 'crimson', marginBottom: 0 }}>{error}</p>}
 
         {!batch ? (
           <p style={{ color: 'var(--ink2)' }}>This tank is empty. Start a brew from the Brew Day tab to fill it.</p>
@@ -187,17 +173,6 @@ function TankPanel({ tank, batch, emptyBbts, onClose, onChanged }) {
             <div style={section}>
               <h4 style={{ margin: '0 0 0.5rem' }}>Log a reading</h4>
               <ReadingForm batch={batch} onSaved={done} />
-            </div>
-
-            <div style={section}>
-              <h4 style={{ margin: '0 0 0.5rem' }}>Change status</h4>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                {['fermenting', 'conditioning', 'packaged'].map((s) => (
-                  <button key={s} className={batch.status === s ? '' : 'secondary'} onClick={() => setStatus(s)}>
-                    {statusLabel(s)}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {tank.tank_type !== 'BBT' && (
