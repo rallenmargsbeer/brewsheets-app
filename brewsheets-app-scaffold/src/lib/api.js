@@ -514,3 +514,47 @@ export async function deleteTankAddition(id) {
   const { error } = await supabase.from('tank_additions').delete().eq('id', id)
   if (error) throw error
 }
+
+// Batches started before the Cellar checklist existed have their dry hops (non-yeast
+// fermenter additions) on the brew-day turns. Move them to the tank checklist, totalled
+// across turns, and take them off the brew sheet so nothing is counted twice. Safe to
+// call every time: once moved there's nothing left to move.
+const movesInFlight = new Map()
+export function moveFermenterAdditionsToTank(batchId) {
+  // One move per batch at a time, so opening the tank twice quickly can't double up.
+  if (!movesInFlight.has(batchId)) {
+    movesInFlight.set(batchId, doMoveFermenterAdditions(batchId).finally(() => movesInFlight.delete(batchId)))
+  }
+  return movesInFlight.get(batchId)
+}
+
+async function doMoveFermenterAdditions(batchId) {
+  const { data: runs, error } = await supabase
+    .from('brew_runs')
+    .select('id, brew_run_ingredients(id, section, item_name, planned_qty, timing_note, sort_order)')
+    .eq('batch_id', batchId)
+  if (error) throw error
+  const yeast = await yeastNames()
+  const rows = runs.flatMap((r) => r.brew_run_ingredients ?? []).filter((i) => i.section === 'fermenter' && !yeast.has(i.item_name))
+  if (rows.length === 0) return
+  const byItem = new Map()
+  for (const r of rows) {
+    const key = `${r.item_name}|${r.timing_note ?? ''}`
+    const t = byItem.get(key) ?? { batch_id: batchId, item_name: r.item_name, planned_qty: 0, timing_note: r.timing_note ?? null, sort_order: r.sort_order ?? 0 }
+    t.planned_qty += Number(r.planned_qty) || 0
+    byItem.set(key, t)
+  }
+  // If the checklist was already seeded (e.g. the tank opened twice at once), don't add it again.
+  const { count, error: cErr } = await supabase
+    .from('tank_additions')
+    .select('id', { count: 'exact', head: true })
+    .eq('batch_id', batchId)
+    .not('planned_qty', 'is', null)
+  if (cErr) throw cErr
+  if (!count) {
+    const { error: insErr } = await supabase.from('tank_additions').insert([...byItem.values()])
+    if (insErr) throw insErr
+  }
+  const { error: delErr } = await supabase.from('brew_run_ingredients').delete().in('id', rows.map((r) => r.id))
+  if (delErr) throw delErr
+}

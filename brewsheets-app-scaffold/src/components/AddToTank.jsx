@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listTankAdditions, saveTankAddition, deleteTankAddition } from '../lib/api'
+import { listTankAdditions, saveTankAddition, deleteTankAddition, moveFermenterAdditionsToTank } from '../lib/api'
 import IngredientPicker from './IngredientPicker.jsx'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
@@ -51,7 +51,12 @@ export default function AddToTank({ batch, ingredients, onAdded }) {
   function refresh() {
     listTankAdditions(batch.id).then(setAdditions).catch((e) => setError(e.message))
   }
-  useEffect(refresh, [batch.id])
+  // Older batches: pull their recipe dry hops off the brew sheet into this checklist first.
+  useEffect(() => {
+    moveFermenterAdditionsToTank(batch.id)
+      .catch((e) => setError(e.message))
+      .finally(refresh)
+  }, [batch.id])
 
   function changed() {
     refresh()
