@@ -905,6 +905,14 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
   const turnNumbers = Array.from({ length: turnCount }, (_, i) => i + 1)
 
   const [activeTurn, setActiveTurn] = useState(1)
+
+  // Brew day ends with the last knockout: once every turn's Knockout is confirmed,
+  // a batch still marked Brewing moves to Fermenting on its own.
+  const allKnockedOut = turnNumbers.every((n) => runsByNumber[n]?.knockout_confirmed_at)
+  useEffect(() => {
+    if (batch.status !== 'brewing' || !allKnockedOut) return
+    upsertBatch({ id: batch.id, status: 'fermenting' }).then(() => refresh())
+  }, [batch.id, batch.status, allKnockedOut])
   // Sheet opens on Fermentation; the Add Brew wizard links straight to ?view=brewday.
   const [searchParams, setSearchParams] = useSearchParams()
   const view = ['brewday', 'details'].includes(searchParams.get('view')) ? searchParams.get('view') : 'fermentation'
