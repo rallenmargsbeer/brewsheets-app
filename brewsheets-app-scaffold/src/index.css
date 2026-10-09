@@ -329,3 +329,17 @@ tbody tr:hover td {
   .pk-heads { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .pk-group input { background: #fff; }
+
+/* ---- Cellar: Add to tank checklist ---- */
+.ta-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.ta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  background: #fdf3dc;
+  border-left: 4px solid #b07d00;
+}
+.ta-done { background: #e7f4ec; border-left-color: #11603f; }
