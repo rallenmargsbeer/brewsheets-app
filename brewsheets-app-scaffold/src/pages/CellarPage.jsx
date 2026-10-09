@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { listTanks, listBatchesInTanks, upsertBatch, upsertFermentationReading } from '../lib/api'
+import { listTanks, listIngredients, listBatchesInTanks, upsertBatch, upsertFermentationReading } from '../lib/api'
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
+import AddToTank from '../components/AddToTank.jsx'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -134,7 +135,7 @@ function TransferForm({ batch, bbts, onSaved }) {
   )
 }
 
-function TankPanel({ tank, batch, emptyBbts, onClose, onChanged }) {
+function TankPanel({ tank, batch, emptyBbts, ingredients, onClose, onChanged }) {
   const [msg, setMsg] = useState(null)
 
   function done(text) {
@@ -175,6 +176,11 @@ function TankPanel({ tank, batch, emptyBbts, onClose, onChanged }) {
               <ReadingForm batch={batch} onSaved={done} />
             </div>
 
+            <div style={section}>
+              <h4 style={{ margin: '0 0 0.5rem' }}>Add to tank</h4>
+              <AddToTank batch={batch} ingredients={ingredients} />
+            </div>
+
             {tank.tank_type !== 'BBT' && (
               <div style={section}>
                 <h4 style={{ margin: '0 0 0.5rem' }}>Transfer to BBT</h4>
@@ -197,6 +203,10 @@ export default function CellarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [openTankId, setOpenTankId] = useState(null)
+  const [ingredients, setIngredients] = useState([])
+  useEffect(() => {
+    listIngredients().then(setIngredients).catch((e) => setError(e.message))
+  }, [])
 
   function refresh() {
     Promise.all([listTanks(), listBatchesInTanks(IN_TANK_STATUSES)])
@@ -221,7 +231,7 @@ export default function CellarPage() {
   return (
     <div>
       <h1>Cellar</h1>
-      <p style={{ color: 'var(--ink2)', marginTop: '-0.5rem' }}>Tap a tank to log a reading, change status or transfer to a BBT.</p>
+      <p style={{ color: 'var(--ink2)', marginTop: '-0.5rem' }}>Tap a tank to log a reading, add dry hops or transfer to a BBT.</p>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {loading ? (
         <p>Loading…</p>
@@ -244,6 +254,7 @@ export default function CellarPage() {
 
       {openTank && (
         <TankPanel
+          ingredients={ingredients}
           tank={openTank}
           batch={batchIn(openTank)}
           emptyBbts={bbts.filter((t) => !batchIn(t))}

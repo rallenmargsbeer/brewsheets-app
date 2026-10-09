@@ -12,8 +12,13 @@ function toUnleashed(grams, baseUnit) {
 }
 
 // Same display units as the brew sheet: kg for malt and hops, g for salts and other small additions.
-const showQty = (grams, sections) =>
-  sections.some((s) => ['grist', 'kettle', 'whirlpool'].includes(s)) ? `${fmt(grams / 1000)} kg` : `${fmt(grams, 1)} g`
+// kg or g following the Unleashed product's unit; otherwise kg for malt and hops,
+// g for salts and other small additions (same as the brew sheet).
+const showQty = (grams, sections, baseUnit) => {
+  const u = (baseUnit ?? '').toLowerCase()
+  const kg = u === 'kg' || (u !== 'g' && sections.some((s) => ['grist', 'kettle', 'whirlpool'].includes(s)))
+  return kg ? `${fmt(grams / 1000)} kg` : `${fmt(grams, 1)} g`
+}
 
 const fmt = (n, dp = 3) => (n == null ? '—' : Number(n.toFixed(dp)).toLocaleString(undefined, { maximumFractionDigits: dp }))
 
@@ -33,6 +38,15 @@ export default function IngredientsUsed({ batch, ingredients }) {
       row.actual += Number(it.actual_qty ?? it.planned_qty) || 0
       totals.set(it.item_name, row)
     }
+  }
+  // Dry hops and other additions made in the cellar (only once actually added).
+  for (const a of batch.tank_additions ?? []) {
+    if (!a.added_on) continue
+    const row = totals.get(a.item_name) ?? { name: a.item_name, sections: [], planned: 0, actual: 0 }
+    if (!row.sections.includes('fermenter')) row.sections.push('fermenter')
+    row.planned += Number(a.planned_qty) || 0
+    row.actual += Number(a.actual_qty) || 0
+    totals.set(a.item_name, row)
   }
   const rows = [...totals.values()]
     .map((r) => {
@@ -84,8 +98,8 @@ export default function IngredientsUsed({ batch, ingredients }) {
                       {r.name}
                       {!r.code && <span style={{ color: 'crimson', fontSize: '0.8rem' }}> · not in Unleashed</span>}
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: changed ? 700 : 400, color: changed ? '#a66a00' : undefined }} title={changed ? `Planned ${showQty(r.planned, r.sections)}` : undefined}>
-                      {showQty(r.actual, r.sections)}
+                    <td style={{ textAlign: 'right', fontWeight: changed ? 700 : 400, color: changed ? '#a66a00' : undefined }} title={changed ? `Planned ${showQty(r.planned, r.sections, r.baseUnit)}` : undefined}>
+                      {showQty(r.actual, r.sections, r.baseUnit)}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {r.unleashed ? (

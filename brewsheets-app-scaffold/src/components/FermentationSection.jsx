@@ -16,12 +16,12 @@ const dayOf = (r, brewed) =>
 const fmt = (v, dp) => (v == null || v === '' ? '—' : Number(v).toFixed(dp))
 
 // One series (°P over fermentation day), so no legend: the heading names it.
-function GravityChart({ points }) {
+function GravityChart({ points, events = [] }) {
   const [hover, setHover] = useState(null)
   const W = 640, H = 220, L = 40, R = 12, T = 12, B = 28
   const xs = points.map((p) => p.day)
   const ys = points.map((p) => p.plato)
-  const xMax = Math.max(1, ...xs)
+  const xMax = Math.max(1, ...xs, ...events.map((e) => e.day))
   const yMax = Math.ceil(Math.max(...ys) + 0.5)
   const yMin = Math.max(0, Math.floor(Math.min(...ys) - 0.5))
   const x = (d) => L + (d / xMax) * (W - L - R)
@@ -53,6 +53,14 @@ function GravityChart({ points }) {
           <text key={d} x={x(d)} y={H - 8} textAnchor="middle" fontSize="11" fill="var(--muted)">{d}</text>
         ))}
         {h && <line x1={x(h.day)} x2={x(h.day)} y1={T} y2={H - B} stroke="var(--muted)" strokeWidth="1" strokeDasharray="3 3" />}
+        {/* Tank additions (dry hops etc.): a marker line per day, labelled with what went in */}
+        {events.map((e) => (
+          <g key={e.day}>
+            <line x1={x(e.day)} x2={x(e.day)} y1={T} y2={H - B} stroke="#11603f" strokeWidth="1.5" strokeDasharray="4 3" />
+            {/* Labels near the right edge sit to the left of the line so they aren't cut off */}
+            <text x={x(e.day) > W * 0.65 ? x(e.day) - 4 : x(e.day) + 4} textAnchor={x(e.day) > W * 0.65 ? 'end' : 'start'} y={T + 10} fontSize="11" fill="var(--ink)">{e.label}</text>
+          </g>
+        ))}
         <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
         {points.map((p, i) => (
           <circle key={i} cx={x(p.day)} cy={y(p.plato)} r={hover === i ? 5 : 4} fill="var(--accent)" stroke="var(--surface)" strokeWidth="2" />
@@ -77,6 +85,15 @@ export default function FermentationSection({ batch, onChanged }) {
     .filter((r) => r.gravity_plato != null && dayOf(r, batch.date_brewed) != null)
     .map((r) => ({ day: dayOf(r, batch.date_brewed), plato: Number(r.gravity_plato), date: r.reading_date }))
 
+  // Tank additions logged on the Cellar tab, grouped by day for the chart.
+  const added = (batch.tank_additions ?? [])
+    .filter((a) => a.added_on)
+    .map((a) => ({ ...a, day: dayOf({ reading_date: a.added_on }, batch.date_brewed) }))
+    .sort((a, b) => a.added_on.localeCompare(b.added_on))
+  const byDay = new Map()
+  for (const a of added) if (a.day != null) byDay.set(a.day, [...(byDay.get(a.day) ?? []), a.item_name])
+  const events = [...byDay].map(([day, names]) => ({ day, label: names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0] }))
+
   async function remove(r) {
     if (!window.confirm(`Delete the ${r.reading_date} reading?`)) return
     await deleteFermentationReading(r.id)
@@ -94,8 +111,14 @@ export default function FermentationSection({ batch, onChanged }) {
             {points.length >= 2 && (
               <>
                 <h3 style={{ marginTop: 0 }}>Gravity (°P)</h3>
-                <GravityChart points={points} />
+                <GravityChart points={points} events={events} />
               </>
+            )}
+            {added.length > 0 && (
+              <p style={{ fontSize: '0.85rem', color: 'var(--ink2)', margin: '0.5rem 0 0' }}>
+                <strong style={{ color: '#11603f' }}>Tank additions:</strong>{' '}
+                {added.map((a) => `Day ${a.day ?? '?'} ${a.item_name} ${a.actual_qty != null ? `${+(a.actual_qty / 1000).toFixed(3)} kg` : ''}${a.initials ? ` (${a.initials})` : ''}`).join(' · ')}
+              </p>
             )}
             <div style={{ overflowX: 'auto', marginTop: points.length >= 2 ? '1rem' : 0 }}>
               <table>

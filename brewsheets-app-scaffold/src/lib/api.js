@@ -217,7 +217,7 @@ export async function getBatch(id) {
   const { data, error } = await supabase
     .from('batches')
     .select(
-      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*)), tanks(*), brew_runs(*, brew_run_ingredients(*)), fermentation_readings(*), cellar_tasks(*)'
+      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*)), tanks(*), brew_runs(*, brew_run_ingredients(*)), fermentation_readings(*), cellar_tasks(*), tank_additions(*)'
     )
     .eq('id', id)
     .single()
@@ -274,13 +274,23 @@ function ingredientTimingNote(section, item) {
 // sheet say "1 bag (25.00 kg)" instead of a computed-to-the-gram figure for something that's
 // actually grabbed off the shelf by the whole bag. Everything else (no pack size, or no bag
 // count supplied for this turn/item) keeps the original per-litre calc, bag_count stays null.
+// Names of ingredients in Unleashed's "Yeast" group. Yeast is pitched on brew day so it
+// stays on the brew sheet; every other fermenter addition (dry hops etc.) goes to the
+// tank's checklist on the Cellar tab instead.
+async function yeastNames() {
+  const { data, error } = await supabase.from('ingredients').select('name').eq('unleashed_group', 'Yeast')
+  if (error) throw error
+  return new Set(data.map((d) => d.name))
+}
+
 export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL, bagCounts = {}) {
+  const yeast = (recipe.recipe_fermenter_additions ?? []).length ? await yeastNames() : new Set()
   const sections = [
     ['grist', recipe.recipe_grist_items ?? [], 'ingredient_name'],
     ['water', recipe.recipe_water_additions ?? [], 'additive_name'],
     ['kettle', recipe.recipe_kettle_additions ?? [], 'item_name'],
     ['whirlpool', recipe.recipe_whirlpool_additions ?? [], 'item_name'],
-    ['fermenter', recipe.recipe_fermenter_additions ?? [], 'item_name'],
+    ['fermenter', (recipe.recipe_fermenter_additions ?? []).filter((f) => yeast.has(f.item_name)), 'item_name'],
   ]
   const rows = []
   let sortOrder = 0
@@ -345,6 +355,7 @@ export async function initializeBrewRuns(batchId, turnQuantity, recipe, turnVolu
     )
     await snapshotBrewRunIngredients(run.id, recipe, turnVolumeL, bagCounts)
   }
+  await createTankAdditions(batchId, recipe, turnVolumeL * turnQuantity)
   return runs
 }
 
@@ -456,5 +467,50 @@ export async function addDoCheck(check) {
 
 export async function deleteDoCheck(id) {
   const { error } = await supabase.from('packaging_do_checks').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ---- Tank additions (dry hops etc., added in the cellar) ----
+
+// Seeds a batch's tank checklist from the recipe's non-yeast fermenter additions,
+// sized for the whole batch.
+async function createTankAdditions(batchId, recipe, batchVolumeL) {
+  const yeast = await yeastNames()
+  const rows = (recipe.recipe_fermenter_additions ?? [])
+    .filter((f) => f.item_name && !yeast.has(f.item_name))
+    .map((f, i) => ({
+      batch_id: batchId,
+      item_name: f.item_name,
+      planned_qty: f.qty_g_per_l != null ? f.qty_g_per_l * batchVolumeL : null,
+      timing_note: f.timing_notes ?? null,
+      sort_order: f.sort_order ?? i,
+    }))
+  if (rows.length === 0) return
+  const { error } = await supabase.from('tank_additions').insert(rows)
+  if (error) throw error
+}
+
+export async function listTankAdditions(batchId) {
+  const { data, error } = await supabase
+    .from('tank_additions')
+    .select('*')
+    .eq('batch_id', batchId)
+    .order('sort_order')
+    .order('created_at')
+  if (error) throw error
+  return data
+}
+
+export async function saveTankAddition(addition) {
+  const { id, ...fields } = addition
+  const query = id
+    ? supabase.from('tank_additions').update(fields).eq('id', id)
+    : supabase.from('tank_additions').insert(fields)
+  const { error } = await query
+  if (error) throw error
+}
+
+export async function deleteTankAddition(id) {
+  const { error } = await supabase.from('tank_additions').delete().eq('id', id)
   if (error) throw error
 }
