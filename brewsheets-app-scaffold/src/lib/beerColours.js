@@ -59,7 +59,9 @@ export function assignBeers(entries, { knownBeers = [], bookingBeer = {} } = {})
   const runs = new Map() // tank_id -> [{ beer, start, end }]
   const byTank = new Map()
   for (const e of entries) if (e.lane === 'tank') byTank.set(e.tank_id, [...(byTank.get(e.tank_id) ?? []), e])
-  for (const [tankId, list] of byTank) {
+  // Two passes: the first learns one-off beer names from FV brew days, so the second can
+  // recognise them when they turn up by name in a bright tank.
+  for (let pass = 0; pass < 2; pass++) for (const [tankId, list] of byTank) {
     list.sort(order)
     const tankRuns = []
     let current = null
