@@ -22,7 +22,7 @@ import {
   moveToBrightTank,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
-import { assignBeers, beerColour, beerInTank, stayAt, slotKey } from '../lib/beerColours'
+import { assignBeers, beerColour, beerInTank, stayAt, slotKey, packBeer } from '../lib/beerColours'
 
 // How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
 const LOOKBACK_DAYS = 42
@@ -53,9 +53,12 @@ function orderTanks(tanks) {
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, undefined, { numeric: true }))
 }
 
-function CellEditor({ cell, column, entries, beer, brightTanks, allEntries, fvLitres, onClose, onChanged }) {
+function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks, allEntries, fvLitres, onClose, onChanged }) {
   const [rows, setRows] = useState(entries.map((e) => ({ ...e })))
   const [newText, setNewText] = useState('')
+  // Canning / kegging: which beer (blank = let the app work it out).
+  const isPack = column.group === 'pack'
+  const [packBeerName, setPackBeerName] = useState(entries.find((e) => e.beer_name)?.beer_name ?? '')
   const [booking, setBooking] = useState(null)
   const [moveTo, setMoveTo] = useState('')
   const [error, setError] = useState(null)
@@ -88,7 +91,8 @@ function CellEditor({ cell, column, entries, beer, brightTanks, allEntries, fvLi
     for (const r of rows) {
       const orig = entries.find((e) => e.id === r.id)
       if (!r.text.trim()) await deleteScheduleEntry(r.id)
-      else if (orig.text !== r.text || orig.done !== r.done) await saveScheduleEntry({ id: r.id, text: r.text.trim(), done: r.done })
+      else if (orig.text !== r.text || orig.done !== r.done || (isPack && (orig.beer_name ?? '') !== packBeerName))
+        await saveScheduleEntry({ id: r.id, text: r.text.trim(), done: r.done, ...(isPack ? { beer_name: packBeerName || null } : {}) })
     }
     if (newText.trim()) {
       await saveScheduleEntry({
@@ -97,6 +101,7 @@ function CellEditor({ cell, column, entries, beer, brightTanks, allEntries, fvLi
         lane: column.lane,
         tank_id: column.tankId ?? null,
         text: newText.trim(),
+        ...(isPack ? { beer_name: packBeerName || null } : {}),
       })
     }
   }
@@ -124,6 +129,15 @@ function CellEditor({ cell, column, entries, beer, brightTanks, allEntries, fvLi
           style={{ width: '100%', boxSizing: 'border-box', marginTop: '0.6rem' }}
         />
         <p style={{ color: 'var(--ink2)', fontSize: '0.8rem', margin: '0.3rem 0 0' }}>Clear a box to remove it.</p>
+        {isPack && (
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: '0.6rem' }}>
+            Beer
+            <select value={packBeerName} onChange={(e) => setPackBeerName(e.target.value)}>
+              <option value="">{beer ? `Worked out: ${beer}` : 'Work it out from the tanks'}</option>
+              {beerChoices.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </label>
+        )}
 
         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
           <button onClick={() => run(saveAll)}>Save</button>
@@ -280,8 +294,10 @@ export default function SchedulePage() {
   function cellBeer(c, list, d, slot) {
     if (list[0] && beerOf.get(list[0].id)) return beerOf.get(list[0].id)
     if (c.lane === 'tank') return beerInTank(runs, c.tankId, d, slot)
+    if (c.group === 'pack' && list.length) return packBeer(list, d, slot, { entries, beerOf, runs, brightTankIds })
     return null
   }
+  const brightTankIds = tanks.filter((t) => t.tank_type === 'BBT').map((t) => t.id)
 
   return (
     <div>
@@ -375,6 +391,7 @@ export default function SchedulePage() {
       {editing && (
         <CellEditor
           beer={editing.beer}
+          beerChoices={weekBeers}
           brightTanks={tanks.filter((t) => t.tank_type === 'BBT')}
           allEntries={entries}
           // Sheet-imported brews don't record their size, so assume the FV was full.
