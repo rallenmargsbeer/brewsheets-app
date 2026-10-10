@@ -357,8 +357,11 @@ tbody tr:hover td {
 .sc-cell { min-width: 84px; vertical-align: top; }
 .sc-editable { cursor: pointer; }
 .sc-editable:hover { outline: 2px solid var(--accent-soft); outline-offset: -2px; }
-.sc-today td { background: #fff8e8; }
-.sc-today .sc-day { background: #fdecc8; }
+.sc-todayrow td { background: #fff8e8; }
+.sc-todayrow .sc-day { background: #fdecc8; }
+.sc-grid tbody tr.sc-weekend td { border-bottom: 3px solid #c9c4b5; }
+.sc-more { text-align: center; padding: 0.5rem !important; }
+.sc-scroll { max-height: calc(100vh - 230px); min-height: 320px; }
 .sc-h-brew { background: #fde3d3 !important; color: #9a3a0c !important; }
 .sc-h-bbt { background: #d9e7fa !important; color: #1d4f91 !important; }
 .sc-h-pack { background: #d4efe2 !important; color: #11603f !important; }
