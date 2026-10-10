@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listTanks, listRecipes } from '../lib/api'
 import { tankLabel } from '../lib/tanks'
@@ -18,15 +18,26 @@ import {
   listBookings,
   moveBooking,
   cancelBooking,
+  suggestBrightTank,
+  moveToBrightTank,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
 import { assignBeers, beerColour, beerInTank } from '../lib/beerColours'
 
 // How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
 const LOOKBACK_DAYS = 42
-// The schedule is one continuous list of days: it opens a week before today and loads
-// another four weeks each time you scroll near the bottom (or tap Load earlier at the top).
+// The schedule is one continuous list of days from the 1st of this month, loading another
+// four weeks each time you scroll near the bottom. Earlier months are in the Archive.
 const CHUNK_DAYS = 28
+const monthStart = (isoDate) => `${isoDate.slice(0, 7)}-01`
+const monthEnd = (ym) => addDays(monthStart(addDays(`${ym}-28`, 7)), -1)
+const FIRST_MONTH = '2026-08' // earliest month on the schedule
+function pastMonths() {
+  const out = []
+  for (let m = monthStart(addDays(monthStart(todayIso()), -1)); m.slice(0, 7) >= FIRST_MONTH; m = monthStart(addDays(m, -1))) out.push(m.slice(0, 7))
+  return out
+}
+const fmtMonth = (ym) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })
 
 const DAY_FMT = { weekday: 'short', day: 'numeric', month: 'short' }
 const fmtDay = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', DAY_FMT)
@@ -42,13 +53,21 @@ function orderTanks(tanks) {
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, undefined, { numeric: true }))
 }
 
-function CellEditor({ cell, column, entries, onClose, onChanged }) {
+function CellEditor({ cell, column, entries, beer, brightTanks, allEntries, fvLitres, onClose, onChanged }) {
   const [rows, setRows] = useState(entries.map((e) => ({ ...e })))
   const [newText, setNewText] = useState('')
   const [booking, setBooking] = useState(null)
   const [moveTo, setMoveTo] = useState('')
   const [error, setError] = useState(null)
   const bookingId = entries.find((e) => e.booking_id)?.booking_id
+
+  // A Filter in an FV: offer to move the beer into a free bright tank (unless it's already there).
+  const filterEntry = column.group === 'fv' ? entries.find((e) => /^filter\b/i.test(e.text.trim()) && !/\?$/.test(e.text)) : null
+  const btEnd = addDays(cell.date, 1)
+  const alreadyInBt = filterEntry && beer && allEntries.some((e) => brightTanks.some((t) => t.id === e.tank_id) && e.entry_date === cell.date && e.text === beer)
+  const suggestedBt = filterEntry && beer && !alreadyInBt ? suggestBrightTank(brightTanks, allEntries, cell.date, btEnd, fvLitres) : null
+  const [btId, setBtId] = useState('')
+  const chosenBt = btId ? brightTanks.find((t) => t.id === btId) : suggestedBt
 
   useEffect(() => {
     if (bookingId) getBooking(bookingId).then((b) => { setBooking(b); setMoveTo(b.brew_date) }).catch(() => {})
@@ -111,6 +130,27 @@ function CellEditor({ cell, column, entries, onClose, onChanged }) {
           <button className="secondary" onClick={onClose}>Cancel</button>
         </div>
 
+        {filterEntry && beer && !alreadyInBt && (
+          <div className="sc-booking" style={{ background: '#e3edfa', borderLeftColor: '#1d4f91' }}>
+            <strong>Move {beer} to a bright tank</strong>
+            <div style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>
+              Adds {beer} to the BT on {fmtDay(cell.date)} {cell.slot}, then Carb and Can &amp; Keg.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
+              <select value={btId} onChange={(e) => setBtId(e.target.value)}>
+                <option value="">{suggestedBt ? `${tankLabel(suggestedBt.name)} (suggested, free)` : 'No free BT found, pick one'}</option>
+                {brightTanks.map((t) => <option key={t.id} value={t.id}>{tankLabel(t.name)}{t.capacity_l != null ? ` (${Number(t.capacity_l).toLocaleString()} L)` : ''}</option>)}
+              </select>
+              <button
+                disabled={!chosenBt}
+                onClick={() => run(() => moveToBrightTank({ bt: chosenBt, beerName: beer, filterDate: cell.date, filterSlot: cell.slot, bookingId: filterEntry.booking_id ?? null }))}
+              >
+                Move to {chosenBt ? tankLabel(chosenBt.name) : 'BT'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {booking && (
           <div className="sc-booking">
             <strong>Booked brew: {booking.beer_name}</strong>
@@ -142,9 +182,10 @@ function CellEditor({ cell, column, entries, onClose, onChanged }) {
 }
 
 export default function SchedulePage() {
-  const [range, setRange] = useState(() => ({ from: mondayOf(addDays(todayIso(), -7)), to: addDays(todayIso(), CHUNK_DAYS * 2) }))
+  const liveRange = () => ({ from: monthStart(todayIso()), to: addDays(todayIso(), CHUNK_DAYS * 2) })
+  const [range, setRange] = useState(liveRange)
+  const [archive, setArchive] = useState('') // 'YYYY-MM' when viewing a past month
   const scrollRef = useRef(null)
-  const prependFrom = useRef(null) // scroll height before loading earlier days, to keep the view still
   const scrolledToToday = useRef(false)
   const [tanks, setTanks] = useState([])
   const [recipes, setRecipes] = useState([])
@@ -177,6 +218,7 @@ export default function SchedulePage() {
 
   // Endless scroll: near the bottom, add the next four weeks.
   function onScroll(e) {
+    if (archive) return
     const el = e.currentTarget
     if (el.scrollTop + el.clientHeight > el.scrollHeight - 600) {
       setRange((r) => (r.loadingMore ? r : { ...r, to: addDays(r.to, CHUNK_DAYS), loadingMore: true }))
@@ -185,17 +227,13 @@ export default function SchedulePage() {
   useEffect(() => {
     if (range.loadingMore) setRange((r) => ({ ...r, loadingMore: false }))
   }, [entries])
-  function loadEarlier() {
-    prependFrom.current = scrollRef.current?.scrollHeight ?? null
-    setRange((r) => ({ ...r, from: addDays(r.from, -CHUNK_DAYS) }))
+  function openArchive(ym) {
+    setArchive(ym)
+    setRange(ym ? { from: `${ym}-01`, to: monthEnd(ym) } : liveRange())
+    scrolledToToday.current = !!ym
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+    if (!ym) requestAnimationFrame(() => requestAnimationFrame(scrollToToday))
   }
-  // Keep the same rows on screen after adding days above them.
-  useLayoutEffect(() => {
-    if (prependFrom.current != null && scrollRef.current) {
-      scrollRef.current.scrollTop += scrollRef.current.scrollHeight - prependFrom.current
-      prependFrom.current = null
-    }
-  }, [range.from])
   function scrollToToday() {
     scrollRef.current?.querySelector('.sc-today')?.scrollIntoView({ block: 'start' })
     // The sticky header covers the top row; nudge back down by its height.
@@ -262,7 +300,12 @@ export default function SchedulePage() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.75rem 0' }}>
-        <button className="secondary" onClick={scrollToToday}>Today</button>
+        {!archive && <button className="secondary" onClick={scrollToToday}>Today</button>}
+        <select value={archive} onChange={(e) => openArchive(e.target.value)} aria-label="Archive">
+          <option value="">{archive ? '← Back to the schedule' : 'Archive…'}</option>
+          {pastMonths().map((ym) => <option key={ym} value={ym}>{fmtMonth(ym)}</option>)}
+        </select>
+        {archive && <strong>Archive: {fmtMonth(archive)} (view only)</strong>}
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
@@ -285,11 +328,6 @@ export default function SchedulePage() {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={columns.length + 1} className="sc-more">
-                <button className="secondary" onClick={loadEarlier}>↑ Load earlier</button>
-              </td>
-            </tr>
             {days.map((d) =>
               ['AM', 'PM'].map((slot) => (
                 <tr
@@ -308,7 +346,7 @@ export default function SchedulePage() {
                         className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '')}
                         style={beer ? { background: beerColour(beer) } : undefined}
                         title={beer ?? undefined}
-                        onClick={editor ? () => setEditing({ cell: { date: d, slot }, column: c, list }) : undefined}
+                        onClick={editor && !archive ? () => setEditing({ cell: { date: d, slot }, column: c, list, beer }) : undefined}
                       >
                         {list.map((e) => (
                           <div key={e.id} className={e.done ? 'sc-done' : ''}>{e.text}</div>
@@ -325,6 +363,11 @@ export default function SchedulePage() {
 
       {editing && (
         <CellEditor
+          beer={editing.beer}
+          brightTanks={tanks.filter((t) => t.tank_type === 'BBT')}
+          allEntries={entries}
+          // Sheet-imported brews don't record their size, so assume the FV was full.
+          fvLitres={Number(tanks.find((t) => t.id === editing.column.tankId)?.capacity_l) || null}
           key={editing.cell.date + editing.cell.slot + editing.column.key}
           cell={editing.cell}
           column={editing.column}
@@ -336,6 +379,7 @@ export default function SchedulePage() {
       {booking && (
         <BookBrewDialog
           tanks={tanks.filter((t) => t.tank_type !== 'BBT')}
+          brightTanks={tanks.filter((t) => t.tank_type === 'BBT')}
           recipes={recipes}
           templates={templates}
           onClose={() => setBooking(false)}

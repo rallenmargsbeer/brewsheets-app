@@ -142,7 +142,66 @@ export async function getBooking(id) {
 
 // Books a brew: the booking itself, its brewhouse turns (Brew 1 / Brew 2, AM then PM),
 // and the tank's cellar tasks from the template, dated from the brew day (day 1).
-export async function createBooking({ brewDate, beerName, recipeId, template, tank, turnVolumeL, turnQuantity, notes }) {
+// ---- Bright tanks ----
+
+const slotOrder = (a, b) => Number(a.day) - Number(b.day) || (a.slot === b.slot ? 0 : a.slot === 'AM' ? -1 : 1)
+const isFilter = (task) => /^filter\b/i.test(task.trim())
+
+// Splits a template's steps at Filter: up to and including Filter happen in the FV, the
+// rest (Carb, Can & Keg) in the bright tank. Templates with nothing after Filter get the
+// usual Carb (filter afternoon) and Can & Keg (next morning).
+export function splitAtFilter(steps) {
+  const ordered = [...steps].sort(slotOrder)
+  const fi = ordered.findIndex((s) => isFilter(s.task))
+  if (fi === -1) return { fvSteps: ordered, filterStep: null, btSteps: [] }
+  const filterStep = ordered[fi]
+  let btSteps = ordered.slice(fi + 1)
+  if (btSteps.length === 0) {
+    btSteps = [
+      ...(filterStep.slot === 'AM' ? [{ day: filterStep.day, slot: 'PM', task: 'Carb' }] : []),
+      { day: filterStep.day + 1, slot: 'AM', task: 'Can & Keg' },
+    ]
+  }
+  return { fvSteps: ordered.slice(0, fi + 1), filterStep, btSteps }
+}
+
+// Default bright-tank jobs when a beer is moved over on its filter day.
+export function defaultBtJobs(filterDate, filterSlot) {
+  return [
+    ...(filterSlot === 'AM' ? [{ date: filterDate, slot: 'PM', task: 'Carb' }] : []),
+    { date: addDays(filterDate, 1), slot: 'AM', task: 'Can & Keg' },
+  ]
+}
+
+// Suggests a bright tank that's empty from `fromDate` to `toDate` (no schedule jobs in it
+// then) and big enough for `litres`. Smallest that fits wins, so big BTs stay free.
+export function suggestBrightTank(brightTanks, entries, fromDate, toDate, litres) {
+  const busy = new Set(entries.filter((e) => e.lane === 'tank' && e.entry_date >= fromDate && e.entry_date <= toDate).map((e) => e.tank_id))
+  return (
+    brightTanks
+      .filter((t) => !busy.has(t.id) && (t.capacity_l == null || !litres || Number(t.capacity_l) >= litres))
+      .sort((a, b) => (Number(a.capacity_l) || 0) - (Number(b.capacity_l) || 0) || a.name.localeCompare(b.name, undefined, { numeric: true }))[0] ?? null
+  )
+}
+
+// Puts a beer into a bright tank on its filter day: its name (arrival) then the BT jobs.
+export async function moveToBrightTank({ bt, beerName, filterDate, filterSlot, bookingId = null, jobs }) {
+  const rows = [
+    { entry_date: filterDate, slot: filterSlot, lane: 'tank', tank_id: bt.id, text: beerName, booking_id: bookingId },
+    ...(jobs ?? defaultBtJobs(filterDate, filterSlot)).map((j) => ({
+      entry_date: j.date,
+      slot: j.slot,
+      lane: 'tank',
+      tank_id: bt.id,
+      text: j.task,
+      booking_id: bookingId,
+    })),
+  ]
+  const { error } = await supabase.from('schedule_entries').insert(rows)
+  if (error) throw error
+}
+
+export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, turnQuantity, notes }) {
   const { data: booking, error } = await supabase
     .from('brew_bookings')
     .insert({
@@ -172,7 +231,8 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
       booking_id: booking.id,
     })
   }
-  for (const s of stepsForTank(template, tank)) {
+  const { fvSteps, filterStep, btSteps } = splitAtFilter(stepsForTank(template, tank))
+  for (const s of brightTank ? fvSteps : stepsForTank(template, tank)) {
     entries.push({
       entry_date: addDays(brewDate, s.day - 1),
       slot: s.slot,
@@ -182,6 +242,14 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
       text: s.task === template.name ? beerName : s.task,
       booking_id: booking.id,
     })
+  }
+  // Filter day: the beer moves to the bright tank, where the rest of its jobs happen.
+  if (brightTank && filterStep) {
+    const filterDate = addDays(brewDate, filterStep.day - 1)
+    entries.push({ entry_date: filterDate, slot: filterStep.slot, lane: 'tank', tank_id: brightTank.id, text: beerName, booking_id: booking.id })
+    for (const s of btSteps) {
+      entries.push({ entry_date: addDays(brewDate, s.day - 1), slot: s.slot, lane: 'tank', tank_id: brightTank.id, text: s.task, booking_id: booking.id })
+    }
   }
   if (entries.length) {
     const { error: e2 } = await supabase.from('schedule_entries').insert(entries)
