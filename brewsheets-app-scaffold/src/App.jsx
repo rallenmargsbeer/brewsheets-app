@@ -7,6 +7,8 @@ import AddBrewPage from './pages/AddBrewPage.jsx'
 import BatchDetailPage from './pages/BatchDetailPage.jsx'
 import TanksPage from './pages/TanksPage.jsx'
 import CellarPage from './pages/CellarPage.jsx'
+import SchedulePage from './pages/SchedulePage.jsx'
+import CellarTemplatesPage from './pages/CellarTemplatesPage.jsx'
 import PackagingPage from './pages/PackagingPage.jsx'
 import PackagingBatchPage from './pages/PackagingBatchPage.jsx'
 import IngredientsPage from './pages/IngredientsPage.jsx'
@@ -19,7 +21,10 @@ const navClass = ({ isActive }) => 'nav-link' + (isActive ? ' active' : '')
 
 export default function App() {
   // Adding a brew (/batches/new) belongs to the Brew Day tab, not Batches
-  const addingBrew = useLocation().pathname === '/batches/new'
+  const { pathname } = useLocation()
+  const addingBrew = pathname === '/batches/new'
+  // The schedule grid is wide (every tank is a column), so it gets the full screen width.
+  const wide = pathname === '/schedule'
   return (
     <AuthProvider>
     <div>
@@ -28,6 +33,9 @@ export default function App() {
         <nav className="app-nav">
           <NavLink to="/recipes" className={navClass}>
             Recipes
+          </NavLink>
+          <NavLink to="/schedule" className={navClass}>
+            Schedule
           </NavLink>
           <NavLink to="/brew-day" className={(p) => navClass({ isActive: p.isActive || addingBrew })}>
             Brew Day
@@ -52,7 +60,7 @@ export default function App() {
           </NavLink>
         </nav>
       </header>
-      <main style={{ padding: '1.5rem', maxWidth: 1100, margin: '0 auto' }}>
+      <main style={{ padding: '1.5rem', maxWidth: wide ? 'none' : 1100, margin: '0 auto' }}>
         <Routes>
           <Route path="/" element={<Navigate to="/brew-day" replace />} />
           <Route path="/recipes" element={<RecipesPage />} />
@@ -62,6 +70,8 @@ export default function App() {
           <Route path="/batches" element={<BatchesPage />} />
           <Route path="/batches/new" element={<AddBrewPage />} />
           <Route path="/batches/:id" element={<BatchDetailPage />} />
+          <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/schedule/templates" element={<CellarTemplatesPage />} />
           <Route path="/cellar" element={<CellarPage />} />
           <Route path="/packaging" element={<PackagingPage />} />
           <Route path="/packaging/:id" element={<PackagingBatchPage />} />
