@@ -104,6 +104,11 @@ export const slotKey = (date, slot) => `${date}|${slot === 'AM' ? 0 : 1}`
 
 // The beer sitting in a tank at a given half-day, if any.
 export function beerInTank(runs, tankId, date, slot) {
+  return stayAt(runs, tankId, date, slot)?.beer ?? null
+}
+
+// The whole stay ({ beer, start, end }) covering a tank's half-day, if any.
+export function stayAt(runs, tankId, date, slot) {
   const k = slotKey(date, slot)
-  return (runs.get(tankId) ?? []).find((r) => r.start <= k && k <= r.end)?.beer ?? null
+  return (runs.get(tankId) ?? []).find((r) => r.start <= k && k <= r.end) ?? null
 }

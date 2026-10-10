@@ -22,7 +22,7 @@ import {
   moveToBrightTank,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
-import { assignBeers, beerColour, beerInTank } from '../lib/beerColours'
+import { assignBeers, beerColour, beerInTank, stayAt, slotKey } from '../lib/beerColours'
 
 // How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
 const LOOKBACK_DAYS = 42
@@ -340,11 +340,22 @@ export default function SchedulePage() {
                   {columns.map((c) => {
                     const list = byCell.get(`${d}|${slot}|${c.key}`) ?? []
                     const beer = cellBeer(c, list, d, slot)
+                    // Black outline round each tank stay as a block: sides always, top on its
+                    // first half-day, bottom on its last; inner cell lines take the beer colour.
+                    const stay = c.lane === 'tank' ? stayAt(runs, c.tankId, d, slot) : null
+                    const k = slotKey(d, slot)
+                    const edges = stay
+                      ? ['inset 2px 0 0 #1a1a1a', 'inset -2px 0 0 #1a1a1a', ...(stay.start === k ? ['inset 0 2px 0 #1a1a1a'] : []), ...(stay.end === k ? ['inset 0 -2px 0 #1a1a1a'] : [])].join(', ')
+                      : null
                     return (
                       <td
                         key={c.key}
                         className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '')}
-                        style={beer ? { background: beerColour(beer) } : undefined}
+                        style={
+                          beer
+                            ? { background: beerColour(beer), ...(edges ? { boxShadow: edges, borderBottomColor: stay.end === k ? undefined : beerColour(beer) } : {}) }
+                            : undefined
+                        }
                         title={beer ?? undefined}
                         onClick={editor && !archive ? () => setEditing({ cell: { date: d, slot }, column: c, list, beer }) : undefined}
                       >
