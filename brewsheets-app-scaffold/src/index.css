@@ -362,11 +362,10 @@ tbody tr:hover td {
 .sc-h-brew { background: #fde3d3 !important; color: #9a3a0c !important; }
 .sc-h-bbt { background: #d9e7fa !important; color: #1d4f91 !important; }
 .sc-h-pack { background: #d4efe2 !important; color: #11603f !important; }
-.sc-brew { background: #fde3d3; font-weight: 700; color: #9a3a0c; }
-.sc-hop { background: #e7f4ec; color: #11603f; font-weight: 600; }
-.sc-pack { background: #e3edfa; color: #1d4f91; }
-.sc-temp { background: #f1eefb; color: #4b3a8f; }
 .sc-done { text-decoration: line-through; opacity: 0.55; }
+.sc-brewday { font-weight: 700; }
+.sc-legend { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; }
+.sc-chip { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 999px; border: 1px solid rgba(0, 0, 0, 0.08); }
 .sc-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex; justify-content: center; align-items: flex-start; padding: 2rem 16px; overflow-y: auto; z-index: 1000; }
 .sc-dialog { background: var(--surface); border-radius: 8px; padding: 1rem; width: 100%; max-width: 460px; }
 .sc-form { display: grid; gap: 0.6rem; margin-top: 0.75rem; }
