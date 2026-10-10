@@ -112,3 +112,26 @@ export function stayAt(runs, tankId, date, slot) {
   const k = slotKey(date, slot)
   return (runs.get(tankId) ?? []).find((r) => r.start <= k && k <= r.end) ?? null
 }
+
+// Which beer a canning / kegging cell is for (they only hold counts):
+// 1. a beer set on the cell, 2. the beer with a Can & Keg job that day (same half-day first),
+// 3. the beer sitting in a bright tank then, 4. the beer filtered in the last few days.
+export function packBeer(cellEntries, date, slot, { entries, beerOf, runs, brightTankIds }) {
+  const set = cellEntries.find((e) => e.beer_name)?.beer_name
+  if (set) return set
+  const packJobs = entries.filter((e) => e.lane === 'tank' && e.entry_date === date && /can|keg|packag/i.test(e.text) && beerOf.get(e.id))
+  const job = packJobs.find((e) => e.slot === slot) ?? packJobs[0]
+  if (job) return beerOf.get(job.id)
+  const k = slotKey(date, slot)
+  for (const id of brightTankIds) {
+    const stay = (runs.get(id) ?? []).find((r) => r.start <= k && k <= r.end)
+    if (stay) return stay.beer
+  }
+  // Most recently filtered beer, filtered on this day or up to 3 days before.
+  const earliest = slotKey(new Date(Date.parse(date) - 3 * 86400000).toISOString().slice(0, 10), 'AM')
+  let best = null
+  for (const list of runs.values()) {
+    for (const r of list) if (!r.open && r.end <= k && r.end >= earliest && (!best || r.end > best.end)) best = r
+  }
+  return best?.beer ?? null
+}
