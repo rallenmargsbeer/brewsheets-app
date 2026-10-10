@@ -43,14 +43,23 @@ export async function isScheduleEditor() {
 
 // ---- Entries ----
 
+// Supabase returns at most 1000 rows per request, so long date ranges are fetched in pages.
 export async function listScheduleEntries(fromIso, toIso) {
-  const { data, error } = await supabase
-    .from('schedule_entries')
-    .select('*')
-    .gte('entry_date', fromIso)
-    .lte('entry_date', toIso)
-  if (error) throw error
-  return data
+  const PAGE = 1000
+  const all = []
+  for (let start = 0; ; start += PAGE) {
+    const { data, error } = await supabase
+      .from('schedule_entries')
+      .select('*')
+      .gte('entry_date', fromIso)
+      .lte('entry_date', toIso)
+      .order('entry_date')
+      .order('id')
+      .range(start, start + PAGE - 1)
+    if (error) throw error
+    all.push(...data)
+    if (data.length < PAGE) return all
+  }
 }
 
 export async function saveScheduleEntry(entry) {

@@ -54,33 +54,54 @@ export function assignBeers(entries, { knownBeers = [], bookingBeer = {} } = {})
     else if (e.lane === 'brew_1' || e.lane === 'brew_2') beerOf.set(e.id, names.get(beerKey(e.text)))
   }
 
+  // Each tank's stays: { beer, start, end } as slot keys ("2026-10-12|0" = AM, "|1" = PM),
+  // used to shade every cell of the stay, empty ones included.
+  const runs = new Map() // tank_id -> [{ beer, start, end }]
   const byTank = new Map()
   for (const e of entries) if (e.lane === 'tank') byTank.set(e.tank_id, [...(byTank.get(e.tank_id) ?? []), e])
-  for (const list of byTank.values()) {
+  for (const [tankId, list] of byTank) {
     list.sort(order)
+    const tankRuns = []
     let current = null
     list.forEach((e, i) => {
-      if (beerOf.has(e.id)) {
-        current = beerOf.get(e.id)
-        return
-      }
-      const named = names.get(beerKey(e.text))
-      if (named) current = named
-      else if (e.text.trim().toLowerCase() === 'brew') {
-        // "Brew" (AM) then the beer's name (PM): the run starts here.
-        // A one-off beer won't be a known name, so the same-day PM cell after "Brew" counts too.
-        const next = list[i + 1]
-        const samePm = next && next.entry_date === e.entry_date && e.slot === 'AM' && next.slot === 'PM'
-        const nextNamed = next && (beerOf.get(next.id) ?? names.get(beerKey(next.text)) ?? (samePm ? next.text.trim() : null))
-        if (nextNamed) {
-          current = nextNamed
-          if (samePm && !names.has(beerKey(next.text))) names.set(beerKey(next.text), next.text.trim())
+      if (beerOf.has(e.id)) current = beerOf.get(e.id)
+      else {
+        const named = names.get(beerKey(e.text))
+        if (named) current = named
+        else if (e.text.trim().toLowerCase() === 'brew') {
+          // "Brew" (AM) then the beer's name (PM): the run starts here.
+          // A one-off beer won't be a known name, so the same-day PM cell after "Brew" counts too.
+          const next = list[i + 1]
+          const samePm = next && next.entry_date === e.entry_date && e.slot === 'AM' && next.slot === 'PM'
+          const nextNamed = next && (beerOf.get(next.id) ?? names.get(beerKey(next.text)) ?? (samePm ? next.text.trim() : null))
+          if (nextNamed) {
+            current = nextNamed
+            if (samePm && !names.has(beerKey(next.text))) names.set(beerKey(next.text), next.text.trim())
+          }
         }
+        if (current) beerOf.set(e.id, current)
       }
-      if (current) beerOf.set(e.id, current)
+      if (current) {
+        const k = slotKey(e.entry_date, e.slot)
+        const last = tankRuns[tankRuns.length - 1]
+        if (last && last.beer === current && last.open) last.end = k
+        else tankRuns.push({ beer: current, start: k, end: k, open: true })
+      }
       // Filtering moves the beer out to a BT, so the FV's run ends after that cell.
-      if (/filter/i.test(e.text) && !/\?$/.test(e.text.trim())) current = null
+      if (/filter/i.test(e.text) && !/\?$/.test(e.text.trim())) {
+        current = null
+        if (tankRuns.length) tankRuns[tankRuns.length - 1].open = false
+      }
     })
+    runs.set(tankId, tankRuns)
   }
-  return beerOf
+  return { beerOf, runs }
+}
+
+export const slotKey = (date, slot) => `${date}|${slot === 'AM' ? 0 : 1}`
+
+// The beer sitting in a tank at a given half-day, if any.
+export function beerInTank(runs, tankId, date, slot) {
+  const k = slotKey(date, slot)
+  return (runs.get(tankId) ?? []).find((r) => r.start <= k && k <= r.end)?.beer ?? null
 }

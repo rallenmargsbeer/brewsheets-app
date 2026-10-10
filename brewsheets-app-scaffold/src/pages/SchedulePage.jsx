@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listTanks, listRecipes } from '../lib/api'
 import { tankLabel } from '../lib/tanks'
@@ -20,10 +20,13 @@ import {
   cancelBooking,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
-import { assignBeers, beerColour } from '../lib/beerColours'
+import { assignBeers, beerColour, beerInTank } from '../lib/beerColours'
 
 // How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
 const LOOKBACK_DAYS = 42
+// The schedule is one continuous list of days: it opens a week before today and loads
+// another four weeks each time you scroll near the bottom (or tap Load earlier at the top).
+const CHUNK_DAYS = 28
 
 const DAY_FMT = { weekday: 'short', day: 'numeric', month: 'short' }
 const fmtDay = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', DAY_FMT)
@@ -139,7 +142,10 @@ function CellEditor({ cell, column, entries, onClose, onChanged }) {
 }
 
 export default function SchedulePage() {
-  const [weekStart, setWeekStart] = useState(() => mondayOf(todayIso()))
+  const [range, setRange] = useState(() => ({ from: mondayOf(addDays(todayIso(), -7)), to: addDays(todayIso(), CHUNK_DAYS * 2) }))
+  const scrollRef = useRef(null)
+  const prependFrom = useRef(null) // scroll height before loading earlier days, to keep the view still
+  const scrolledToToday = useRef(false)
   const [tanks, setTanks] = useState([])
   const [recipes, setRecipes] = useState([])
   const [templates, setTemplates] = useState([])
@@ -160,15 +166,47 @@ export default function SchedulePage() {
     listRecipes().then(setRecipes).catch(() => {})
   }, [editor])
 
-  const weekEnd = addDays(weekStart, 6)
   function refresh() {
-    const from = addDays(weekStart, -LOOKBACK_DAYS)
-    listScheduleEntries(from, weekEnd).then(setEntries).catch((e) => setError(e.message))
-    listBookings({ fromIso: from, toIso: weekEnd })
+    const from = addDays(range.from, -LOOKBACK_DAYS)
+    listScheduleEntries(from, range.to).then(setEntries).catch((e) => setError(e.message))
+    listBookings({ fromIso: from, toIso: range.to })
       .then((b) => setBookingBeer(Object.fromEntries(b.map((x) => [x.id, x.beer_name]))))
       .catch(() => {})
   }
-  useEffect(refresh, [weekStart])
+  useEffect(refresh, [range.from, range.to])
+
+  // Endless scroll: near the bottom, add the next four weeks.
+  function onScroll(e) {
+    const el = e.currentTarget
+    if (el.scrollTop + el.clientHeight > el.scrollHeight - 600) {
+      setRange((r) => (r.loadingMore ? r : { ...r, to: addDays(r.to, CHUNK_DAYS), loadingMore: true }))
+    }
+  }
+  useEffect(() => {
+    if (range.loadingMore) setRange((r) => ({ ...r, loadingMore: false }))
+  }, [entries])
+  function loadEarlier() {
+    prependFrom.current = scrollRef.current?.scrollHeight ?? null
+    setRange((r) => ({ ...r, from: addDays(r.from, -CHUNK_DAYS) }))
+  }
+  // Keep the same rows on screen after adding days above them.
+  useLayoutEffect(() => {
+    if (prependFrom.current != null && scrollRef.current) {
+      scrollRef.current.scrollTop += scrollRef.current.scrollHeight - prependFrom.current
+      prependFrom.current = null
+    }
+  }, [range.from])
+  function scrollToToday() {
+    scrollRef.current?.querySelector('.sc-today')?.scrollIntoView({ block: 'start' })
+    // The sticky header covers the top row; nudge back down by its height.
+    if (scrollRef.current) scrollRef.current.scrollTop -= 34
+  }
+  useEffect(() => {
+    if (!scrolledToToday.current && tanks.length) {
+      scrolledToToday.current = true
+      requestAnimationFrame(scrollToToday)
+    }
+  }, [tanks])
 
   const columns = useMemo(
     () => [
@@ -180,7 +218,7 @@ export default function SchedulePage() {
     [tanks]
   )
 
-  const beerOf = useMemo(
+  const { beerOf, runs } = useMemo(
     () => assignBeers(entries, { knownBeers: templates.map((t) => t.name), bookingBeer }),
     [entries, templates, bookingBeer]
   )
@@ -194,10 +232,18 @@ export default function SchedulePage() {
     return m
   }, [entries])
 
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
-  // Beers with a cell in the week on screen, for the colour key.
-  const weekBeers = [...new Set(entries.filter((e) => e.entry_date >= weekStart && beerOf.get(e.id)).map((e) => beerOf.get(e.id)))].sort()
+  const dayCount = Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86400000) + 1
+  const days = Array.from({ length: dayCount }, (_, i) => addDays(range.from, i))
+  // Beers on the loaded schedule, for the colour key.
+  const weekBeers = [...new Set(entries.filter((e) => e.entry_date >= range.from && beerOf.get(e.id)).map((e) => beerOf.get(e.id)))].sort()
   const today = todayIso()
+
+  // A cell's beer: its own job's beer, or for a tank, whatever is sitting in the tank then.
+  function cellBeer(c, list, d, slot) {
+    if (list[0] && beerOf.get(list[0].id)) return beerOf.get(list[0].id)
+    if (c.lane === 'tank') return beerInTank(runs, c.tankId, d, slot)
+    return null
+  }
 
   return (
     <div>
@@ -216,10 +262,7 @@ export default function SchedulePage() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.75rem 0' }}>
-        <button className="secondary" onClick={() => setWeekStart(addDays(weekStart, -7))} aria-label="Previous week">‹</button>
-        <button className="secondary" onClick={() => setWeekStart(mondayOf(todayIso()))}>This week</button>
-        <button className="secondary" onClick={() => setWeekStart(addDays(weekStart, 7))} aria-label="Next week">›</button>
-        <strong style={{ marginLeft: '0.5rem' }}>{fmtDay(weekStart)} – {fmtDay(weekEnd)}</strong>
+        <button className="secondary" onClick={scrollToToday}>Today</button>
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
@@ -231,7 +274,7 @@ export default function SchedulePage() {
         </div>
       )}
 
-      <div className="sc-scroll">
+      <div className="sc-scroll" ref={scrollRef} onScroll={onScroll}>
         <table className="sc-grid">
           <thead>
             <tr>
@@ -242,20 +285,29 @@ export default function SchedulePage() {
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td colSpan={columns.length + 1} className="sc-more">
+                <button className="secondary" onClick={loadEarlier}>↑ Load earlier</button>
+              </td>
+            </tr>
             {days.map((d) =>
               ['AM', 'PM'].map((slot) => (
-                <tr key={d + slot} className={(d === today ? 'sc-today ' : '') + (slot === 'PM' ? 'sc-pm' : '')}>
+                <tr
+                  key={d + slot}
+                  className={(d === today && slot === 'AM' ? 'sc-today ' : '') + (d === today ? 'sc-todayrow ' : '') + (slot === 'PM' ? 'sc-pm ' : '') + (new Date(`${d}T00:00:00`).getDay() === 0 && slot === 'PM' ? 'sc-weekend' : '')}
+                >
                   <td className="sc-day">
                     {slot === 'AM' ? <strong>{fmtDay(d)}</strong> : null} <span className="sc-slot">{slot}</span>
                   </td>
                   {columns.map((c) => {
                     const list = byCell.get(`${d}|${slot}|${c.key}`) ?? []
+                    const beer = cellBeer(c, list, d, slot)
                     return (
                       <td
                         key={c.key}
                         className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '')}
-                        style={list[0] && beerOf.get(list[0].id) ? { background: beerColour(beerOf.get(list[0].id)) } : undefined}
-                        title={list[0] && beerOf.get(list[0].id) ? beerOf.get(list[0].id) : undefined}
+                        style={beer ? { background: beerColour(beer) } : undefined}
+                        title={beer ?? undefined}
                         onClick={editor ? () => setEditing({ cell: { date: d, slot }, column: c, list }) : undefined}
                       >
                         {list.map((e) => (
@@ -289,7 +341,8 @@ export default function SchedulePage() {
           onClose={() => setBooking(false)}
           onBooked={(b) => {
             setBooking(false)
-            setWeekStart(mondayOf(b.brew_date))
+            // Make sure the whole booked brew is loaded, then show it.
+            setRange((r) => ({ from: b.brew_date < r.from ? mondayOf(b.brew_date) : r.from, to: addDays(b.brew_date, 35) > r.to ? addDays(b.brew_date, 35) : r.to }))
             refresh()
           }}
         />
