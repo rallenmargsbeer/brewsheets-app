@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { CUBES_PER_PALLET } from './packaging'
 
 // ---- Dates (local yyyy-mm-dd, no time zones) ----
 
@@ -203,9 +204,10 @@ export async function moveToBrightTank({ bt, beerName, filterDate, filterSlot, b
 
 // Text for the Canning / Kegging cells from a packaging plan.
 export function packTexts(pack) {
-  const cubes = Number(pack?.cubes) || 0
+  const pallets = Number(pack?.pallets) || 0
+  const cubes = pallets * CUBES_PER_PALLET
   const kegs = [50, 30, 20].filter((l) => Number(pack?.[`kegs_${l}`]) > 0).map((l) => `${pack[`kegs_${l}`]} x ${l}L`)
-  return { canning: cubes ? `${cubes} cubes` : null, kegging: kegs.length ? kegs.join(', ') : null }
+  return { canning: pallets ? `${pallets} pallet${pallets === 1 ? '' : 's'} (${cubes} cubes)` : null, kegging: kegs.length ? kegs.join(', ') : null }
 }
 
 // When packaging happens: the Can & Keg job in the bright tank, else the morning after Filter.
@@ -228,7 +230,7 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
       turn_volume_l: turnVolumeL || null,
       turn_quantity: turnQuantity || null,
       notes: notes || null,
-      pack_cubes: Number(pack?.cubes) || null,
+      pack_cubes: (Number(pack?.pallets) || 0) * CUBES_PER_PALLET || null,
       pack_kegs_50: Number(pack?.kegs_50) || null,
       pack_kegs_30: Number(pack?.kegs_30) || null,
       pack_kegs_20: Number(pack?.kegs_20) || null,

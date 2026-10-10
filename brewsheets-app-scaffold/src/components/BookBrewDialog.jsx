@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
 import { addDays, todayIso, stepsForTank, splitAtFilter, suggestBrightTank, listScheduleEntries, createBooking, packDay, packTexts } from '../lib/schedule'
-import { LITRES_PER_CUBE, CANS_PER_CUBE } from '../lib/packaging'
+import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 
 const TURN_SIZES = [1000, 1500, 2500]
 const fmt = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -16,7 +16,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const [turnVolume, setTurnVolume] = useState(2500)
   const [turns, setTurns] = useState(4)
   const [notes, setNotes] = useState('')
-  const [pack, setPack] = useState({ cubes: '', kegs_50: '', kegs_30: '', kegs_20: '' })
+  const [pack, setPack] = useState({ pallets: '', kegs_50: '', kegs_30: '', kegs_20: '' })
   const [clashes, setClashes] = useState([])
   const [windowEntries, setWindowEntries] = useState([])
   const [btChoice, setBtChoice] = useState('auto') // 'auto' = use the suggestion, '' = none, or a tank id
@@ -86,7 +86,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
 
   const tooBig = tank?.capacity_l != null && turnVolume * turns > Number(tank.capacity_l)
   const ready = beerName.trim() && brewDate && tank && template && !tooBig
-  const packLitres = Math.round((Number(pack.cubes) || 0) * LITRES_PER_CUBE + [50, 30, 20].reduce((t, l) => t + (Number(pack[`kegs_${l}`]) || 0) * l, 0))
+  const packLitres = Math.round((Number(pack.pallets) || 0) * LITRES_PER_PALLET + [50, 30, 20].reduce((t, l) => t + (Number(pack[`kegs_${l}`]) || 0) * l, 0))
   const overPacked = packLitres > turnVolume * turns
   const packWhen = filterStep ? packDay(brewDate, filterStep, btSteps) : null
 
@@ -161,7 +161,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
           <div>
             <div>Packaging plan</div>
             <div className="sc-pack-grid">
-              <label>Cubes ({CANS_PER_CUBE} × 375 mL)<input type="number" inputMode="numeric" min="0" value={pack.cubes} onChange={(e) => setPack({ ...pack, cubes: e.target.value })} /></label>
+              <label>Can pallets<input type="number" inputMode="numeric" min="0" step="1" value={pack.pallets} onChange={(e) => setPack({ ...pack, pallets: e.target.value.replace(/\D/g, '') })} /></label>
               {[50, 30, 20].map((l) => (
                 <label key={l}>{l} L kegs<input type="number" inputMode="numeric" min="0" value={pack[`kegs_${l}`]} onChange={(e) => setPack({ ...pack, [`kegs_${l}`]: e.target.value })} /></label>
               ))}
@@ -171,6 +171,12 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
               {overPacked ? ' (more than the batch)' : ''}
               {packWhen ? ` · ${fmt(packWhen.date)} ${packWhen.slot}` : ''}
             </div>
+            {Number(pack.pallets) > 0 && (
+              <div style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>
+                {pack.pallets} pallet{Number(pack.pallets) === 1 ? '' : 's'} = {(Number(pack.pallets) * CANS_PER_PALLET).toLocaleString()} cans = {Number(pack.pallets) * CUBES_PER_PALLET} cubes
+              </div>
+            )}
+            <div style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>Split depends on SKU and demand; enter what this batch needs.</div>
           </div>
           <label>Notes
             <input value={notes} onChange={(e) => setNotes(e.target.value)} />
