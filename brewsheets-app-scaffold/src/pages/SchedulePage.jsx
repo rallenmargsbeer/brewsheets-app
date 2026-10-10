@@ -15,23 +15,21 @@ import {
   deleteScheduleEntry,
   listCellarTemplates,
   getBooking,
+  listBookings,
   moveBooking,
   cancelBooking,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
+import { assignBeers, beerColour } from '../lib/beerColours'
+
+// How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
+const LOOKBACK_DAYS = 42
 
 const DAY_FMT = { weekday: 'short', day: 'numeric', month: 'short' }
 const fmtDay = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', DAY_FMT)
 
-// Colour a cell by what kind of job it is, so the week reads at a glance.
-function taskClass(text) {
-  const t = text.toLowerCase()
-  if (t === 'brew') return 'sc-brew'
-  if (t.includes('dry hop')) return 'sc-hop'
-  if (t.includes('filter') || t.includes('carb') || t.includes('can') || t.includes('keg')) return 'sc-pack'
-  if (t.includes('chill') || /\d+\s*°c/.test(t)) return 'sc-temp'
-  return ''
-}
+// Cell colour comes from the beer; brew days are also bold.
+const isBrew = (text) => text.trim().toLowerCase() === 'brew'
 
 // Fermenters (numbered) first, then other non-BBT vessels like YP, then bright tanks.
 function orderTanks(tanks) {
@@ -150,20 +148,25 @@ export default function SchedulePage() {
   const [editing, setEditing] = useState(null) // { cell, column }
   const [booking, setBooking] = useState(false)
   const [error, setError] = useState(null)
+  const [bookingBeer, setBookingBeer] = useState({})
 
   useEffect(() => {
+    listCellarTemplates().then(setTemplates).catch(() => {})
     listTanks().then((t) => setTanks(orderTanks(t))).catch((e) => setError(e.message))
     isScheduleEditor().then(setEditor)
   }, [])
   useEffect(() => {
     if (!editor) return
     listRecipes().then(setRecipes).catch(() => {})
-    listCellarTemplates().then(setTemplates).catch(() => {})
   }, [editor])
 
   const weekEnd = addDays(weekStart, 6)
   function refresh() {
-    listScheduleEntries(weekStart, weekEnd).then(setEntries).catch((e) => setError(e.message))
+    const from = addDays(weekStart, -LOOKBACK_DAYS)
+    listScheduleEntries(from, weekEnd).then(setEntries).catch((e) => setError(e.message))
+    listBookings({ fromIso: from, toIso: weekEnd })
+      .then((b) => setBookingBeer(Object.fromEntries(b.map((x) => [x.id, x.beer_name]))))
+      .catch(() => {})
   }
   useEffect(refresh, [weekStart])
 
@@ -177,6 +180,11 @@ export default function SchedulePage() {
     [tanks]
   )
 
+  const beerOf = useMemo(
+    () => assignBeers(entries, { knownBeers: templates.map((t) => t.name), bookingBeer }),
+    [entries, templates, bookingBeer]
+  )
+
   const byCell = useMemo(() => {
     const m = new Map()
     for (const e of entries) {
@@ -187,6 +195,8 @@ export default function SchedulePage() {
   }, [entries])
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  // Beers with a cell in the week on screen, for the colour key.
+  const weekBeers = [...new Set(entries.filter((e) => e.entry_date >= weekStart && beerOf.get(e.id)).map((e) => beerOf.get(e.id)))].sort()
   const today = todayIso()
 
   return (
@@ -213,6 +223,14 @@ export default function SchedulePage() {
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
+      {weekBeers.length > 0 && (
+        <div className="sc-legend">
+          {weekBeers.map((b) => (
+            <span key={b} className="sc-chip" style={{ background: beerColour(b) }}>{b}</span>
+          ))}
+        </div>
+      )}
+
       <div className="sc-scroll">
         <table className="sc-grid">
           <thead>
@@ -235,7 +253,9 @@ export default function SchedulePage() {
                     return (
                       <td
                         key={c.key}
-                        className={'sc-cell ' + (list[0] ? taskClass(list[0].text) : '') + (editor ? ' sc-editable' : '')}
+                        className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '')}
+                        style={list[0] && beerOf.get(list[0].id) ? { background: beerColour(beerOf.get(list[0].id)) } : undefined}
+                        title={list[0] && beerOf.get(list[0].id) ? beerOf.get(list[0].id) : undefined}
                         onClick={editor ? () => setEditing({ cell: { date: d, slot }, column: c, list }) : undefined}
                       >
                         {list.map((e) => (
