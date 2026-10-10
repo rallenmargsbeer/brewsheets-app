@@ -201,7 +201,22 @@ export async function moveToBrightTank({ bt, beerName, filterDate, filterSlot, b
   if (error) throw error
 }
 
-export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, turnQuantity, notes }) {
+// Text for the Canning / Kegging cells from a packaging plan.
+export function packTexts(pack) {
+  const cubes = Number(pack?.cubes) || 0
+  const kegs = [50, 30, 20].filter((l) => Number(pack?.[`kegs_${l}`]) > 0).map((l) => `${pack[`kegs_${l}`]} x ${l}L`)
+  return { canning: cubes ? `${cubes} cubes` : null, kegging: kegs.length ? kegs.join(', ') : null }
+}
+
+// When packaging happens: the Can & Keg job in the bright tank, else the morning after Filter.
+export function packDay(brewDate, filterStep, btSteps) {
+  const job = btSteps.find((s) => /can|keg|packag/i.test(s.task))
+  if (job) return { date: addDays(brewDate, job.day - 1), slot: job.slot }
+  if (filterStep) return { date: addDays(brewDate, filterStep.day), slot: 'AM' }
+  return null
+}
+
+export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, turnQuantity, notes, pack }) {
   const { data: booking, error } = await supabase
     .from('brew_bookings')
     .insert({
@@ -213,6 +228,10 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
       turn_volume_l: turnVolumeL || null,
       turn_quantity: turnQuantity || null,
       notes: notes || null,
+      pack_cubes: Number(pack?.cubes) || null,
+      pack_kegs_50: Number(pack?.kegs_50) || null,
+      pack_kegs_30: Number(pack?.kegs_30) || null,
+      pack_kegs_20: Number(pack?.kegs_20) || null,
     })
     .select()
     .single()
@@ -251,6 +270,11 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
       entries.push({ entry_date: addDays(brewDate, s.day - 1), slot: s.slot, lane: 'tank', tank_id: brightTank.id, text: s.task, booking_id: booking.id })
     }
   }
+  // Planned packaging goes straight into the Canning / Kegging columns on pack day.
+  const when = packDay(brewDate, filterStep, btSteps)
+  const { canning, kegging } = packTexts(pack)
+  if (when && canning) entries.push({ entry_date: when.date, slot: when.slot, lane: 'canning_1', text: canning, beer_name: beerName, booking_id: booking.id })
+  if (when && kegging) entries.push({ entry_date: when.date, slot: when.slot, lane: 'kegging_1', text: kegging, beer_name: beerName, booking_id: booking.id })
   if (entries.length) {
     const { error: e2 } = await supabase.from('schedule_entries').insert(entries)
     if (e2) throw e2
