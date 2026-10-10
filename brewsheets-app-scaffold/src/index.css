@@ -379,3 +379,8 @@ tbody tr:hover td {
 /* ---- Brew Day: booked brews ---- */
 .bd-booking { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; margin-bottom: 0.5rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); }
 .bd-today { background: #fdf3dc; border-left-color: #b07d00; }
+
+.sc-pack-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; margin-top: 2px; }
+.sc-pack-grid label { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; }
+.sc-pack-grid input { width: 100%; box-sizing: border-box; }
+@media (max-width: 480px) { .sc-pack-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

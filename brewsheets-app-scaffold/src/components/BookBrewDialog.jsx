@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
-import { addDays, todayIso, stepsForTank, splitAtFilter, suggestBrightTank, listScheduleEntries, createBooking } from '../lib/schedule'
+import { addDays, todayIso, stepsForTank, splitAtFilter, suggestBrightTank, listScheduleEntries, createBooking, packDay, packTexts } from '../lib/schedule'
+import { LITRES_PER_CUBE, CANS_PER_CUBE } from '../lib/packaging'
 
 const TURN_SIZES = [1000, 1500, 2500]
 const fmt = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -15,6 +16,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const [turnVolume, setTurnVolume] = useState(2500)
   const [turns, setTurns] = useState(4)
   const [notes, setNotes] = useState('')
+  const [pack, setPack] = useState({ cubes: '', kegs_50: '', kegs_30: '', kegs_20: '' })
   const [clashes, setClashes] = useState([])
   const [windowEntries, setWindowEntries] = useState([])
   const [btChoice, setBtChoice] = useState('auto') // 'auto' = use the suggestion, '' = none, or a tank id
@@ -74,7 +76,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     setSaving(true)
     setError(null)
     try {
-      const b = await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, notes })
+      const b = await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, notes, pack })
       onBooked(b)
     } catch (e) {
       setError(e.message)
@@ -84,6 +86,9 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
 
   const tooBig = tank?.capacity_l != null && turnVolume * turns > Number(tank.capacity_l)
   const ready = beerName.trim() && brewDate && tank && template && !tooBig
+  const packLitres = Math.round((Number(pack.cubes) || 0) * LITRES_PER_CUBE + [50, 30, 20].reduce((t, l) => t + (Number(pack[`kegs_${l}`]) || 0) * l, 0))
+  const overPacked = packLitres > turnVolume * turns
+  const packWhen = filterStep ? packDay(brewDate, filterStep, btSteps) : null
 
   return (
     <div className="sc-overlay" onClick={onClose}>
@@ -153,6 +158,20 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
           {filterStep && btChoice === 'auto' && !suggestedBt && (
             <p className="sc-warn" style={{ margin: 0 }}>No bright tank is empty and big enough from {fmt(filterDate)} to {fmt(btEnd)}. Pick one anyway, or leave it in the FV and move it later.</p>
           )}
+          <div>
+            <div>Packaging plan</div>
+            <div className="sc-pack-grid">
+              <label>Cubes ({CANS_PER_CUBE} × 375 mL)<input type="number" inputMode="numeric" min="0" value={pack.cubes} onChange={(e) => setPack({ ...pack, cubes: e.target.value })} /></label>
+              {[50, 30, 20].map((l) => (
+                <label key={l}>{l} L kegs<input type="number" inputMode="numeric" min="0" value={pack[`kegs_${l}`]} onChange={(e) => setPack({ ...pack, [`kegs_${l}`]: e.target.value })} /></label>
+              ))}
+            </div>
+            <div style={{ color: overPacked ? 'crimson' : 'var(--ink2)', fontSize: '0.85rem', marginTop: 4 }}>
+              {packLitres.toLocaleString()} L packaged of {(turnVolume * turns).toLocaleString()} L brewed
+              {overPacked ? ' (more than the batch)' : ''}
+              {packWhen ? ` · ${fmt(packWhen.date)} ${packWhen.slot}` : ''}
+            </div>
+          </div>
           <label>Notes
             <input value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
@@ -170,6 +189,9 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
             <summary style={{ cursor: 'pointer' }}>Cellar plan ({preview.length} jobs, to {fmt(preview[preview.length - 1].date)})</summary>
             <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
               {preview.map((p) => <li key={p.key}>{fmt(p.date)} {p.slot} · {p.where} · {p.text}</li>)}
+              {packWhen && Object.entries(packTexts(pack)).filter(([, t]) => t).map(([lane, t]) => (
+                <li key={lane}>{fmt(packWhen.date)} {packWhen.slot} · {lane === 'canning' ? 'Canning' : 'Kegging'} · {t}</li>
+              ))}
             </ul>
           </details>
         )}
