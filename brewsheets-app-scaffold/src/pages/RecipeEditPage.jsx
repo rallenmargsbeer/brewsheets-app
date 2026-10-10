@@ -12,6 +12,7 @@ import {
   listIngredients,
 } from '../lib/api'
 import IngredientPicker from '../components/IngredientPicker.jsx'
+import { listCellarTemplates } from '../lib/schedule'
 
 const emptyRecipe = {
   name: '',
@@ -164,11 +165,13 @@ export default function RecipeEditPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [ingredients, setIngredients] = useState([])
+  const [cellarTemplates, setCellarTemplates] = useState([])
 
   // Powers the autocomplete suggestions on each Item/Ingredient field —
   // imported on the Ingredients page (from an Unleashed CSV export) and
   // categorized to match the section it should show up in.
   useEffect(() => {
+    listCellarTemplates().then(setCellarTemplates).catch(() => {})
     listIngredients()
       .then(setIngredients)
       .catch(() => {
@@ -334,6 +337,13 @@ export default function RecipeEditPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
           <Field label="Name" value={recipe.name} onChange={(v) => updateField('name', v)} />
           <Field label="Style" value={recipe.style} onChange={(v) => updateField('style', v)} />
+          <label style={{ display: 'block' }}>
+            <div style={{ fontSize: '0.85rem', color: '#444' }}>Cellar template</div>
+            <select value={recipe.cellar_template_id ?? ''} onChange={(e) => updateField('cellar_template_id', e.target.value || null)}>
+              <option value="">None</option>
+              {cellarTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
           <label style={{ display: 'block' }}>
             <div style={{ fontSize: '0.85rem', color: '#444' }}>Core range?</div>
             <select

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { listRecipes, getRecipe, listBatches, listTanks, upsertBatch, initializeBrewRuns } from '../lib/api'
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
+import { getBooking, linkBookingToBatch } from '../lib/schedule'
 
 // Fixed brewhouse turn sizes — tell me the values to use if this ever changes.
 const TURN_VOLUMES = [
@@ -207,6 +208,20 @@ export default function AddBrewPage() {
   const [tankId, setTankId] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
+  // Started from a booked brew on the Brew Day page: pre-fill recipe, turn size and tank.
+  const [searchParams] = useSearchParams()
+  const bookingId = searchParams.get('booking')
+  const [booking, setBooking] = useState(null)
+  useEffect(() => {
+    if (!bookingId) return
+    getBooking(bookingId)
+      .then((b) => {
+        setBooking(b)
+        if (b.recipe_id) setRecipeId(b.recipe_id)
+        if (b.turn_volume_l) setTurnVolumeL(Number(b.turn_volume_l))
+      })
+      .catch((e) => setError(e.message))
+  }, [bookingId])
 
   useEffect(() => {
     listRecipes().then(setRecipes).catch((e) => setError(e.message))
@@ -256,6 +271,7 @@ export default function AddBrewPage() {
         target_volume_l: turnVolumeL * quantity,
       })
       await initializeBrewRuns(batch.id, quantity, fullRecipe, turnVolumeL, bagAllocations)
+      if (booking) await linkBookingToBatch(booking.id, batch.id)
       navigate(`/batches/${batch.id}?view=brewday`)
     } catch (e) {
       setError(e.message)
@@ -270,7 +286,7 @@ export default function AddBrewPage() {
   // answer for them.
   function pickTurnQuantity(quantity) {
     setTurnQuantity(quantity)
-    setTankId('')
+    setTankId(booking?.tank_id ?? '')
     const seeded = Object.fromEntries(
       baggedGristItems.map((item) => [item.id, evenBagSplit(bagsNeededFor(item, turnVolumeL, quantity), quantity)])
     )
@@ -281,6 +297,13 @@ export default function AddBrewPage() {
   return (
     <div style={{ maxWidth: 640 }}>
       <h1>Add Brew</h1>
+      {booking && (
+        <p className="sc-warn" style={{ marginTop: 0 }}>
+          Booked brew: <strong>{booking.beer_name}</strong> · {tankLabel(booking.tanks?.name)}
+          {booking.turn_quantity ? ` · ${booking.turn_quantity} × ${booking.turn_volume_l / 100}HL` : ''}
+          {!booking.recipe_id ? ' · no recipe linked yet, pick one below' : ''}
+        </p>
+      )}
       <p style={{ color: '#666', marginTop: '-0.5rem' }}>
         Set up today's brew day — pick the recipe, the size of each brewhouse turn, how many
         turns you're running and the tank, and you'll land straight in the brewsheet.
@@ -331,7 +354,7 @@ export default function AddBrewPage() {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {TURN_QUANTITIES.map((q) => (
             <button key={q} className={turnQuantity === q ? '' : 'secondary'} disabled={creating} onClick={() => pickTurnQuantity(q)}>
-              {`${q} turn${q === 1 ? '' : 's'}`}
+              {`${q} turn${q === 1 ? '' : 's'}`}{booking?.turn_quantity === q ? ' (booked)' : ''}
             </button>
           ))}
         </div>

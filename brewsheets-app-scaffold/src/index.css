@@ -343,3 +343,37 @@ tbody tr:hover td {
   border-left: 4px solid #b07d00;
 }
 .ta-done { background: #e7f4ec; border-left-color: #11603f; }
+
+/* ---- Schedule grid ---- */
+.sc-scroll { overflow: auto; max-height: 75vh; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.sc-grid { border: 0; border-radius: 0; overflow: visible; width: max-content; min-width: 100%; font-size: 0.8rem; }
+.sc-grid th, .sc-grid td { padding: 0.3rem 0.45rem; border-right: 1px solid var(--line); white-space: nowrap; }
+.sc-grid thead th { position: sticky; top: 0; z-index: 2; font-size: 0.72rem; }
+.sc-grid .sc-day { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 108px; }
+.sc-grid thead .sc-day { z-index: 3; }
+.sc-grid tbody tr.sc-pm td { border-bottom: 2px solid var(--line); }
+.sc-grid tbody tr:not(.sc-pm) td { border-bottom: 1px dashed var(--line); }
+.sc-slot { color: var(--muted); font-size: 0.7rem; }
+.sc-cell { min-width: 84px; vertical-align: top; }
+.sc-editable { cursor: pointer; }
+.sc-editable:hover { outline: 2px solid var(--accent-soft); outline-offset: -2px; }
+.sc-today td { background: #fff8e8; }
+.sc-today .sc-day { background: #fdecc8; }
+.sc-h-brew { background: #fde3d3 !important; color: #9a3a0c !important; }
+.sc-h-bbt { background: #d9e7fa !important; color: #1d4f91 !important; }
+.sc-h-pack { background: #d4efe2 !important; color: #11603f !important; }
+.sc-brew { background: #fde3d3; font-weight: 700; color: #9a3a0c; }
+.sc-hop { background: #e7f4ec; color: #11603f; font-weight: 600; }
+.sc-pack { background: #e3edfa; color: #1d4f91; }
+.sc-temp { background: #f1eefb; color: #4b3a8f; }
+.sc-done { text-decoration: line-through; opacity: 0.55; }
+.sc-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex; justify-content: center; align-items: flex-start; padding: 2rem 16px; overflow-y: auto; z-index: 1000; }
+.sc-dialog { background: var(--surface); border-radius: 8px; padding: 1rem; width: 100%; max-width: 460px; }
+.sc-form { display: grid; gap: 0.6rem; margin-top: 0.75rem; }
+.sc-form label { display: flex; flex-direction: column; gap: 2px; }
+.sc-booking { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; background: #fdf3dc; border-left: 4px solid #b07d00; }
+.sc-warn { background: #fdf3dc; border-left: 4px solid #b07d00; padding: 0.5rem 0.6rem; border-radius: 6px; font-size: 0.85rem; }
+
+/* ---- Brew Day: booked brews ---- */
+.bd-booking { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; margin-bottom: 0.5rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); }
+.bd-today { background: #fdf3dc; border-left-color: #b07d00; }
