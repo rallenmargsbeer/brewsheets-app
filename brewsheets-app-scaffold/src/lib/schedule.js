@@ -63,13 +63,59 @@ export async function listScheduleEntries(fromIso, toIso) {
   }
 }
 
+// Returns the new row's id when it inserts (so the change can be undone).
 export async function saveScheduleEntry(entry) {
   const { id, ...fields } = entry
-  const query = id
-    ? supabase.from('schedule_entries').update(fields).eq('id', id)
-    : supabase.from('schedule_entries').insert(fields)
-  const { error } = await query
+  if (id) {
+    const { error } = await supabase.from('schedule_entries').update(fields).eq('id', id)
+    if (error) throw error
+    return id
+  }
+  const { data, error } = await supabase.from('schedule_entries').insert(fields).select('id').single()
   if (error) throw error
+  return data.id
+}
+
+// ---- Bulk changes + undo ----
+
+const ENTRY_COLS = 'id, entry_date, slot, lane, tank_id, text, booking_id, done, beer_name'
+
+export async function getEntriesByIds(ids) {
+  if (!ids.length) return []
+  const { data, error } = await supabase.from('schedule_entries').select(ENTRY_COLS).in('id', ids)
+  if (error) throw error
+  return data
+}
+
+// rows: [{ id, ...fieldsToChange }]
+export async function updateEntries(rows) {
+  for (const { id, ...fields } of rows) {
+    const { error } = await supabase.from('schedule_entries').update(fields).eq('id', id)
+    if (error) throw error
+  }
+}
+
+export async function insertEntries(rows) {
+  if (!rows.length) return []
+  const { data, error } = await supabase.from('schedule_entries').insert(rows).select('id')
+  if (error) throw error
+  return data.map((r) => r.id)
+}
+
+export async function deleteEntries(ids) {
+  if (!ids.length) return
+  const { error } = await supabase.from('schedule_entries').delete().in('id', ids)
+  if (error) throw error
+}
+
+// Puts rows back exactly as they were (re-creating any that were deleted) and removes rows
+// that the change created.
+export async function restoreEntries(before, createdIds = []) {
+  await deleteEntries(createdIds.filter((id) => !before.some((b) => b.id === id)))
+  if (before.length) {
+    const { error } = await supabase.from('schedule_entries').upsert(before, { onConflict: 'id' })
+    if (error) throw error
+  }
 }
 
 export async function deleteScheduleEntry(id) {
@@ -198,8 +244,7 @@ export async function moveToBrightTank({ bt, beerName, filterDate, filterSlot, b
       booking_id: bookingId,
     })),
   ]
-  const { error } = await supabase.from('schedule_entries').insert(rows)
-  if (error) throw error
+  return insertEntries(rows)
 }
 
 // Text for the Canning / Kegging cells from a packaging plan.

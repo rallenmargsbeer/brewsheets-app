@@ -384,3 +384,17 @@ tbody tr:hover td {
 .sc-pack-grid label { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; }
 .sc-pack-grid input { width: 100%; box-sizing: border-box; }
 @media (max-width: 480px) { .sc-pack-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---- Schedule: drag & drop, right-click menu ---- */
+.sc-cell[draggable='true'] { cursor: grab; }
+.sc-cell[data-drop='over'] { outline: 3px dashed #1d4f91 !important; outline-offset: -3px; }
+.sc-menu-back { position: fixed; inset: 0; z-index: 1200; }
+.sc-menu { position: fixed; width: 280px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); padding: 0.35rem; font-size: 0.85rem; }
+.sc-menu-title { font-weight: 700; color: var(--ink2); padding: 0.35rem 0.5rem 0.2rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.sc-menu-item { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--ink); font-weight: 500; padding: 0.4rem 0.5rem; border-radius: 4px; }
+.sc-menu-item:hover:not(:disabled) { background: var(--accent-soft); color: var(--ink); border: 0; }
+.sc-menu-danger { color: #b00020; }
+.sc-menu-row { display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; }
+.sc-menu-row span { flex: 1; }
+.sc-menu-row button { padding: 0.15rem 0.5rem; font-size: 0.8rem; }
+.sc-menu-row select { font-size: 0.8rem; }
