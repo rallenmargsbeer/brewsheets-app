@@ -25,9 +25,12 @@ import {
   insertEntries,
   deleteEntries,
   restoreEntries,
+  listBeerColours,
+  saveBeerColour,
+  deleteBeerColour,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
-import { assignBeers, beerColour, beerInTank, stayAt, slotKey, packBeer } from '../lib/beerColours'
+import { assignBeers, beerStyle, beerInTank, stayAt, slotKey, packBeer, setBeerColours, hasSavedColours } from '../lib/beerColours'
 
 // How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
 const LOOKBACK_DAYS = 42
@@ -64,6 +67,12 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
   // Canning / kegging: which beer (blank = let the app work it out).
   const isPack = column.group === 'pack'
   const [packBeerName, setPackBeerName] = useState(entries.find((e) => e.beer_name)?.beer_name ?? '')
+  // Cell colours: by default the beer's; tick "Own colours" to pick this cell's fill and font.
+  const style = beerStyle(beer) ?? { bg: '#ffffff', fg: '#1d2421' }
+  const [ownColours, setOwnColours] = useState(entries.some((e) => e.cell_bg || e.cell_fg))
+  const [cellBg, setCellBg] = useState(entries.find((e) => e.cell_bg)?.cell_bg ?? style.bg)
+  const [cellFg, setCellFg] = useState(entries.find((e) => e.cell_fg)?.cell_fg ?? style.fg)
+  const colourFields = ownColours ? { cell_bg: cellBg, cell_fg: cellFg } : { cell_bg: null, cell_fg: null }
   const [booking, setBooking] = useState(null)
   const [moveTo, setMoveTo] = useState('')
   const [error, setError] = useState(null)
@@ -96,9 +105,10 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
     const created = []
     for (const r of rows) {
       const orig = entries.find((e) => e.id === r.id)
-      if (!r.text.trim()) await deleteScheduleEntry(r.id)
-      else if (orig.text !== r.text || orig.done !== r.done || (isPack && (orig.beer_name ?? '') !== packBeerName))
-        await saveScheduleEntry({ id: r.id, text: r.text.trim(), done: r.done, ...(isPack ? { beer_name: packBeerName || null } : {}) })
+      // A cleared box is removed, unless it's only there to hold the cell's own colours.
+      if (!r.text.trim() && !ownColours) await deleteScheduleEntry(r.id)
+      else
+        await saveScheduleEntry({ id: r.id, text: r.text.trim(), done: r.done, ...colourFields, ...(isPack ? { beer_name: packBeerName || null } : {}) })
     }
     if (newText.trim()) {
       created.push(await saveScheduleEntry({
@@ -107,8 +117,12 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
         lane: column.lane,
         tank_id: column.tankId ?? null,
         text: newText.trim(),
+        ...colourFields,
         ...(isPack ? { beer_name: packBeerName || null } : {}),
       }))
+    } else if (!rows.length && ownColours) {
+      // An empty cell can still have its own colours.
+      created.push(await saveScheduleEntry({ entry_date: cell.date, slot: cell.slot, lane: column.lane, tank_id: column.tankId ?? null, text: '', ...colourFields }))
     }
     return created
   }
@@ -136,6 +150,18 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
           style={{ width: '100%', boxSizing: 'border-box', marginTop: '0.6rem' }}
         />
         <p style={{ color: 'var(--ink2)', fontSize: '0.8rem', margin: '0.3rem 0 0' }}>Clear a box to remove it.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.6rem', marginTop: '0.6rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <input type="checkbox" checked={ownColours} onChange={(e) => setOwnColours(e.target.checked)} /> Own colours
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: ownColours ? 1 : 0.4 }}>
+            Cell <input type="color" value={cellBg} disabled={!ownColours} onChange={(e) => setCellBg(e.target.value)} />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: ownColours ? 1 : 0.4 }}>
+            Font <input type="color" value={cellFg} disabled={!ownColours} onChange={(e) => setCellFg(e.target.value)} />
+          </label>
+          <span className="sc-chip" style={{ background: ownColours ? cellBg : style.bg, color: ownColours ? cellFg : style.fg }}>Preview</span>
+        </div>
         {isPack && (
           <label style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: '0.6rem' }}>
             Beer
@@ -221,6 +247,12 @@ export default function SchedulePage() {
   const [error, setError] = useState(null)
   const [bookingBeer, setBookingBeer] = useState({})
   const [undoStack, setUndoStack] = useState([]) // [{ label, undo }]
+  const [colourRows, setColourRows] = useState([]) // beer_colours, kept in state so the grid re-renders on change
+  const [colourEdit, setColourEdit] = useState(null) // { beer, bg, fg, x, y }
+  function loadColours() {
+    listBeerColours().then((rows) => { setBeerColours(rows); setColourRows(rows) }).catch(() => {})
+  }
+  useEffect(loadColours, [])
   const [menu, setMenu] = useState(null) // right-click menu
   const [dropKey, setDropKey] = useState(null) // cell being dragged over
   const dragged = useRef(null)
@@ -283,7 +315,7 @@ export default function SchedulePage() {
     const last = undoStack[undoStack.length - 1]
     if (!last || busy) return
     setUndoStack((st) => st.slice(0, -1))
-    perform(last.undo)
+    perform(last.undo).then(loadColours)
   }
   useEffect(() => {
     const onKey = (e) => {
@@ -439,7 +471,15 @@ export default function SchedulePage() {
       {weekBeers.length > 0 && (
         <div className="sc-legend">
           {weekBeers.map((b) => (
-            <span key={b} className="sc-chip" style={{ background: beerColour(b) }}>{b}</span>
+            <span
+              key={b}
+              className={'sc-chip' + (editor ? ' sc-chip-edit' : '')}
+              style={{ background: beerStyle(b).bg, color: beerStyle(b).fg }}
+              title={editor ? `Change ${b}'s colours` : b}
+              onClick={editor ? (e) => setColourEdit({ beer: b, ...beerStyle(b), x: e.clientX, y: e.clientY }) : undefined}
+            >
+              {b}
+            </span>
           ))}
         </div>
       )}
@@ -478,11 +518,19 @@ export default function SchedulePage() {
                       <td
                         key={c.key}
                         className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '')}
-                        style={
-                          beer
-                            ? { background: beerColour(beer), ...(edges ? { boxShadow: edges, borderBottomColor: stay.end === k ? undefined : beerColour(beer) } : {}) }
-                            : undefined
-                        }
+                        style={(() => {
+                          // A cell's own colours win over its beer's.
+                          const own = list.find((x) => x.cell_bg || x.cell_fg)
+                          const bs = beerStyle(beer)
+                          const bg = own?.cell_bg ?? bs?.bg
+                          const fg = own?.cell_fg ?? bs?.fg
+                          if (!bg && !fg) return undefined
+                          return {
+                            ...(bg ? { background: bg } : {}),
+                            ...(fg ? { color: fg } : {}),
+                            ...(edges ? { boxShadow: edges, borderBottomColor: stay.end === k ? undefined : bg } : {}),
+                          }
+                        })()}
                         title={beer ?? undefined}
                         onClick={editor && !archive ? () => setEditing({ cell: { date: d, slot }, column: c, list, beer }) : undefined}
                         draggable={editor && !archive && list.length > 0}
@@ -516,6 +564,36 @@ export default function SchedulePage() {
           </tbody>
         </table>
       </div>
+
+      {colourEdit && (
+        <div className="sc-menu-back" onClick={() => setColourEdit(null)}>
+          <div className="sc-menu" style={{ left: Math.min(colourEdit.x, window.innerWidth - 290), top: colourEdit.y + 12, padding: '0.6rem' }} onClick={(e) => e.stopPropagation()}>
+            <div className="sc-menu-title" style={{ padding: '0 0 0.4rem' }}>{colourEdit.beer} colours (everywhere)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Cell <input type="color" value={colourEdit.bg} onChange={(e) => setColourEdit({ ...colourEdit, bg: e.target.value })} /></label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Font <input type="color" value={colourEdit.fg} onChange={(e) => setColourEdit({ ...colourEdit, fg: e.target.value })} /></label>
+              <span className="sc-chip" style={{ background: colourEdit.bg, color: colourEdit.fg }}>{colourEdit.beer}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.6rem' }}>
+              <button
+                onClick={() => {
+                  const { beer, bg, fg } = colourEdit
+                  const prev = colourRows.find((r) => r.beer_name.toLowerCase() === beer.toLowerCase())
+                  setColourEdit(null)
+                  perform(async () => {
+                    await saveBeerColour(prev?.beer_name ?? beer, bg, fg)
+                    pushUndo(`${beer} colours`, () => (prev ? saveBeerColour(prev.beer_name, prev.bg, prev.fg) : deleteBeerColour(beer)))
+                  }).then(loadColours)
+                }}
+              >
+                Save
+              </button>
+              <button className="secondary" onClick={() => setColourEdit(null)}>Cancel</button>
+            </div>
+            {!hasSavedColours(colourEdit.beer) && <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--ink2)' }}>No colours saved for this beer yet; it's using a stand-in.</p>}
+          </div>
+        </div>
+      )}
 
       {menu && (
         <div className="sc-menu-back" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null) }}>

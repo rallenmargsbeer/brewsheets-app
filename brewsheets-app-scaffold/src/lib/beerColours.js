@@ -1,23 +1,6 @@
-// Every beer gets its own cell colour on the schedule. Core beers have fixed colours so
-// they always look the same week to week; one-offs get a colour from the spare set,
-// picked from their name so it stays the same every time.
-
-// Light tints so the dark cell text stays readable.
-const CORE = {
-  itp: '#cfe0f8', // blue
-  pale: '#fbd9c2', // orange
-  kolsch: '#fbeaa6', // yellow
-  mermid: '#f6cfe1', // pink
-  draught: '#c9eadb', // aqua
-  'drift xpa': '#ddd4f6', // violet
-  riverdog: '#d3e9c6', // green
-  red: '#f3c5c3', // red
-  brown: '#e4d3bf', // brown
-  stout: '#d5d3cf', // grey
-  lager: '#c8e6f1', // sky
-  megsy: '#f1dcc0', // sand
-}
-const SPARE = ['#e0bfe8', '#a9d8e2', '#f4b8b8', '#cbdc93', '#a9c8f0', '#f5b5d8', '#d6c7a2', '#b3e2ae', '#c3b8ec', '#f0cf86']
+// Every beer has a cell colour and a font colour on the schedule. The colours staff know
+// from the Google sheet are stored in the beer_colours table (editable from the colour key);
+// a beer without saved colours gets a stable fallback picked from its name.
 
 // "8 Ball 1500L" and "ITP trial - 1000L" belong to "8 Ball" and "ITP trial".
 export const beerKey = (name) =>
@@ -26,14 +9,29 @@ export const beerKey = (name) =>
     .trim()
     .toLowerCase()
 
-export function beerColour(name) {
+const FALLBACK = ['#e0bfe8', '#a9d8e2', '#f4b8b8', '#cbdc93', '#a9c8f0', '#f5b5d8', '#d6c7a2', '#b3e2ae', '#c3b8ec', '#f0cf86']
+let saved = new Map() // beerKey -> { bg, fg }
+
+// Loads the saved colours (rows from beer_colours).
+export function setBeerColours(rows) {
+  saved = new Map(rows.map((r) => [beerKey(r.beer_name), { bg: r.bg, fg: r.fg }]))
+}
+
+export function hasSavedColours(name) {
+  return saved.has(beerKey(name))
+}
+
+// { bg, fg } for a beer, or null when there's no beer.
+export function beerStyle(name) {
   const key = beerKey(name)
   if (!key) return null
-  if (CORE[key]) return CORE[key]
+  if (saved.has(key)) return saved.get(key)
   let h = 0
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return SPARE[h % SPARE.length]
+  return { bg: FALLBACK[h % FALLBACK.length], fg: '#1d2421' }
 }
+
+export const beerColour = (name) => beerStyle(name)?.bg ?? null
 
 // Works out which beer each schedule cell belongs to.
 // - Brew 1 / Brew 2 cells are the beer's name.
