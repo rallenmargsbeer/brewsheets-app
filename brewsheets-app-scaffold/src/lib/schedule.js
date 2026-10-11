@@ -78,7 +78,7 @@ export async function saveScheduleEntry(entry) {
 
 // ---- Bulk changes + undo ----
 
-const ENTRY_COLS = 'id, entry_date, slot, lane, tank_id, text, booking_id, done, beer_name'
+const ENTRY_COLS = 'id, entry_date, slot, lane, tank_id, text, booking_id, done, beer_name, cell_bg, cell_fg'
 
 export async function getEntriesByIds(ids) {
   if (!ids.length) return []
@@ -351,5 +351,23 @@ export async function cancelBooking(id) {
 
 export async function linkBookingToBatch(bookingId, batchId) {
   const { error } = await supabase.rpc('link_booking_to_batch', { p_booking: bookingId, p_batch: batchId })
+  if (error) throw error
+}
+
+// ---- Beer colours ----
+
+export async function listBeerColours() {
+  const { data, error } = await supabase.from('beer_colours').select('beer_name, bg, fg')
+  if (error) throw error
+  return data
+}
+
+export async function saveBeerColour(beerName, bg, fg) {
+  const { error } = await supabase.from('beer_colours').upsert({ beer_name: beerName, bg, fg, updated_at: new Date().toISOString() }, { onConflict: 'beer_name' })
+  if (error) throw error
+}
+
+export async function deleteBeerColour(beerName) {
+  const { error } = await supabase.from('beer_colours').delete().eq('beer_name', beerName)
   if (error) throw error
 }
