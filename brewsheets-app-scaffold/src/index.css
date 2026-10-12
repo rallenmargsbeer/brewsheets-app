@@ -525,3 +525,13 @@ p.bd-empty { color: var(--ink2); }
 .dil-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--ink2); }
 .dil-grid input { font-size: 1.05rem; }
 .dil-result { margin-top: 0.9rem; font-size: 1.15rem; color: #1f4f66; }
+.acid-box { margin: 0.75rem 0; padding: 0.7rem 0.9rem; border-radius: 8px; background: #f6f1fa; border: 1px solid #ddd0ea; }
+.acid-box p { margin: 0.25rem 0; }
+.acid-box .dil-title { color: #5a3d7a; }
+.acid-hint { margin: 0.4rem 0; color: #4a2f6a; }
+.acid-hint.ok { color: #1b6e2e; }
+.calc-h { font-size: 1.05rem; margin: 1.4rem 0 0.6rem; }
+.calc-buffer { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: flex-end; margin-top: 0.9rem; padding-top: 0.7rem; border-top: 1px dashed var(--line); font-size: 0.82rem; color: var(--ink2); }
+.calc-buffer label { display: flex; flex-direction: column; gap: 0.2rem; }
+.calc-buffer input { width: 90px; }
+.calc-buffer span { flex: 1; min-width: 220px; }

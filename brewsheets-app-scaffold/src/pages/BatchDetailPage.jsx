@@ -17,6 +17,7 @@ import {
 } from '../lib/api'
 import { batchFigures, actualOg } from '../lib/batchFigures'
 import { blendGravity, waterForGravity, gravityAfter } from '../lib/dilution'
+import { useBuffer, lacticMl, remainingTurnsPh } from '../lib/acid'
 
 function toLocalInput(iso) {
   if (!iso) return ''
@@ -353,7 +354,8 @@ function IngredientRow({ item, ingredients, onSaved }) {
   )
 }
 
-function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngredients, onSaved, isLastTurn, otherRuns = [] }) {
+function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, masterIngredients, onSaved, isLastTurn, otherRuns = [] }) {
+  const [buffer] = useBuffer()
   const [form, setForm] = useState(() => seedForm(batchId, runNumber, run))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -567,6 +569,13 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
                   {fld('mash_water_l', 'Actual Strike Volume (L)', 'number', 140)}
                   {fld('mash_temp', 'Mash Temp', 'number', 110)}
                   {fld('mash_ph', 'Mash pH', 'number', 100)}
+                  <AcidHint
+                    label="mash"
+                    volumeL={Number(form.mash_water_l) || null}
+                    ph={Number(form.mash_ph) || null}
+                    target={Number(recipe?.target_mash_ph) || null}
+                    perHl={buffer.mash}
+                  />
                   <div style={{ marginTop: '0.5rem' }}>
                     <TimeButton
                       runId={form.id}
@@ -711,6 +720,16 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
                     const out = (recipe.target_ko_ph_min != null && ph < lo) || (recipe.target_ko_ph_max != null && ph > hi)
                     return <span style={{ marginLeft: '0.5rem', fontWeight: 600, color: out ? '#b00020' : '#1b6e2e' }}>{out ? `Outside ${koPhRange}` : 'In range'}</span>
                   })()}
+                  <KoPhPrompt
+                    runNumber={runNumber}
+                    turnCount={turnCount}
+                    otherRuns={otherRuns}
+                    volumeL={Number(form.ko_flowmeter_l) || Number(turnVolumeL) || null}
+                    turnVolumeL={Number(turnVolumeL) || null}
+                    ph={Number(form.whirlpool_ph) || null}
+                    recipe={recipe}
+                    perHl={buffer.wort}
+                  />
                   {isLastTurn && (
                     <DilutionPrompt
                       turns={[...otherRuns, { ...form, run_number: runNumber }]}
@@ -1004,6 +1023,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
             masterIngredients={ingredients}
             onSaved={refresh}
             isLastTurn={n === turnCount}
+            turnCount={turnCount}
             otherRuns={(batch.brew_runs ?? []).filter((r) => r.run_number !== n)}
           />
         </div>
@@ -1212,6 +1232,57 @@ function DilutionPrompt({ turns, targetPlato, water, onWater, locked }) {
         {!locked && need > 0.5 && <button className="secondary" onClick={() => onWater(String(Math.round(need)))}>Use {Math.round(need)} L</button>}
         {after != null && <span className="dil-after">→ batch OG {after.toFixed(2)} °P, {Math.round(blend.volumeL + added).toLocaleString()} L</span>}
       </div>
+    </div>
+  )
+}
+
+// Lactic acid (88%) suggestion for one reading against its target.
+function AcidHint({ label, volumeL, ph, target, perHl }) {
+  if (!target || !ph) return null
+  const ml = lacticMl(volumeL, ph, target, perHl)
+  if (ph <= target) return <p className="acid-hint ok">Mash pH {ph} is at or under the target {target}: no acid needed.</p>
+  return (
+    <p className="acid-hint">
+      {ml == null
+        ? `Enter the ${label} volume to see the lactic acid needed to reach pH ${target}.`
+        : <>Add about <strong>{Math.round(ml)} mL</strong> lactic acid (88%) to bring the {label} from {ph} to {target} ({Math.round(volumeL).toLocaleString()} L).</>}
+    </p>
+  )
+}
+
+// Knockout pH: what this turn should land on so the whole batch hits the recipe's KO pH,
+// given the turns already knocked out, and the lactic acid to get there.
+function KoPhPrompt({ runNumber, turnCount, otherRuns, volumeL, turnVolumeL, ph, recipe, perHl }) {
+  const lo = recipe?.target_ko_ph_min != null ? Number(recipe.target_ko_ph_min) : null
+  const hi = recipe?.target_ko_ph_max != null ? Number(recipe.target_ko_ph_max) : null
+  if (lo == null && hi == null) return null
+  const batchTarget = lo != null && hi != null ? (lo + hi) / 2 : lo ?? hi
+  const done = otherRuns
+    .filter((r) => r.knockout_confirmed_at && Number(r.whirlpool_ph) > 0)
+    .map((r) => ({ run: r.run_number, volumeL: Number(r.ko_flowmeter_l) || turnVolumeL || 0, ph: Number(r.whirlpool_ph) }))
+  const toCome = Math.max(1, turnCount - done.length) // this turn and any after it
+  const plan = remainingTurnsPh(done, toCome * (turnVolumeL || volumeL || 0), batchTarget)
+  const turnTarget = plan ? Math.round(plan.need * 100) / 100 : batchTarget
+  const ml = ph && ph > turnTarget ? lacticMl(volumeL, ph, turnTarget, perHl) : null
+  return (
+    <div className="acid-box">
+      <div className="dil-title">KO pH</div>
+      {done.length > 0 && plan?.donePh != null ? (
+        <p>
+          Turn{done.length > 1 ? 's' : ''} {done.map((d) => d.run).join(', ')} knocked out at <strong>{plan.donePh.toFixed(2)}</strong> ({Math.round(plan.doneL).toLocaleString()} L).
+          For the batch to finish at {batchTarget.toFixed(2)}, {toCome > 1 ? `turns ${runNumber} to ${turnCount}` : `turn ${runNumber}`} should knock out at <strong>{turnTarget.toFixed(2)}</strong>.
+          {(lo != null && turnTarget < lo) || (hi != null && turnTarget > hi) ? <span className="dil-warn"> That's outside the recipe's {lo ?? '?'} to {hi ?? '?'} range for a single turn; consider landing this turn at the edge of the range instead.</span> : null}
+        </p>
+      ) : (
+        <p>Aim for <strong>{turnTarget.toFixed(2)}</strong> (middle of the recipe's {lo ?? '?'} to {hi ?? '?'}).</p>
+      )}
+      {ph ? (
+        ph <= turnTarget
+          ? <p className="acid-hint ok">KO pH {ph} is at or under {turnTarget.toFixed(2)}: no acid needed.</p>
+          : <p className="acid-hint">Add about <strong>{ml != null ? Math.round(ml) : '?'} mL</strong> lactic acid (88%) to bring this turn from {ph} to {turnTarget.toFixed(2)}{volumeL ? ` (${Math.round(volumeL).toLocaleString()} L)` : ''}.</p>
+      ) : (
+        <p className="stock-muted" style={{ fontSize: '0.85rem' }}>Enter the KO pH to see how much lactic acid to add.</p>
+      )}
     </div>
   )
 }
