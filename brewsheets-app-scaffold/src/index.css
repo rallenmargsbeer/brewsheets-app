@@ -443,3 +443,5 @@ tbody tr:hover td {
 .stock-bar.mid > div { background: #f2c64d; } .stock-bar.mid > span { color: #6b4500; }
 .stock-bar.ok > div { background: #7cc58e; } .stock-bar.ok > span { color: #14512a; }
 .stock-muted { color: var(--ink2); }
+.stock-coming { font-size: 0.82rem; color: #1b6e2e; font-weight: 600; }
+.stock-coming span { color: var(--ink2); font-weight: 400; }
