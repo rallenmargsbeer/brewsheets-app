@@ -1,20 +1,22 @@
 // Batch figures worked out from what's recorded elsewhere (Brew Day, Fermentation, Cellar,
 // Packaging), so Batch Details never needs typing into.
 import { abvTracker } from '../components/FermentationSection.jsx'
+import { blendGravity, gravityAfter } from './dilution'
 
 const n = (v) => (v == null || v === '' ? null : Number(v))
 
-// Actual OG: each turn's KO gravity (°P), weighted by its knockout volume.
+// Actual OG: the turns' KO gravities blended by knockout volume, then diluted by any water
+// added on the last turn.
 export function actualOg(batch) {
   const turns = (batch.brew_runs ?? []).filter((r) => n(r.whirlpool_gravity) != null)
   if (!turns.length) return null
-  const weighted = turns.filter((r) => n(r.ko_flowmeter_l) > 0)
-  if (weighted.length === turns.length) {
-    const vol = weighted.reduce((a, r) => a + n(r.ko_flowmeter_l), 0)
-    return weighted.reduce((a, r) => a + n(r.whirlpool_gravity) * n(r.ko_flowmeter_l), 0) / vol
-  }
-  return turns.reduce((a, r) => a + n(r.whirlpool_gravity), 0) / turns.length
+  const weighted = turns.every((r) => n(r.ko_flowmeter_l) > 0)
+  if (!weighted) return turns.reduce((a, r) => a + n(r.whirlpool_gravity), 0) / turns.length
+  const blend = blendGravity(turns.map((r) => ({ volumeL: n(r.ko_flowmeter_l), plato: n(r.whirlpool_gravity) })))
+  return gravityAfter(blend.volumeL, blend.plato, dilutionWater(batch))
 }
+
+export const dilutionWater = (batch) => (batch.brew_runs ?? []).reduce((a, r) => a + (n(r.correction_l) ?? 0), 0)
 
 // Actual FG: the latest fermentation reading with a gravity.
 export function actualFg(batch) {
@@ -43,7 +45,8 @@ export function batchFigures(batch, sessions = []) {
     targetOg: n(recipe.target_og),
     targetFg: n(recipe.target_fg),
     targetAbv: n(recipe.target_abv),
-    yieldL: koVol || null,
+    yieldL: koVol ? koVol + dilutionWater(batch) : null,
+    dilutionL: dilutionWater(batch) || null,
     turnsDone: turns.filter((r) => r.knockout_confirmed_at).length,
     packed,
     packedLitres: packed.cubes * 6 + packed.kegs_50 * 50 + packed.kegs_30 * 30 + packed.kegs_20 * 20,
