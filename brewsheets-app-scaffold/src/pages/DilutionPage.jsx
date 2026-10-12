@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { waterForGravity, gravityAfter, waterForAbv, abvAfter } from '../lib/dilution'
 import { useBuffer, saveBuffer, lacticMl, remainingTurnsPh } from '../lib/acid'
 
@@ -7,9 +8,37 @@ const MODES = [
   { key: 'abv', label: 'ABV (%)', unit: '%', dp: 2 },
 ]
 
-// Standalone dilution calculator: how much water to hit a target, or where a given amount of
-// water lands you. Gravity in °P, or ABV.
-export default function DilutionPage() {
+const TABS = [
+  { key: 'dilution', label: 'Dilution' },
+  { key: 'ph', label: 'pH' },
+]
+
+// Calculators: Dilution (gravity and ABV) and pH (lactic acid, KO pH for remaining turns).
+export default function CalculatorsPage() {
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'ph' ? 'ph' : 'dilution'
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <h1>Calculators</h1>
+      <div className="calc-tabs">
+        {TABS.map((t) => (
+          <button key={t.key} className={tab === t.key ? '' : 'secondary'} onClick={() => setParams(t.key === 'dilution' ? {} : { tab: t.key }, { replace: true })}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'dilution' ? <DilutionCalculator /> : (
+        <>
+          <AcidCalculator />
+          <PhPlanner />
+        </>
+      )}
+    </div>
+  )
+}
+
+// How much water to hit a target, or where a given amount of water lands you. Gravity in °P, or ABV.
+function DilutionCalculator() {
   const [mode, setMode] = useState('plato')
   const [volume, setVolume] = useState('')
   const [current, setCurrent] = useState('')
@@ -24,9 +53,7 @@ export default function DilutionPage() {
   const placeholder = mode === 'abv' ? '5.6' : '12.0'
 
   return (
-    <div style={{ maxWidth: 720 }}>
-      <h1>Calculators</h1>
-      <h2 className="calc-h">Dilution</h2>
+    <>
       <p style={{ color: 'var(--ink2)', marginTop: 0 }}>Work out how much water brings a tank of wort or beer down to a target, or what adding a set amount of water does.</p>
 
       <div className="dil-modes">
@@ -61,10 +88,8 @@ export default function DilutionPage() {
           {after == null ? <span className="stock-muted">Uses the current volume and {mode === 'abv' ? 'ABV' : 'gravity'} above.</span> : <>→ <strong>{fmt(after)}</strong> at {Math.round(v + w).toLocaleString()} L</>}
         </div>
       </section>
-      <AcidCalculator />
-      <PhPlanner />
       <p style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>Gravity dilution allows for °P not scaling exactly with volume (it's worked out from the extract in solution); ABV scales directly with volume.</p>
-    </div>
+    </>
   )
 }
 
@@ -83,7 +108,7 @@ function AcidCalculator() {
   }
   return (
     <>
-      <h2 className="calc-h">Lactic acid (88%)</h2>
+      <h2 className="calc-h" style={{ marginTop: 0 }}>Lactic acid (88%)</h2>
       <div className="dil-modes">
         {[['mash', 'Mash'], ['wort', 'Kettle / KO wort']].map(([k, l]) => (
           <button key={k} className={stage === k ? '' : 'secondary'} onClick={() => setStage(k)}>{l}</button>

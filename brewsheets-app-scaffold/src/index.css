@@ -545,3 +545,5 @@ tr.ing-added td { background: #f3faf5; }
 .brew-missing { margin: 0 0 1rem; padding-left: 1.1rem; max-height: 50vh; overflow-y: auto; }
 .brew-missing li { margin: 0.2rem 0; }
 .brew-missing span { color: var(--ink2); font-size: 0.85rem; margin-left: 0.3rem; }
+.calc-tabs { display: flex; gap: 0.5rem; border-bottom: 2px solid var(--line); margin-bottom: 1rem; }
+.calc-tabs button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: -2px; }
