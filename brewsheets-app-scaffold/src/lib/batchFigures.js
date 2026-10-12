@@ -2,6 +2,7 @@
 // Packaging), so Batch Details never needs typing into.
 import { abvTracker } from '../components/FermentationSection.jsx'
 import { blendGravity, gravityAfter } from './dilution'
+import { tinsethIbu, moreySrm, byName } from './beerCalcs'
 
 const n = (v) => (v == null || v === '' ? null : Number(v))
 
@@ -53,4 +54,30 @@ export function batchFigures(batch, sessions = []) {
     packFrom: dates[0] ?? null,
     packTo: dates[dates.length - 1] ?? null,
   }
+}
+
+// Estimated IBU and SRM for the batch from what actually went in on Brew Day. IBU is worked
+// out per turn (its own hops, post-boil gravity and volume), blended by volume and thinned by
+// dilution water; SRM uses all turns' grist over the final volume.
+export function batchIbuSrm(batch, ingredients) {
+  const alpha = byName(ingredients, 'alpha_acid_pct')
+  const colour = byName(ingredients, 'color_lovibond')
+  const turns = batch.brew_runs ?? []
+  const qty = (i) => n(i.actual_qty) ?? n(i.planned_qty) ?? 0
+  let ibuVol = 0, ibuSum = 0
+  for (const r of turns) {
+    const items = r.brew_run_ingredients ?? []
+    const hops = items
+      .filter((i) => i.section === 'kettle' || i.section === 'whirlpool')
+      .map((i) => ({ grams: qty(i), alphaPct: alpha.get(i.item_name), minutes: i.time_min }))
+    const ibu = tinsethIbu(hops, r.postboil_gravity, n(r.postboil_volume_l))
+    const vol = n(r.ko_flowmeter_l) ?? n(r.postboil_volume_l)
+    if (ibu != null && vol) { ibuSum += ibu * vol; ibuVol += vol }
+  }
+  const water = dilutionWater(batch)
+  const ibu = ibuVol ? (ibuSum / ibuVol) * (ibuVol / (ibuVol + water)) : null
+  const koVol = turns.reduce((a, r) => a + (n(r.ko_flowmeter_l) ?? 0), 0)
+  const finalVol = koVol ? koVol + water : n(batch.target_volume_l)
+  const malts = turns.flatMap((r) => (r.brew_run_ingredients ?? []).filter((i) => i.section === 'grist').map((i) => ({ grams: qty(i), lovibond: colour.get(i.item_name) })))
+  return { ibu, srm: moreySrm(malts, finalVol) }
 }

@@ -5,6 +5,7 @@ import {
   updateIngredientSections,
   updateIngredientPotentialPpg,
   updateIngredientAlphaAcid,
+  updateIngredientLovibond,
 } from '../lib/api'
 
 // Recipe-flow order — also used for the default sort/grouping below.
@@ -241,6 +242,13 @@ export default function IngredientsPage() {
     setIngredients((prev) => prev.map((i) => (i.id === ingredient.id ? updated : i)))
   }
 
+  async function saveLovibond(ingredient, value) {
+    const parsed = value === '' ? null : Number(value)
+    if (parsed === ingredient.color_lovibond) return
+    const updated = await updateIngredientLovibond(ingredient.id, parsed)
+    setIngredients((prev) => prev.map((i) => (i.id === ingredient.id ? updated : i)))
+  }
+
   async function saveAlphaAcid(ingredient, value) {
     const parsed = value === '' ? null : Number(value)
     if (parsed === ingredient.alpha_acid_pct) return
@@ -341,6 +349,7 @@ export default function IngredientsPage() {
                   </th>
                 ))}
                 <th style={stickyHeaderCellStyle}>Potential PPG</th>
+                <th style={stickyHeaderCellStyle}>Colour (°L)</th>
                 <th style={stickyHeaderCellStyle}>Alpha Acid %</th>
                 <th style={stickyHeaderCellStyle}>Unit</th>
                 <th style={stickyHeaderCellStyle}>Unleashed Code</th>
@@ -362,6 +371,9 @@ export default function IngredientsPage() {
                   ))}
                   <td>
                     <NumericTagCell applies={isMalt(i)} value={i.potential_ppg} onSave={(v) => savePotentialPpg(i, v)} />
+                  </td>
+                  <td>
+                    <NumericTagCell applies={isMalt(i)} value={i.color_lovibond} onSave={(v) => saveLovibond(i, v)} />
                   </td>
                   <td>
                     <NumericTagCell applies={isHops(i)} value={i.alpha_acid_pct} onSave={(v) => saveAlphaAcid(i, v)} />
