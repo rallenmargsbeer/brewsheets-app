@@ -404,3 +404,9 @@ tbody tr:hover td {
 
 .sc-chip-edit { cursor: pointer; }
 .sc-chip-edit:hover { outline: 2px solid #1a1a1a; outline-offset: 1px; }
+
+/* Move preview: the clash box floats so the schedule behind stays scrollable. */
+.sc-floating { position: fixed; right: 16px; bottom: 16px; width: min(440px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; z-index: 1000; border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); border: 1px solid var(--line); }
+.sc-floating .sc-dialog { max-width: none; }
+.sc-previewing td { pointer-events: none; }
+.sc-moved { outline: 3px dashed #d40000; outline-offset: -4px; }

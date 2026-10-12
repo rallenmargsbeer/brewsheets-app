@@ -234,10 +234,11 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
 
 // Sorts out a move's knock-on effects one at a time: each brew day it overfills (more than
 // 3 turns) or pushes onto a weekend is put to you, then everything moving is summarised.
-function MoveResolver({ resolver: r, runs, tankName, groupBeer, onChange, onSave, onClose }) {
-  const plan = useMemo(() => planMove(r.all, runs, r.moves), [r, runs])
+function MoveResolver({ resolver: r, plan, runs, tankName, groupBeer, onChange, onSave, onClose }) {
   const clashes = useMemo(() => brewDayClashes(r.all, plan, { maxTurns: 3, accepted: r.accepted }), [r, plan])
   const c = clashes[0]
+  const showDay = (date) => document.querySelector(`tr[data-day="${date}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  useEffect(() => { if (c) showDay(c.date) }, [c?.date])
   const choose = (text, move, acceptDate) =>
     onChange({
       ...r,
@@ -281,15 +282,17 @@ function MoveResolver({ resolver: r, runs, tankName, groupBeer, onChange, onSave
   ]
 
   return (
-    <div className="sc-overlay" onClick={onClose}>
-      <div className="sc-dialog" onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ margin: '0 0 0.5rem' }}>{r.label}</h3>
+    <div className="sc-floating">
+      <div className="sc-dialog">
+        <h3 style={{ margin: '0 0 0.25rem' }}>{r.label}</h3>
+        <div style={{ color: 'var(--ink2)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>The schedule behind shows the moves so far (dashed cells). Scroll it to check before choosing.</div>
         {c ? (
           <>
             <p className="sc-warn" style={{ marginTop: 0 }}>
               {c.reason === 'full'
                 ? `${fmtDay(c.date)} would have ${c.total} brew turns (${groupBeer(c.group.rows)} plus ${[...new Set(c.others.map((o) => groupBeer([o])))].join(', ') || 'others'}). The usual max is 3.`
                 : `${groupBeer(c.group.rows)} would be pushed to brew on ${fmtDay(c.date)}, a weekend.`}
+              {' '}<a href="#" onClick={(e) => { e.preventDefault(); showDay(c.date) }}>Show</a>
             </p>
             {clashes.length > 1 && <div style={{ color: 'var(--ink2)', fontSize: '0.85rem', marginBottom: 6 }}>{clashes.length - 1} more brew day{clashes.length === 2 ? '' : 's'} to sort out after this.</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -467,7 +470,7 @@ export default function SchedulePage() {
     const known = new Set(entries.map((e) => e.id))
     const all = [...entries, ...extraRows.filter((e) => !known.has(e.id))]
     const r = { label, moves: [move], all, accepted: new Set(), choices: [] }
-    const plan = planMove(all, runs, r.moves)
+    const plan = planMove(all, planRuns, r.moves)
     if (!plan.updates.length) return
     if (!plan.pushed.length && !plan.blocked.length && !brewDayClashes(all, plan, { accepted: r.accepted }).length) return saveMove(r, plan)
     setResolver(r)
@@ -537,31 +540,45 @@ export default function SchedulePage() {
     [tanks]
   )
 
-  const { beerOf, runs } = useMemo(
+  // Planning always works from the saved schedule; while a move is being sorted out the
+  // grid shows the schedule as it would be, with the moved cells marked.
+  const saved = useMemo(
     () => assignBeers(entries, { knownBeers: templates.map((t) => t.name), bookingBeer }),
     [entries, templates, bookingBeer]
+  )
+  const planRuns = saved.runs
+  const resolverPlan = useMemo(() => (resolver ? planMove(resolver.all, planRuns, resolver.moves) : null), [resolver, planRuns])
+  const shown = useMemo(() => {
+    if (!resolverPlan) return entries
+    const u = new Map(resolverPlan.updates.map((x) => [x.id, x]))
+    return entries.map((e) => (u.has(e.id) ? { ...e, ...u.get(e.id) } : e))
+  }, [entries, resolverPlan])
+  const movedIds = useMemo(() => new Set(resolverPlan?.updates.map((u) => u.id) ?? []), [resolverPlan])
+  const { beerOf, runs } = useMemo(
+    () => (shown === entries ? saved : assignBeers(shown, { knownBeers: templates.map((t) => t.name), bookingBeer })),
+    [shown, entries, saved, templates, bookingBeer]
   )
 
   const byCell = useMemo(() => {
     const m = new Map()
-    for (const e of entries) {
+    for (const e of shown) {
       const k = `${e.entry_date}|${e.slot}|${e.lane === 'tank' ? e.tank_id : e.lane}`
       m.set(k, [...(m.get(k) ?? []), e])
     }
     return m
-  }, [entries])
+  }, [shown])
 
   const dayCount = Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86400000) + 1
   const days = Array.from({ length: dayCount }, (_, i) => addDays(range.from, i))
   // Beers on the loaded schedule, for the colour key.
-  const weekBeers = [...new Set(entries.filter((e) => e.entry_date >= range.from && beerOf.get(e.id)).map((e) => beerOf.get(e.id)))].sort()
+  const weekBeers = [...new Set(shown.filter((e) => e.entry_date >= range.from && beerOf.get(e.id)).map((e) => beerOf.get(e.id)))].sort()
   const today = todayIso()
 
   // A cell's beer: its own job's beer, or for a tank, whatever is sitting in the tank then.
   function cellBeer(c, list, d, slot) {
     if (list[0] && beerOf.get(list[0].id)) return beerOf.get(list[0].id)
     if (c.lane === 'tank') return beerInTank(runs, c.tankId, d, slot)
-    if (c.group === 'pack' && list.length) return packBeer(list, d, slot, { entries, beerOf, runs, brightTankIds })
+    if (c.group === 'pack' && list.length) return packBeer(list, d, slot, { entries: shown, beerOf, runs, brightTankIds })
     return null
   }
   const brightTankIds = tanks.filter((t) => t.tank_type === 'BBT').map((t) => t.id)
@@ -617,7 +634,7 @@ export default function SchedulePage() {
         </div>
       )}
 
-      <div className="sc-scroll" ref={scrollRef} onScroll={onScroll}>
+      <div className={'sc-scroll' + (resolver ? ' sc-previewing' : '')} ref={scrollRef} onScroll={onScroll}>
         <table className="sc-grid">
           <thead>
             <tr>
@@ -632,6 +649,7 @@ export default function SchedulePage() {
               ['AM', 'PM'].map((slot) => (
                 <tr
                   key={d + slot}
+                  data-day={slot === 'AM' ? d : undefined}
                   className={(d === today && slot === 'AM' ? 'sc-today ' : '') + (d === today ? 'sc-todayrow ' : '') + (slot === 'PM' ? 'sc-pm ' : '') + (new Date(`${d}T00:00:00`).getDay() === 0 && slot === 'PM' ? 'sc-weekend' : '')}
                 >
                   <td className="sc-day">
@@ -650,7 +668,7 @@ export default function SchedulePage() {
                     return (
                       <td
                         key={c.key}
-                        className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '')}
+                        className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '') + (movedIds.size && list.some((e) => movedIds.has(e.id)) ? ' sc-moved' : '')}
                         style={(() => {
                           // A cell's own colours win over its beer's.
                           const own = list.find((x) => x.cell_bg || x.cell_fg)
@@ -807,7 +825,8 @@ export default function SchedulePage() {
       {resolver && (
         <MoveResolver
           resolver={resolver}
-          runs={runs}
+          plan={resolverPlan}
+          runs={planRuns}
           tankName={tankName}
           groupBeer={groupBeer}
           onChange={setResolver}
