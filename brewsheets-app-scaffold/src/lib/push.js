@@ -45,7 +45,7 @@ export function brewGroup(entries, runs, row) {
 // move: { rows, days, toTankId? } — shift `rows` by `days` and/or put their tank jobs in another
 // tank — or an array of them (extra moves chosen while resolving brewhouse clashes).
 // Returns { updates: [{ id, entry_date?, tank_id? }], pushed: [{ beer, tankId, days }], blocked: [{ beer, tankId }] }.
-//  - pushed: later brews moved to keep their turnaround gap (moving into another tank: at least a day).
+//  - pushed: later brews moved so they start at least the day after the moved brew leaves the tank.
 //  - blocked: earlier brews the move now overlaps (they're never pushed back in time).
 export function planMove(entries, runs, move) {
   const shiftOf = new Map() // entry id -> days
@@ -95,11 +95,10 @@ export function planMove(entries, runs, move) {
           if (sStart <= s.newEnd) blocked.push({ beer: stay.beer, tankId, from: stay.start.split('|')[0] })
           continue
         }
-        // Keep the turnaround the later brew had (moving into a new tank: at least a day).
-        const gap = s.sameTank ? Math.max(1, sStart - s.oldEnd) : 2
-        const needHalfDays = s.newEnd + gap - sStart
-        if (needHalfDays <= 0) continue
-        const push = Math.ceil(needHalfDays / 2)
+        // Only push when the tank isn't free in time: the next brew can go in the day after
+        // the moved beer's last job (e.g. filter Thu, brew Fri). Empty days in between soak up the move.
+        const push = Math.floor(s.newEnd / 2) + 1 - Math.floor(sStart / 2)
+        if (push <= 0) continue
         const key = `${tankId}|${stay.start}`
         if ((pushedByStay.get(key)?.days ?? 0) >= push) continue
         pushedByStay.set(key, { beer: stay.beer, tankId, days: push, from: stay.start.split('|')[0], ids: its.map((r) => r.id) })
