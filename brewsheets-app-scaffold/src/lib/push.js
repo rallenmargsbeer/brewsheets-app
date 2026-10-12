@@ -108,6 +108,7 @@ export function planMove(entries, runs, move) {
   }
 
   const byId = new Map(entries.map((e) => [e.id, e]))
+  const cellOf = placeTurns(entries, shiftOf)
   const updates = []
   for (const id of new Set([...shiftOf.keys(), ...tankOf.keys()])) {
     const e = byId.get(id)
@@ -116,7 +117,10 @@ export function planMove(entries, runs, move) {
     const u = { id }
     if (days) u.entry_date = addDays(e.entry_date, days)
     if (tankOf.has(id) && tankOf.get(id) !== e.tank_id) u.tank_id = tankOf.get(id)
-    if (u.entry_date || u.tank_id) updates.push(u)
+    const cell = cellOf.get(id)
+    if (cell && cell.slot !== e.slot) u.slot = cell.slot
+    if (cell && cell.lane !== e.lane) u.lane = cell.lane
+    if (u.entry_date || u.tank_id || u.slot || u.lane) updates.push(u)
   }
   const seen = new Set()
   return {
@@ -127,6 +131,29 @@ export function planMove(entries, runs, move) {
     pushed: [...pushedByStay.values()].map(({ ids, ...p }) => ({ ...p, days: Math.max(p.days, ...ids.map((id) => shiftOf.get(id) ?? 0)) })),
     blocked: blocked.filter((b) => (seen.has(b.beer + b.tankId) ? false : seen.add(b.beer + b.tankId))),
   }
+}
+
+// Brewhouse turn cells in the order they fill up on a day.
+const TURN_CELLS = [['AM', 'brew_1'], ['AM', 'brew_2'], ['PM', 'brew_1'], ['PM', 'brew_2']]
+
+// Brew turns that move onto a day keep their Brew 1 / Brew 2 cell if it's free, else take
+// the next free one, so they never land on top of a brew already there. id -> { slot, lane }
+function placeTurns(entries, shiftOf) {
+  const moved = entries.filter((e) => isBrewLane(e) && shiftOf.get(e.id))
+  const taken = new Map() // date -> Set of "slot|lane"
+  const take = (date, cell) => taken.set(date, (taken.get(date) ?? new Set()).add(cell))
+  for (const e of entries) if (isBrewLane(e) && !shiftOf.get(e.id)) take(e.entry_date, `${e.slot}|${e.lane}`)
+  const order = (a, b) => a.entry_date.localeCompare(b.entry_date) || a.slot.localeCompare(b.slot) || a.lane.localeCompare(b.lane)
+  const out = new Map()
+  for (const e of moved.sort(order)) {
+    const date = addDays(e.entry_date, shiftOf.get(e.id))
+    const used = taken.get(date) ?? new Set()
+    let cell = [e.slot, e.lane]
+    if (used.has(cell.join('|'))) cell = TURN_CELLS.find((c) => !used.has(c.join('|'))) ?? cell
+    take(date, cell.join('|'))
+    out.set(e.id, { slot: cell[0], lane: cell[1] })
+  }
+  return out
 }
 
 const isWeekend = (date) => [0, 6].includes(new Date(`${date}T00:00:00`).getDay())
