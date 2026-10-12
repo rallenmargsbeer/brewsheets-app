@@ -110,7 +110,7 @@ export function planMove(entries, runs, move) {
   const byId = new Map(entries.map((e) => [e.id, e]))
   const cellOf = placeTurns(entries, shiftOf)
   const updates = []
-  for (const id of new Set([...shiftOf.keys(), ...tankOf.keys()])) {
+  for (const id of new Set([...shiftOf.keys(), ...tankOf.keys(), ...cellOf.keys()])) {
     const e = byId.get(id)
     if (!e) continue
     const days = shiftOf.get(id) ?? 0
@@ -136,22 +136,27 @@ export function planMove(entries, runs, move) {
 // Brewhouse turn cells in the order they fill up on a day.
 const TURN_CELLS = [['AM', 'brew_1'], ['AM', 'brew_2'], ['PM', 'brew_1'], ['PM', 'brew_2']]
 
-// Brew turns that move onto a day keep their Brew 1 / Brew 2 cell if it's free, else take
-// the next free one, so they never land on top of a brew already there. id -> { slot, lane }
+// Lays out the brewhouse turns on each day a moved brew lands on, top to bottom:
+// 1. turns finishing a batch started the day before, 2. the brew moved in (it starts the day),
+// 3. brews already starting that day, which slide down a cell each. id -> { slot, lane }
 function placeTurns(entries, shiftOf) {
-  const moved = entries.filter((e) => isBrewLane(e) && shiftOf.get(e.id))
-  const taken = new Map() // date -> Set of "slot|lane"
-  const take = (date, cell) => taken.set(date, (taken.get(date) ?? new Set()).add(cell))
-  for (const e of entries) if (isBrewLane(e) && !shiftOf.get(e.id)) take(e.entry_date, `${e.slot}|${e.lane}`)
-  const order = (a, b) => a.entry_date.localeCompare(b.entry_date) || a.slot.localeCompare(b.slot) || a.lane.localeCompare(b.lane)
+  const turns = entries.filter(isBrewLane)
+  const dateOf = (e) => addDays(e.entry_date, shiftOf.get(e.id) ?? 0)
+  const days = new Set(turns.filter((e) => shiftOf.get(e.id)).map(dateOf))
+  const beersOn = new Map() // date -> Set of beer names brewing that day
+  for (const e of turns) beersOn.set(dateOf(e), (beersOn.get(dateOf(e)) ?? new Set()).add(nameKey(e.text)))
   const out = new Map()
-  for (const e of moved.sort(order)) {
-    const date = addDays(e.entry_date, shiftOf.get(e.id))
-    const used = taken.get(date) ?? new Set()
-    let cell = [e.slot, e.lane]
-    if (used.has(cell.join('|'))) cell = TURN_CELLS.find((c) => !used.has(c.join('|'))) ?? cell
-    take(date, cell.join('|'))
-    out.set(e.id, { slot: cell[0], lane: cell[1] })
+  for (const date of days) {
+    const carriesOver = (e) => beersOn.get(addDays(date, -1))?.has(nameKey(e.text))
+    const rank = (e) => (carriesOver(e) ? 0 : shiftOf.get(e.id) ? 1 : 2)
+    const cellNo = (e) => TURN_CELLS.findIndex(([slot, lane]) => slot === e.slot && lane === e.lane)
+    const list = turns
+      .filter((e) => dateOf(e) === date)
+      .sort((x, y) => rank(x) - rank(y) || x.entry_date.localeCompare(y.entry_date) || cellNo(x) - cellNo(y))
+    list.forEach((e, i) => {
+      const [slot, lane] = TURN_CELLS[Math.min(i, TURN_CELLS.length - 1)]
+      out.set(e.id, { slot, lane })
+    })
   }
   return out
 }
