@@ -2,12 +2,17 @@
 // from the Google sheet are stored in the beer_colours table (editable from the colour key);
 // a beer without saved colours gets a stable fallback picked from its name.
 
-// "8 Ball 1500L" and "ITP trial - 1000L" belong to "8 Ball" and "ITP trial".
-export const beerKey = (name) =>
-  String(name ?? '')
+// Full names that the schedule knows by a short one (same beer, same colour).
+const ALIASES = { 'in the pines': 'itp' }
+
+// "8 Ball 1500L" and "ITP trial - 1000L" belong to "8 Ball" and "ITP trial"; "In The Pines" is "ITP".
+export const beerKey = (name) => {
+  const k = String(name ?? '')
     .replace(/\s*-?\s*\d+\s*L$/i, '')
     .trim()
     .toLowerCase()
+  return ALIASES[k] ?? k
+}
 
 const FALLBACK = ['#e0bfe8', '#a9d8e2', '#f4b8b8', '#cbdc93', '#a9c8f0', '#f5b5d8', '#d6c7a2', '#b3e2ae', '#c3b8ec', '#f0cf86']
 let saved = new Map() // beerKey -> { bg, fg }
@@ -42,13 +47,15 @@ export const beerColour = (name) => beerStyle(name)?.bg ?? null
 export function assignBeers(entries, { knownBeers = [], bookingBeer = {} } = {}) {
   const names = new Map() // beerKey -> display name
   for (const n of knownBeers) names.set(beerKey(n), n)
-  for (const e of entries) if (e.lane === 'brew_1' || e.lane === 'brew_2') names.set(beerKey(e.text), e.text.replace(/\s*-?\s*\d+\s*L$/i, '').trim())
+  for (const e of entries) {
+    if ((e.lane === 'brew_1' || e.lane === 'brew_2') && !names.has(beerKey(e.text))) names.set(beerKey(e.text), e.text.replace(/\s*-?\s*\d+\s*L$/i, '').trim())
+  }
 
   const beerOf = new Map() // entry id -> beer display name
   const order = (a, b) => a.entry_date.localeCompare(b.entry_date) || (a.slot === b.slot ? 0 : a.slot === 'AM' ? -1 : 1)
 
   for (const e of entries) {
-    if (e.booking_id && bookingBeer[e.booking_id]) beerOf.set(e.id, bookingBeer[e.booking_id])
+    if (e.booking_id && bookingBeer[e.booking_id]) beerOf.set(e.id, names.get(beerKey(bookingBeer[e.booking_id])) ?? bookingBeer[e.booking_id])
     else if (e.lane === 'brew_1' || e.lane === 'brew_2') beerOf.set(e.id, names.get(beerKey(e.text)))
   }
 
