@@ -17,9 +17,10 @@ const locationLabel = (key) => (key.startsWith('unleashed|') ? key.slice(10).rep
 // Core range if Unleashed can't be read for the sub-group.
 const CORE_FALLBACK = ['ITP', 'Kolsch', 'Lager', 'Draught', 'Megsy', 'Mermid', 'Pale Ale', 'Red IPA', 'River Dog', 'Stout', 'Brown', 'Drift XPA']
 
-const FORMATS = [
-  { key: 'cube', title: 'Cubes', note: '16 × 375 mL' },
-  { key: 'keg', title: 'Kegs', note: '20 / 30 / 50 L' },
+const TABLES = [
+  { key: 'cube', title: 'Cubes', note: '16 × 375 mL', match: (r) => r.format === 'cube' },
+  { key: 'keg', title: '50 L kegs', match: (r) => r.format === 'keg' && r.size === 50 },
+  { key: 'kegsmall', title: '20 L & 30 L kegs', match: (r) => r.format === 'keg' && r.size !== 50, sizes: true },
 ]
 
 // Settings kept in this browser.
@@ -70,10 +71,14 @@ export default function StockPage() {
   const view = useMemo(() => {
     if (!data) return null
     const link = new Map(data.products.map((p) => [`${p.source}|${p.code.toLowerCase()}`, p]))
-    const find = (source, code, alt) => link.get(`${source}|${String(code).toLowerCase()}`) ?? (alt ? link.get(`${source}|${String(alt).toLowerCase()}`) : null)
+    // Transfers in transit carry Unleashed product codes.
+    const find = (source, code, alt) => {
+      const src = source === 'transit' ? 'unleashed' : source
+      return link.get(`${src}|${String(code).toLowerCase()}`) ?? (alt ? link.get(`${src}|${String(alt).toLowerCase()}`) : null)
+    }
     const counted = data.items.filter((it) => !mirrorsLm(it))
     const locations = [...new Set(counted.map(locationKey))].sort((a, b) => {
-      const rank = (k) => (k.startsWith('unleashed|') ? 0 : k === 'lm_3pl' ? 1 : 2)
+      const rank = (k) => (k.startsWith('unleashed|') ? 0 : k === 'transit' ? 1 : k === 'lm_3pl' ? 2 : 3)
       return rank(a) - rank(b) || a.localeCompare(b)
     })
 
@@ -162,8 +167,9 @@ export default function StockPage() {
     )
     for (const r of list) r.core = coreBeers.has(r.beer)
 
+    const transitRoutes = [...new Set(data.items.filter((it) => it.source === 'transit').map((it) => it.location))].join('\n')
     const beerNames = [...new Set(data.products.map((p) => p.beer))].sort()
-    return { locations, list, unmapped, beerNames, historyDays }
+    return { locations, list, unmapped, beerNames, historyDays, transitRoutes }
   }, [data, windowWeeks, incoming])
 
   const lastRun = data?.runs?.[0]
@@ -171,9 +177,16 @@ export default function StockPage() {
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
         <h1 style={{ marginBottom: 0 }}>Stock on hand</h1>
-        <button onClick={refresh} disabled={busy}>{busy ? 'Pulling stock and sales… (up to a minute)' : 'Refresh stock'}</button>
+        <div className="stock-print-title">
+          Weekly stock meeting · {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          <span> · sales rate over the last {windowWeeks} weeks · flagged under {target} weeks of cover</span>
+        </div>
+        <div className="stock-actions">
+          <button className="secondary" onClick={() => window.print()} disabled={!view}>Generate handout</button>
+          <button onClick={refresh} disabled={busy}>{busy ? 'Pulling stock and sales… (up to a minute)' : 'Refresh stock'}</button>
+        </div>
       </div>
-      <p style={{ color: 'var(--ink2)', marginTop: 4 }}>
+      <p className="stock-noprint" style={{ color: 'var(--ink2)', marginTop: 4 }}>
         Available stock from Unleashed and Liquid Mix, and sales from Unleashed (read-only). Last refresh: {when(lastRun?.finished_at ?? lastRun?.started_at)}
       </p>
       {msg && <p style={{ color: msg.bad ? '#b00020' : '#1b6e2e' }}>{msg.text}</p>}
@@ -182,7 +195,7 @@ export default function StockPage() {
 
       {view && (
         <>
-          <div className="stock-controls">
+          <div className="stock-controls stock-noprint">
             <label>Sales rate over
               <select value={windowWeeks} onChange={(e) => setWindowWeeks(Number(e.target.value))}>
                 {[4, 8, 13].map((w) => <option key={w} value={w}>last {w} weeks</option>)}
@@ -198,21 +211,21 @@ export default function StockPage() {
             </span>
           </div>
 
-          {FORMATS.map((f) => {
-            const all = view.list.filter((r) => r.format === f.key)
+          {TABLES.map((f) => {
+            const all = view.list.filter(f.match)
             const core = all.filter((r) => r.core).sort((a, b) => (a.cover ?? 1e9) - (b.cover ?? 1e9))
             const other = all.filter((r) => !r.core).sort((a, b) => a.beer.localeCompare(b.beer) || b.size - a.size)
             const rows = [...core, ...other]
             const locs = view.locations.filter((l) => rows.some((r) => r.at[l]))
             return (
               <section key={f.key} className={`stock-card stock-${f.key}`}>
-                <h2>{f.title} <span>{f.note}</span></h2>
+                <h2>{f.title} {f.note && <span>{f.note}</span>}</h2>
                 <div className="stock-scroll">
                   <table className="stock-table">
                     <thead>
                       <tr>
                         <th className="stock-beer">Beer</th>
-                        {locs.map((l) => <th key={l}>{locationLabel(l)}</th>)}
+                        {locs.map((l) => <th key={l} className={l === 'transit' ? 'stock-transit' : ''} title={l === 'transit' ? view.transitRoutes : undefined}>{locationLabel(l)}</th>)}
                         <th className="stock-total">Total</th>
                         <th>Sold / wk</th>
                         <th>Packaging</th>
@@ -227,8 +240,8 @@ export default function StockPage() {
                             <tr key="other" className="stock-divider"><td colSpan={locs.length + 5}>Seasonal &amp; other</td></tr>
                           ),
                           <tr key={r.key} className={r.core ? '' : 'stock-other'}>
-                            <td className="stock-beer">{r.beer}{r.size && <span className={`stock-size s${r.size}`}>{r.size} L</span>}</td>
-                            {locs.map((l) => <td key={l} className={r.at[l] < 0 ? 'stock-neg' : ''}>{num(r.at[l])}</td>)}
+                            <td className="stock-beer">{r.beer}{f.sizes && <span className={`stock-size s${r.size}`}>{r.size} L</span>}</td>
+                            {locs.map((l) => <td key={l} className={(r.at[l] < 0 ? 'stock-neg ' : '') + (l === 'transit' ? 'stock-transit' : '')}>{num(r.at[l])}</td>)}
                             <td className={'stock-total' + (r.total < 0 ? ' stock-neg' : '')}>{num(r.total) || '0'}</td>
                             <td title={r.lmEstimated ? 'LM Wholesale part estimated from our sales to them' : undefined}>
                               {r.weekly ? r.weekly.toFixed(r.weekly < 10 ? 1 : 0) : ''}{r.lmEstimated ? '*' : ''}
@@ -264,11 +277,11 @@ export default function StockPage() {
             {view.historyDays < 14
               ? ` * LM Wholesale's part is estimated from what we sell them until there are 2 weeks of daily stock snapshots (${view.historyDays} day${view.historyDays === 1 ? '' : 's'} so far).`
               : ''}
-            {' '}Unleashed's Liquid Mix 3PL warehouse is left out so it isn't counted twice.
+            {' '}In transit = Unleashed warehouse transfers not yet completed (already taken out of the sending warehouse's available stock). Unleashed's Liquid Mix 3PL warehouse is left out so it isn't counted twice.
           </p>
 
           {view.unmapped.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
+            <div className="stock-noprint" style={{ marginTop: '1rem' }}>
               <button className="secondary" onClick={() => setShowUnmapped((s) => !s)}>
                 {showUnmapped ? 'Hide' : 'Show'} {view.unmapped.length} product{view.unmapped.length === 1 ? '' : 's'} not linked to a beer
               </button>

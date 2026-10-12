@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient'
 
-export const SOURCE_LABEL = { unleashed: 'Unleashed', lm_3pl: 'LM 3PL', lm_wholesale: 'LM Wholesale' }
+export const SOURCE_LABEL = { unleashed: 'Unleashed', lm_3pl: 'LM 3PL', lm_wholesale: 'LM Wholesale', transit: 'In transit' }
 
 // Supabase returns at most 1000 rows per request; page through bigger tables.
 async function fetchAll(build) {
