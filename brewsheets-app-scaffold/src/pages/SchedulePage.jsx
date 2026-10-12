@@ -251,11 +251,13 @@ function MoveResolver({ resolver: r, runs, tankName, groupBeer, onChange, onSave
   let options = []
   if (c) {
     const beer = groupBeer(c.group.rows)
-    const k = daysToNextFreeDay(r.all, plan, c.group, { maxTurns: 3 })
-    if (k) {
-      const to = fmtDay(addDays(c.date, k))
-      options.push({ text: `Brew ${beer} on ${to} instead`, move: { rows: c.group.rows, days: shiftNow(c.group.rows) + k, toTankId: c.group.toTankId } })
-    }
+    const moveBy = (k) => ({ rows: c.group.rows, days: shiftNow(c.group.rows) + k, toTankId: c.group.toTankId })
+    // The next weekday, busy or not (you then sort out the brews already there)...
+    const kNext = daysToNextFreeDay(r.all, plan, c.group, { maxTurns: Infinity })
+    if (kNext) options.push({ text: `Brew ${beer} on ${fmtDay(addDays(c.date, kNext))}`, move: moveBy(kNext) })
+    // ...and the first weekday with room for all its turns, if that's later.
+    const kFree = daysToNextFreeDay(r.all, plan, c.group, { maxTurns: 3 })
+    if (kFree && kFree !== kNext) options.push({ text: `Brew ${beer} on ${fmtDay(addDays(c.date, kFree))} (first day with room)`, move: moveBy(kFree) })
     // The brew(s) already on that day, unless it's the brew you're moving.
     const rootIds = new Set(plan.groups.filter((g) => g.root).flatMap((g) => g.rows.map((x) => x.id)))
     const ownIds = new Set(c.group.rows.map((x) => x.id))
@@ -294,7 +296,7 @@ function MoveResolver({ resolver: r, runs, tankName, groupBeer, onChange, onSave
               {options.map((o) => (
                 <button key={o.text} onClick={() => choose(o.text, o.move, o.accept)}>{o.text}</button>
               ))}
-              {!options.length && <div className="sc-warn">No free weekday found in the next 30 days. Cancel and move it by hand.</div>}
+              {!options.length && <div className="sc-warn">No free weekday found in the next 60 days. Cancel and move it by hand.</div>}
               <button className="secondary" onClick={onClose}>Cancel the move</button>
             </div>
           </>
