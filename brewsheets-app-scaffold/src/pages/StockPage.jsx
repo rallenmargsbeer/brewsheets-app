@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { listStock, refreshStock, mapStockProduct, guessFormat, SOURCE_LABEL } from '../lib/stock'
+import { listStock, refreshStock, mapStockProduct, guessFormat, kegSize, SOURCE_LABEL } from '../lib/stock'
 import { loadIncoming, beerMatch, weeksOfCover } from '../lib/incoming'
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Perth', dateStyle: 'medium', timeStyle: 'short' }) : 'never')
@@ -77,18 +77,21 @@ export default function StockPage() {
       return rank(a) - rank(b) || a.localeCompare(b)
     })
 
-    // Stock per beer and format, by location.
-    const rows = new Map() // "beer|format" -> row
-    const rowOf = (beer, format) => {
-      const k = `${beer}|${format}`
-      if (!rows.has(k)) rows.set(k, { beer, format, at: {}, total: 0, sold: 0, toLm: 0, lmDep: null })
+    // Stock per beer and format (kegs split by size), by location.
+    const rows = new Map() // "beer|format|size" -> row
+    const lineKey = (p, code, description) => `${p.beer}|${p.format}|${p.format === 'keg' ? kegSize(code, description) : ''}`
+    const rowOf = (k) => {
+      if (!rows.has(k)) {
+        const [beer, format, size] = k.split('|')
+        rows.set(k, { key: k, beer, format, size: size ? Number(size) : null, at: {}, total: 0, sold: 0, toLm: 0, lmDep: null })
+      }
       return rows.get(k)
     }
     const unmapped = []
     for (const it of counted) {
       const p = find(it.source, it.code, it.alt_code)
       if (!p) { if (it.available || it.on_hand) unmapped.push(it); continue }
-      const r = rowOf(p.beer, p.format)
+      const r = rowOf(lineKey(p, it.code, it.description ?? ''))
       const loc = locationKey(it)
       r.at[loc] = (r.at[loc] ?? 0) + Number(it.available)
       r.total += Number(it.available)
@@ -102,10 +105,10 @@ export default function StockPage() {
       if (s.sale_date <= from) continue
       const p = find('unleashed', s.code)
       if (!p) continue
-      const r = rowOf(p.beer, p.format)
+      const k = lineKey(p, s.code)
+      const r = rowOf(k)
       if (isLmWholesale(s.customer)) {
         r.toLm += Number(s.qty)
-        const k = `${p.beer}|${p.format}`
         toLmByDay.set(k, [...(toLmByDay.get(k) ?? []), { date: s.sale_date, qty: Number(s.qty) }])
       } else r.sold += Number(s.qty)
     }
@@ -116,7 +119,8 @@ export default function StockPage() {
       if (h.snap_date <= from) continue
       const p = find('lm_wholesale', h.code, h.alt_code)
       if (!p) continue
-      const k = `${p.beer}|${p.format}`
+      // LM Wholesale's number codes don't carry a size: they're 50 L kegs.
+      const k = lineKey(p, h.code)
       const m = snaps.get(k) ?? new Map()
       m.set(h.snap_date, (m.get(h.snap_date) ?? 0) + Number(h.available))
       snaps.set(k, m)
@@ -133,15 +137,14 @@ export default function StockPage() {
         const inflow = (toLmByDay.get(k) ?? []).filter((x) => x.date > dates[i - 1] && x.date <= dates[i]).reduce((a, x) => a + x.qty, 0)
         dep += Math.max(0, m.get(dates[i - 1]) + inflow - m.get(dates[i]))
       }
-      const [beer, format] = k.split('|')
-      rowOf(beer, format).lmDep = (dep / span) * 7
+      rowOf(k).lmDep = (dep / span) * 7
     }
 
     const list = [...rows.values()].map((r) => {
       // Until there's enough snapshot history, what we sell LM Wholesale stands in for what they sell on.
       const lmWeekly = r.lmDep ?? r.toLm / windowWeeks
       const weekly = r.sold / windowWeeks + lmWeekly
-      const coming = incoming.filter((i) => i.format === r.format && beerMatch(i.beer) === beerMatch(r.beer))
+      const coming = incoming.filter((i) => i.format === r.format && (r.format !== 'keg' || i.size === r.size) && beerMatch(i.beer) === beerMatch(r.beer))
       return {
         ...r,
         weekly,
@@ -198,7 +201,7 @@ export default function StockPage() {
           {FORMATS.map((f) => {
             const all = view.list.filter((r) => r.format === f.key)
             const core = all.filter((r) => r.core).sort((a, b) => (a.cover ?? 1e9) - (b.cover ?? 1e9))
-            const other = all.filter((r) => !r.core).sort((a, b) => b.total - a.total)
+            const other = all.filter((r) => !r.core).sort((a, b) => a.beer.localeCompare(b.beer) || b.size - a.size)
             const rows = [...core, ...other]
             const locs = view.locations.filter((l) => rows.some((r) => r.at[l]))
             return (
@@ -223,8 +226,8 @@ export default function StockPage() {
                           r === other[0] && (
                             <tr key="other" className="stock-divider"><td colSpan={locs.length + 5}>Seasonal &amp; other</td></tr>
                           ),
-                          <tr key={r.beer} className={r.core ? '' : 'stock-other'}>
-                            <td className="stock-beer">{r.beer}</td>
+                          <tr key={r.key} className={r.core ? '' : 'stock-other'}>
+                            <td className="stock-beer">{r.beer}{r.size && <span className={`stock-size s${r.size}`}>{r.size} L</span>}</td>
                             {locs.map((l) => <td key={l} className={r.at[l] < 0 ? 'stock-neg' : ''}>{num(r.at[l])}</td>)}
                             <td className={'stock-total' + (r.total < 0 ? ' stock-neg' : '')}>{num(r.total) || '0'}</td>
                             <td title={r.lmEstimated ? 'LM Wholesale part estimated from our sales to them' : undefined}>

@@ -447,3 +447,7 @@ tbody tr:hover td {
 .stock-coming span { color: var(--ink2); font-weight: 400; }
 .stock-divider td { background: #f1efe9 !important; text-align: left !important; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink2); font-weight: 700; padding: 0.3rem 0.6rem; }
 .stock-other td { color: #5f6863; }
+.stock-size { margin-left: 0.4rem; padding: 0.05rem 0.4rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; vertical-align: 1px; }
+.stock-size.s50 { background: #f5e8d9; color: #6b3a0e; }
+.stock-size.s30 { background: #e6e1f3; color: #46377a; }
+.stock-size.s20 { background: #dcefe9; color: #1f5a4a; }

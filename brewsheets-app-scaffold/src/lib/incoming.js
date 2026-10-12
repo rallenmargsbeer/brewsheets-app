@@ -39,7 +39,9 @@ export async function loadIncoming({ days = 120 } = {}) {
     const { entry_date: date, slot, lane } = list[0]
     const beer = packBeer(list, date, slot, { entries, beerOf, runs, brightTankIds })
     const qty = list.reduce((a, e) => a + packCount(e.text), 0)
-    if (beer && qty) out.push({ beer, format: lane.startsWith('canning') ? 'cube' : 'keg', date, qty })
+    // Kegging cells may name a size ("45 x 50L", "20 x 30L"); otherwise they're 50 L kegs.
+    const size = Number(/(\d{2})\s*l\b/i.exec(list.map((e) => e.text).join(' '))?.[1] ?? 50)
+    if (beer && qty) out.push({ beer, format: lane.startsWith('canning') ? 'cube' : 'keg', size, date, qty })
   }
   return out.sort((a, b) => a.date.localeCompare(b.date))
 }
