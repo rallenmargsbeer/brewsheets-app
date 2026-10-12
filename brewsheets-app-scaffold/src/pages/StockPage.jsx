@@ -14,6 +14,9 @@ const mirrorsLm = (it) => it.source === 'unleashed' && /liquid mix/i.test(it.loc
 const locationKey = (it) => (it.source === 'unleashed' ? `unleashed|${it.location}` : it.source)
 const locationLabel = (key) => (key.startsWith('unleashed|') ? key.slice(10).replace(/ MRBC Brewery$/, '') : SOURCE_LABEL[key])
 
+// Core range if Unleashed can't be read for the sub-group.
+const CORE_FALLBACK = ['ITP', 'Kolsch', 'Lager', 'Draught', 'Megsy', 'Mermid', 'Pale Ale', 'Red IPA', 'River Dog', 'Stout', 'Brown', 'Drift XPA']
+
 const FORMATS = [
   { key: 'cube', title: 'Cubes', note: '16 × 375 mL' },
   { key: 'keg', title: 'Kegs', note: '20 / 30 / 50 L' },
@@ -148,6 +151,14 @@ export default function StockPage() {
       }
     }).filter((r) => r.total || r.weekly || r.coming.length)
 
+    // Weeks of cover is for the core range only: a beer is core if any of its Unleashed codes is.
+    const coreBeers = new Set(
+      data.core?.size
+        ? data.products.filter((p) => p.source === 'unleashed' && data.core.has(p.code.toLowerCase())).map((p) => p.beer)
+        : CORE_FALLBACK
+    )
+    for (const r of list) r.core = coreBeers.has(r.beer)
+
     const beerNames = [...new Set(data.products.map((p) => p.beer))].sort()
     return { locations, list, unmapped, beerNames, historyDays }
   }, [data, windowWeeks, incoming])
@@ -185,7 +196,10 @@ export default function StockPage() {
           </div>
 
           {FORMATS.map((f) => {
-            const rows = view.list.filter((r) => r.format === f.key).sort((a, b) => (a.cover ?? 1e9) - (b.cover ?? 1e9))
+            const all = view.list.filter((r) => r.format === f.key)
+            const core = all.filter((r) => r.core).sort((a, b) => (a.cover ?? 1e9) - (b.cover ?? 1e9))
+            const other = all.filter((r) => !r.core).sort((a, b) => b.total - a.total)
+            const rows = [...core, ...other]
             const locs = view.locations.filter((l) => rows.some((r) => r.at[l]))
             return (
               <section key={f.key} className={`stock-card stock-${f.key}`}>
@@ -205,8 +219,11 @@ export default function StockPage() {
                     <tbody>
                       {rows.map((r) => {
                         const c = coverClass(r.cover, target)
-                        return (
-                          <tr key={r.beer}>
+                        return [
+                          r === other[0] && (
+                            <tr key="other" className="stock-divider"><td colSpan={locs.length + 5}>Seasonal &amp; other</td></tr>
+                          ),
+                          <tr key={r.beer} className={r.core ? '' : 'stock-other'}>
                             <td className="stock-beer">{r.beer}</td>
                             {locs.map((l) => <td key={l} className={r.at[l] < 0 ? 'stock-neg' : ''}>{num(r.at[l])}</td>)}
                             <td className={'stock-total' + (r.total < 0 ? ' stock-neg' : '')}>{num(r.total) || '0'}</td>
@@ -220,15 +237,15 @@ export default function StockPage() {
                               {r.coming.length > 2 && <div className="stock-muted">+{r.coming.length - 2} more</div>}
                             </td>
                             <td className="stock-cover">
-                              {r.cover == null ? <span className="stock-muted">no sales</span> : (
+                              {!r.core ? null : r.cover == null ? <span className="stock-muted">no sales</span> : (
                                 <div className={`stock-bar ${c}`}>
                                   <div style={{ width: `${Math.min(100, (r.cover / (target * 3)) * 100)}%` }} />
                                   <span>{r.cover >= 26 ? '26+' : r.cover < 10 ? r.cover.toFixed(1) : Math.round(r.cover)}</span>
                                 </div>
                               )}
                             </td>
-                          </tr>
-                        )
+                          </tr>,
+                        ]
                       })}
                       {!rows.length && <tr><td colSpan={locs.length + 5} className="stock-muted">No {f.title.toLowerCase()} in stock.</td></tr>}
                     </tbody>
@@ -239,7 +256,7 @@ export default function StockPage() {
           })}
 
           <p className="stock-muted" style={{ fontSize: '0.8rem' }}>
-            Sold / wk = Unleashed sales to everyone except LM Wholesale, plus what leaves LM Wholesale.
+            Weeks of cover is shown for the core range. Sold / wk = Unleashed sales to everyone except LM Wholesale, plus what leaves LM Wholesale.
             Weeks of cover counts packaging on the schedule from its day (canning counts are cubes, kegging counts are kegs).
             {view.historyDays < 14
               ? ` * LM Wholesale's part is estimated from what we sell them until there are 2 weeks of daily stock snapshots (${view.historyDays} day${view.historyDays === 1 ? '' : 's'} so far).`

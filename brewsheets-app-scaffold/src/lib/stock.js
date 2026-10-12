@@ -15,15 +15,23 @@ async function fetchAll(build) {
 
 export async function listStock() {
   const since = new Date(Date.now() - 92 * 86400000).toISOString().slice(0, 10)
-  const [items, products, runs, sales, history] = await Promise.all([
+  const [items, products, runs, sales, history, core] = await Promise.all([
     fetchAll(() => supabase.from('stock_items').select('source, location, code, alt_code, description, product_group, on_hand, allocated, on_order, available, pulled_at')),
     fetchAll(() => supabase.from('stock_products').select('*')),
     supabase.from('stock_sync_runs').select('*').order('id', { ascending: false }).limit(5),
     fetchAll(() => supabase.from('stock_sales').select('sale_date, code, customer, qty').gte('sale_date', since)),
     fetchAll(() => supabase.from('stock_history').select('snap_date, code, alt_code, available').eq('source', 'lm_wholesale').gte('snap_date', since).order('snap_date')),
+    coreCodes(),
   ])
   if (runs.error) throw runs.error
-  return { items, products, runs: runs.data, sales, history }
+  return { items, products, runs: runs.data, sales, history, core }
+}
+
+// Unleashed codes in the "Core Range" product sub-group (from the nightly Unleashed sync).
+// Empty if this account can't read it; the page then falls back to a fixed list.
+async function coreCodes() {
+  const { data } = await supabase.from('unl_dataset').select('data').eq('key', 'products').maybeSingle()
+  return new Set((data?.data ?? []).filter((p) => p.range === 'Core Range').map((p) => p.code.toLowerCase()))
 }
 
 // Pulls fresh stock from Unleashed and Liquid Mix (read-only) via the stock-sync function.

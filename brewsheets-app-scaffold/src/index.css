@@ -445,3 +445,5 @@ tbody tr:hover td {
 .stock-muted { color: var(--ink2); }
 .stock-coming { font-size: 0.82rem; color: #1b6e2e; font-weight: 600; }
 .stock-coming span { color: var(--ink2); font-weight: 400; }
+.stock-divider td { background: #f1efe9 !important; text-align: left !important; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink2); font-weight: 700; padding: 0.3rem 0.6rem; }
+.stock-other td { color: #5f6863; }
