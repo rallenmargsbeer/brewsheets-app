@@ -1,14 +1,13 @@
 import { useState } from 'react'
-import { platoToSg, sgToPlato, waterForGravity, gravityAfter, waterForAbv, abvAfter } from '../lib/dilution'
+import { waterForGravity, gravityAfter, waterForAbv, abvAfter } from '../lib/dilution'
 
 const MODES = [
   { key: 'plato', label: 'Gravity (°P)', unit: '°P', dp: 2 },
-  { key: 'sg', label: 'Gravity (SG)', unit: '', dp: 4 },
   { key: 'abv', label: 'ABV (%)', unit: '%', dp: 2 },
 ]
 
 // Standalone dilution calculator: how much water to hit a target, or where a given amount of
-// water lands you. Gravity in °P or SG, or ABV.
+// water lands you. Gravity in °P, or ABV.
 export default function DilutionPage() {
   const [mode, setMode] = useState('plato')
   const [volume, setVolume] = useState('')
@@ -18,12 +17,10 @@ export default function DilutionPage() {
   const m = MODES.find((x) => x.key === mode)
 
   const v = Number(volume), c = Number(current), t = Number(target), w = Number(water)
-  const toP = (x) => (mode === 'sg' ? sgToPlato(x) : x)
-  const fromP = (x) => (mode === 'sg' ? platoToSg(x) : x)
-  const need = mode === 'abv' ? waterForAbv(v, c, t) : waterForGravity(v, toP(c), toP(t))
-  const after = !water ? null : mode === 'abv' ? abvAfter(v, c, w) : (() => { const g = gravityAfter(v, toP(c), w); return g == null ? null : fromP(g) })()
+  const need = mode === 'abv' ? waterForAbv(v, c, t) : waterForGravity(v, c, t)
+  const after = !water ? null : mode === 'abv' ? abvAfter(v, c, w) : gravityAfter(v, c, w)
   const fmt = (x) => `${Number(x).toFixed(m.dp)}${m.unit ? ' ' + m.unit : ''}`
-  const placeholder = mode === 'sg' ? '1.048' : mode === 'abv' ? '5.6' : '12.0'
+  const placeholder = mode === 'abv' ? '5.6' : '12.0'
 
   return (
     <div style={{ maxWidth: 720 }}>
@@ -39,8 +36,8 @@ export default function DilutionPage() {
       <section className="bd-card">
         <div className="dil-grid">
           <label>Current volume (L)<input type="number" min="0" value={volume} onChange={(e) => setVolume(e.target.value)} placeholder="5000" /></label>
-          <label>Current {mode === 'abv' ? 'ABV (%)' : `gravity (${mode === 'sg' ? 'SG' : '°P'})`}<input type="number" step="any" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder={placeholder} /></label>
-          <label>Target {mode === 'abv' ? 'ABV (%)' : `gravity (${mode === 'sg' ? 'SG' : '°P'})`}<input type="number" step="any" value={target} onChange={(e) => setTarget(e.target.value)} /></label>
+          <label>Current {mode === 'abv' ? 'ABV (%)' : 'gravity (°P)'}<input type="number" step="any" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder={placeholder} /></label>
+          <label>Target {mode === 'abv' ? 'ABV (%)' : 'gravity (°P)'}<input type="number" step="any" value={target} onChange={(e) => setTarget(e.target.value)} /></label>
         </div>
         <div className="dil-result">
           {need == null ? (
@@ -62,7 +59,7 @@ export default function DilutionPage() {
           {after == null ? <span className="stock-muted">Uses the current volume and {mode === 'abv' ? 'ABV' : 'gravity'} above.</span> : <>→ <strong>{fmt(after)}</strong> at {Math.round(v + w).toLocaleString()} L</>}
         </div>
       </section>
-      <p style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>Gravity is diluted in SG points ((SG − 1) × 1000), which scale with the extract in solution; ABV scales directly with volume.</p>
+      <p style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>Gravity dilution allows for °P not scaling exactly with volume (it's worked out from the extract in solution); ABV scales directly with volume.</p>
     </div>
   )
 }
