@@ -133,6 +133,57 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // ---- Daily snapshot of every source's current stock (one per day; a rerun replaces it)
+  try {
+    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10) // Perth date
+    const { data: now } = await admin.from('stock_items').select('source, location, code, alt_code, available')
+    if (now?.length) {
+      await admin.from('stock_history').delete().eq('snap_date', today)
+      const { error } = await admin.from('stock_history').insert(now.map((r) => ({ ...r, snap_date: today })))
+      if (error) throw error
+    }
+  } catch (e) {
+    results.history_note = 'snapshot failed: ' + String((e as Error).message || e)
+  }
+
+  // ---- Unleashed sales orders for the last 13 weeks (read-only), summed per day, product and customer
+  try {
+    const id = env('UNLEASHED_API_ID'), key = env('UNLEASHED_API_KEY')
+    if (!id || !key) throw new Error('Unleashed credentials not set')
+    const since = new Date(Date.now() - 91 * 86400000).toISOString().slice(0, 10)
+    const orders = await getAll('SalesOrders', { startDate: since }, id, key)
+    const msDate = (v: string) => {
+      const m = /-?\d+/.exec(String(v || ''))
+      return m ? new Date(parseInt(m[0], 10) + 8 * 3600 * 1000).toISOString().slice(0, 10) : null
+    }
+    const sums = new Map<string, { sale_date: string; code: string; customer: string; qty: number }>()
+    for (const o of orders) {
+      if (!['Completed', 'Placed', 'Backordered', 'Dispatched'].includes(o.OrderStatus)) continue
+      const d = msDate(o.OrderDate)
+      if (!d || d < since) continue
+      const customer = o.Customer?.CustomerName || ''
+      for (const l of o.SalesOrderLines || []) {
+        const code = String(l.Product?.ProductCode || '').trim()
+        const qty = Number(l.OrderQuantity || 0)
+        if (!code || !qty) continue
+        const k = `${d}|${code}|${customer}`
+        const e = sums.get(k) ?? { sale_date: d, code, customer, qty: 0 }
+        e.qty += qty
+        sums.set(k, e)
+      }
+    }
+    if (!sums.size) throw new Error('no sales lines returned; existing sales kept')
+    await admin.from('stock_sales').delete().gte('sale_date', '1900-01-01')
+    const rows = [...sums.values()]
+    for (let i = 0; i < rows.length; i += 1000) {
+      const { error } = await admin.from('stock_sales').insert(rows.slice(i, i + 1000))
+      if (error) throw error
+    }
+    results.sales_note = `${orders.length} orders, ${rows.length} sales lines`
+  } catch (e) {
+    results.sales_note = 'sales pull failed: ' + String((e as Error).message || e)
+  }
+
   const failed = Object.entries(results).filter(([k]) => !k.endsWith('_note')).map(([, v]) => v).filter((r) => r.startsWith('error')).length
   const detail = Object.entries(results).map(([k, v]) => `${k}: ${v}`).join(' · ')
   await admin.from('stock_sync_runs').update({ finished_at: new Date().toISOString(), status: failed === 3 ? 'error' : failed ? 'partial' : 'ok', detail: detail.slice(0, 1000) }).eq('id', runId)
