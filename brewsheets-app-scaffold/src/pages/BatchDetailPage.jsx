@@ -370,6 +370,15 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
   // The first stage whose confirmed timestamp isn't set yet is the active,
   // editable one — everything before it is confirmed+locked, everything after
   // it isn't reachable yet.
+  // Target KO pH range from the recipe, e.g. "5.0 to 5.2" (or one end of it).
+  const koPhRange = (() => {
+    const lo = recipe?.target_ko_ph_min, hi = recipe?.target_ko_ph_max
+    if (lo != null && hi != null) return `${lo} to ${hi}`
+    if (lo != null) return `≥ ${lo}`
+    if (hi != null) return `≤ ${hi}`
+    return null
+  })()
+
   const activeIndex = STAGES.findIndex((s) => !form[s.confirmedField])
   const allConfirmed = activeIndex === -1
 
@@ -664,9 +673,10 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
 
               {s.key === 'knockout' && (
                 <>
-                  {(recipe?.ko_temp != null || estimatedIBU != null) && (
+                  {(recipe?.ko_temp != null || estimatedIBU != null || koPhRange) && (
                     <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                       {recipe?.ko_temp != null && <TargetValue label="Target KO Temp" value={recipe.ko_temp} unit="°C" />}
+                      {koPhRange && <TargetValue label="Target KO pH" value={koPhRange} unit="" />}
                       <TargetValue
                         label="IBU (est., Tinseth)"
                         value={estimatedIBU != null ? estimatedIBU.toFixed(0) : null}
@@ -695,6 +705,12 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
                   {fld('ko_flowmeter_l', 'Flowmeter (L)', 'number', 120)}
                   {fld('whirlpool_gravity', 'Gravity', 'number', 110)}
                   {fld('whirlpool_ph', 'pH', 'number', 100)}
+                  {koPhRange && form.whirlpool_ph !== '' && form.whirlpool_ph != null && (() => {
+                    const ph = Number(form.whirlpool_ph)
+                    const lo = Number(recipe.target_ko_ph_min), hi = Number(recipe.target_ko_ph_max)
+                    const out = (recipe.target_ko_ph_min != null && ph < lo) || (recipe.target_ko_ph_max != null && ph > hi)
+                    return <span style={{ marginLeft: '0.5rem', fontWeight: 600, color: out ? '#b00020' : '#1b6e2e' }}>{out ? `Outside ${koPhRange}` : 'In range'}</span>
+                  })()}
                   {isLastTurn && (
                     <DilutionPrompt
                       turns={[...otherRuns, { ...form, run_number: runNumber }]}

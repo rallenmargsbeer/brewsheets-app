@@ -22,6 +22,8 @@ const emptyRecipe = {
   target_fg: '',
   target_abv: '',
   ko_temp: '',
+  target_ko_ph_min: '',
+  target_ko_ph_max: '',
   target_strike_temp: '',
   target_mash_ph: '',
   liquor_grist_ratio: 3.0,
@@ -372,6 +374,8 @@ export default function RecipeEditPage() {
           <Field label="Step 3 (40-60) temp" value={recipe.mash_step_3_temp} onChange={(v) => updateField('mash_step_3_temp', v)} />
           <Field label="Mash out temp" value={recipe.mash_out_temp} onChange={(v) => updateField('mash_out_temp', v)} />
           <Field label="KO temp" value={recipe.ko_temp} onChange={(v) => updateField('ko_temp', v)} />
+          <Field label="Target KO pH (min)" value={recipe.target_ko_ph_min} onChange={(v) => updateField('target_ko_ph_min', v)} />
+          <Field label="Target KO pH (max)" value={recipe.target_ko_ph_max} onChange={(v) => updateField('target_ko_ph_max', v)} />
         </div>
       </Section>
 
