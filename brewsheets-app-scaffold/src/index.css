@@ -535,3 +535,7 @@ p.bd-empty { color: var(--ink2); }
 .calc-buffer label { display: flex; flex-direction: column; gap: 0.2rem; }
 .calc-buffer input { width: 90px; }
 .calc-buffer span { flex: 1; min-width: 220px; }
+.ing-add { padding: 0.25rem 0.9rem; }
+.ing-stamp { padding: 0.25rem 0.6rem; background: #dcf1e1 !important; color: #1b6e2e !important; border-color: #b5dfc0 !important; font-weight: 600; }
+tr.ing-added td { background: #f3faf5; }
+.ing-addall { margin-top: 0.4rem; }
