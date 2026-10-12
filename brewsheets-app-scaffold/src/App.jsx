@@ -35,7 +35,7 @@ export default function App() {
         <div className="brand">
           <img src="/logo-cream.png" alt="Margaret River Beer Co" />
           <span className="brand-divider" />
-          <span className="brand-name">Brewsheets</span>
+          <span className="brand-name">Production App</span>
         </div>
         <nav className="app-nav">
           <NavLink to="/recipes" className={navClass}>
