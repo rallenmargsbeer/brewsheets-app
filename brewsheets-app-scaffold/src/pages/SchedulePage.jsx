@@ -321,6 +321,19 @@ function MoveResolver({ resolver: r, runs, tankName, groupBeer, onChange, onSave
   )
 }
 
+// A date picker in the right-click menu: pick the day and Move shifts the jobs there.
+function MoveToDate({ label = 'Move to', from, onMove }) {
+  const [to, setTo] = useState(from)
+  const ok = /^\d{4}-\d{2}-\d{2}$/.test(to) && to !== from
+  return (
+    <div className="sc-menu-row sc-menu-date">
+      <span>{label}</span>
+      <input type="date" value={to} onChange={(e) => setTo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ok && onMove(to)} />
+      <button onClick={() => onMove(to)} disabled={!ok}>Move</button>
+    </div>
+  )
+}
+
 export default function SchedulePage() {
   const liveRange = () => ({ from: monthStart(todayIso()), to: addDays(todayIso(), CHUNK_DAYS * 2) })
   const [range, setRange] = useState(liveRange)
@@ -495,12 +508,6 @@ export default function SchedulePage() {
     if (!rows.length) return
     applyMove(`Move ${booking.beer_name} brew ${days > 0 ? '+' : ''}${days} day${Math.abs(days) === 1 ? '' : 's'}`, { rows, days }, rows)
   }
-  function askDays(verb) {
-    const v = window.prompt(`${verb} by how many days? (negative = earlier)`, '1')
-    const n = parseInt(v, 10)
-    return Number.isFinite(n) ? n : 0
-  }
-
   function openArchive(ym) {
     setArchive(ym)
     setRange(ym ? { from: `${ym}-01`, to: monthEnd(ym) } : liveRange())
@@ -725,7 +732,7 @@ export default function SchedulePage() {
         <div className="sc-menu-back" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null) }}>
           <div
             className="sc-menu"
-            style={{ left: Math.min(menu.x, window.innerWidth - 290), top: Math.min(menu.y, window.innerHeight - 330) }}
+            style={{ left: Math.min(menu.x, window.innerWidth - 290), top: Math.min(menu.y, window.innerHeight - 400) }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sc-menu-title">{menu.column.label} · {fmtDay(menu.cell.date)} {menu.cell.slot}</div>
@@ -734,6 +741,7 @@ export default function SchedulePage() {
               const all = stayEntries(menu.column, menu.stay)
               const k = slotKey(menu.cell.date, menu.cell.slot)
               const fromHere = all.filter((e) => slotKey(e.entry_date, e.slot) >= k)
+              const stayStart = menu.stay.start.split('|')[0]
               const close = (fn) => () => { setMenu(null); fn() }
               const others = tanks.filter((t) => t.id !== menu.column.tankId && (t.tank_type === 'BBT') === (menu.column.group === 'bbt'))
               return (
@@ -743,14 +751,14 @@ export default function SchedulePage() {
                     <span>This job and later ({fromHere.length})</span>
                     <button onClick={close(() => shift(`Shift ${menu.stay.beer} from ${fmtDay(menu.cell.date)} −1 day`, fromHere, -1))}>−1</button>
                     <button onClick={close(() => shift(`Shift ${menu.stay.beer} from ${fmtDay(menu.cell.date)} +1 day`, fromHere, 1))}>+1</button>
-                    <button onClick={close(() => { const n = askDays('Shift'); shift(`Shift ${menu.stay.beer} from ${fmtDay(menu.cell.date)} ${n > 0 ? '+' : ''}${n} days`, fromHere, n) })}>±…</button>
                   </div>
+                  <MoveToDate from={menu.cell.date} onMove={(to) => close(() => shift(`Move ${menu.stay.beer} from ${fmtDay(menu.cell.date)} to ${fmtDay(to)}`, fromHere, daysBetween(menu.cell.date, to)))()} />
                   <div className="sc-menu-row">
                     <span>Whole stay ({all.length})</span>
                     <button onClick={close(() => shift(`Shift ${menu.stay.beer} −1 day`, all, -1))}>−1</button>
                     <button onClick={close(() => shift(`Shift ${menu.stay.beer} +1 day`, all, 1))}>+1</button>
-                    <button onClick={close(() => { const n = askDays('Shift'); shift(`Shift ${menu.stay.beer} ${n > 0 ? '+' : ''}${n} days`, all, n) })}>±…</button>
                   </div>
+                  <MoveToDate label="Starts" from={stayStart} onMove={(to) => close(() => shift(`Move ${menu.stay.beer} to start ${fmtDay(to)}`, all, daysBetween(stayStart, to)))()} />
                   <div className="sc-menu-row">
                     <span>Move stay to</span>
                     <select defaultValue="" onChange={(e) => { const t = others.find((x) => x.id === e.target.value); if (t) close(() => moveStayToTank(menu.column, menu.stay, t))() }}>
