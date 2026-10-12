@@ -13,3 +13,17 @@ insert into public.stock_products (beer, format, source, code) values
 ('Draught','cube','unleashed','Cube-Margs Draught'), ('Draught','keg','unleashed','Keg-Margs Draught'), ('Draught','keg','lm_3pl','KEG-MARGSDRAUGHT'), ('Draught','keg','lm_wholesale','KEG-MARGSDRAUGHT'),
 ('Panther Cream Whisky','keg','unleashed','30l Keg-Panther Cream Whisky'), ('Panther Cream Whisky','keg','unleashed','30l Keg-Panther Cream Whisky 2026')
 on conflict (source, code) do nothing;
+
+-- Liquid Mix wholesale only reports its own number codes.
+insert into public.stock_products (beer, format, source, code) values
+('ITP','cube','lm_wholesale','12206'), ('Kolsch','cube','lm_wholesale','12207'), ('Megsy','cube','lm_wholesale','12208'),
+('Mermid','cube','lm_wholesale','12209'), ('Pale Ale','cube','lm_wholesale','12210'), ('Red IPA','cube','lm_wholesale','12211'),
+('Stout','cube','lm_wholesale','12212'), ('River Dog','cube','lm_wholesale','12215'), ('Beyond the Pines','cube','lm_wholesale','12218'),
+('Drift XPA','cube','lm_wholesale','12237'),
+('ITP','keg','lm_wholesale','32206'), ('Kolsch','keg','lm_wholesale','32207'), ('Megsy','keg','lm_wholesale','32208'),
+('Mermid','keg','lm_wholesale','32209'), ('Pale Ale','keg','lm_wholesale','32210'), ('Red IPA','keg','lm_wholesale','32211'),
+('River Dog','keg','lm_wholesale','32219'), ('English Bitter','keg','lm_wholesale','37177'), ('Draught','keg','lm_wholesale','37184'),
+('Drift XPA','keg','lm_wholesale','38408'),
+('English Bitter','keg','unleashed','Keg-English Bitter'), ('English Bitter','keg','lm_3pl','KEG-ENGLISHBITTER'),
+('PICA Draught','cube','lm_3pl','PICADRAUGHT16x375')
+on conflict (source, code) do nothing;
