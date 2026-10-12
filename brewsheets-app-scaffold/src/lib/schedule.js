@@ -371,3 +371,41 @@ export async function deleteBeerColour(beerName) {
   const { error } = await supabase.from('beer_colours').delete().eq('beer_name', beerName)
   if (error) throw error
 }
+
+// After cells move, set each booking's brew date to its first brewhouse turn. Returns the
+// old dates so it can be undone with setBookingDates.
+export async function syncBookingDates(bookingIds) {
+  const prev = []
+  for (const id of new Set(bookingIds)) {
+    const { data: b, error } = await supabase.from('brew_bookings').select('id, brew_date').eq('id', id).single()
+    if (error) throw error
+    const { data: first, error: e2 } = await supabase
+      .from('schedule_entries')
+      .select('entry_date')
+      .eq('booking_id', id)
+      .in('lane', BREW_LANES)
+      .order('entry_date')
+      .limit(1)
+    if (e2) throw e2
+    const date = first?.[0]?.entry_date
+    if (date && date !== b.brew_date) {
+      const { error: e3 } = await supabase.from('brew_bookings').update({ brew_date: date }).eq('id', id)
+      if (e3) throw e3
+      prev.push({ id, brew_date: b.brew_date })
+    }
+  }
+  return prev
+}
+
+export async function setBookingDates(rows) {
+  for (const { id, brew_date } of rows) {
+    const { error } = await supabase.from('brew_bookings').update({ brew_date }).eq('id', id)
+    if (error) throw error
+  }
+}
+
+export async function listBookingEntries(bookingId) {
+  const { data, error } = await supabase.from('schedule_entries').select(ENTRY_COLS).eq('booking_id', bookingId)
+  if (error) throw error
+  return data
+}
