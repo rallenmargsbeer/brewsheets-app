@@ -1039,7 +1039,7 @@ function BatchDetails({ batch, tanks, ingredients, remove }) {
           <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day'} />
           <Fact label="Actual FG" value={fx(f.fg?.plato, 1, ' °P')} from={f.fg ? `Latest fermentation reading, ${fmtDate(f.fg.date)}` : 'Fermentation readings'} />
           <Fact label="ABV" value={fx(f.abv, 2, '%')} from="From actual OG and FG" />
-          <Fact label="Target ABV" value={fx(f.targetAbv, 2, '%')} from={f.targetOg != null ? `Recipe: OG ${f.targetOg} °P, FG ${f.targetFg ?? '?'} °P` : 'Recipe targets'} />
+          <Fact label="Target ABV" value={fx(f.targetAbv, 1, '%')} from={f.targetAbv != null ? `Recipe${f.targetOg != null ? `: OG ${f.targetOg} °P, FG ${f.targetFg ?? '?'} °P` : ''}` : 'Set on the recipe'} />
         </div>
       </section>
 

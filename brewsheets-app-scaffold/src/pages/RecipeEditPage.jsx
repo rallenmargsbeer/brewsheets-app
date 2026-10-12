@@ -20,6 +20,7 @@ const emptyRecipe = {
   is_core_range: true,
   target_og: '',
   target_fg: '',
+  target_abv: '',
   ko_temp: '',
   target_strike_temp: '',
   target_mash_ph: '',
@@ -356,6 +357,7 @@ export default function RecipeEditPage() {
           </label>
           <Field label="Target OG" value={recipe.target_og} onChange={(v) => updateField('target_og', v)} />
           <Field label="Target FG" value={recipe.target_fg} onChange={(v) => updateField('target_fg', v)} />
+          <Field label="Target ABV (%)" value={recipe.target_abv} onChange={(v) => updateField('target_abv', v)} />
         </div>
       </Section>
 
