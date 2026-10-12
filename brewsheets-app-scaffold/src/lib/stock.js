@@ -62,3 +62,14 @@ export function guessFormat(item) {
   if (/cube|16x375|x375/.test(s)) return 'cube'
   return null
 }
+
+// Keg size in litres from a product code or description ("20L Keg-ITP", "30l Keg-8 Ball",
+// "KEG-8BALL30", ": 50000 ml"); kegs without a size are 50 L.
+export function kegSize(code, description = '') {
+  const l = /(\d{2})\s*l\b/i.exec(code) || /(\d{2})\s*l\b/i.exec(description)
+  if (l) return Number(l[1])
+  const ml = /(\d{5})\s*ml/i.exec(description)
+  if (ml) return Math.round(Number(ml[1]) / 1000)
+  const tail = /^keg-.*?(20|30)$/i.exec(code)
+  return tail ? Number(tail[1]) : 50
+}
