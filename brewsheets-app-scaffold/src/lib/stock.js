@@ -2,14 +2,28 @@ import { supabase } from '../supabaseClient'
 
 export const SOURCE_LABEL = { unleashed: 'Unleashed', lm_3pl: 'LM 3PL', lm_wholesale: 'LM Wholesale' }
 
+// Supabase returns at most 1000 rows per request; page through bigger tables.
+async function fetchAll(build) {
+  const out = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build().range(from, from + 999)
+    if (error) throw error
+    out.push(...data)
+    if (data.length < 1000) return out
+  }
+}
+
 export async function listStock() {
-  const [items, products, runs] = await Promise.all([
-    supabase.from('stock_items').select('source, location, code, alt_code, description, product_group, on_hand, allocated, on_order, available, pulled_at'),
-    supabase.from('stock_products').select('*'),
+  const since = new Date(Date.now() - 92 * 86400000).toISOString().slice(0, 10)
+  const [items, products, runs, sales, history] = await Promise.all([
+    fetchAll(() => supabase.from('stock_items').select('source, location, code, alt_code, description, product_group, on_hand, allocated, on_order, available, pulled_at')),
+    fetchAll(() => supabase.from('stock_products').select('*')),
     supabase.from('stock_sync_runs').select('*').order('id', { ascending: false }).limit(5),
+    fetchAll(() => supabase.from('stock_sales').select('sale_date, code, customer, qty').gte('sale_date', since)),
+    fetchAll(() => supabase.from('stock_history').select('snap_date, code, alt_code, available').eq('source', 'lm_wholesale').gte('snap_date', since).order('snap_date')),
   ])
-  for (const r of [items, products, runs]) if (r.error) throw r.error
-  return { items: items.data, products: products.data, runs: runs.data }
+  if (runs.error) throw runs.error
+  return { items, products, runs: runs.data, sales, history }
 }
 
 // Pulls fresh stock from Unleashed and Liquid Mix (read-only) via the stock-sync function.
