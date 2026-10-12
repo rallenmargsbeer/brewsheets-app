@@ -167,12 +167,12 @@ export function brewDayClashes(entries, plan, { maxTurns = 3, accepted = new Set
 }
 
 // How many more days a brew must move so all its brew days fall on weekdays with room for
-// its turns (others' turns as planned). Looks up to 30 days ahead.
+// its turns (others' turns as planned). Looks up to 60 days ahead.
 export function daysToNextFreeDay(entries, plan, group, { maxTurns = 3, minDays = 1 } = {}) {
   const totals = turnsByDay(entries, plan.shiftOf)
   const turns = group.rows.filter(isBrewLane)
   const cur = (t) => addDays(t.entry_date, plan.shiftOf.get(t.id) ?? 0)
-  for (let k = minDays; k <= 30; k++) {
+  for (let k = minDays; k <= 60; k++) {
     const need = new Map()
     for (const t of turns) need.set(addDays(cur(t), k), (need.get(addDays(cur(t), k)) ?? 0) + 1)
     let ok = true
