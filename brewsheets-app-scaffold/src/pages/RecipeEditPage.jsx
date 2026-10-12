@@ -1,3 +1,4 @@
+import { tinsethIbu, moreySrm, byName } from '../lib/beerCalcs'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
@@ -21,6 +22,8 @@ const emptyRecipe = {
   target_og: '',
   target_fg: '',
   target_abv: '',
+  target_ibu: '',
+  target_srm: '',
   ko_temp: '',
   target_ko_ph_min: '',
   target_ko_ph_max: '',
@@ -360,7 +363,10 @@ export default function RecipeEditPage() {
           <Field label="Target OG" value={recipe.target_og} onChange={(v) => updateField('target_og', v)} />
           <Field label="Target FG" value={recipe.target_fg} onChange={(v) => updateField('target_fg', v)} />
           <Field label="Target ABV (%)" value={recipe.target_abv} onChange={(v) => updateField('target_abv', v)} />
+          <Field label="Target IBU" value={recipe.target_ibu} onChange={(v) => updateField('target_ibu', v)} />
+          <Field label="Target SRM" value={recipe.target_srm} onChange={(v) => updateField('target_srm', v)} />
         </div>
+        <RecipeEstimates recipe={recipe} grist={grist} kettle={kettle} whirlpool={whirlpool} ingredients={ingredients} />
       </Section>
 
       <Section title="Mash Schedule" subtitle="These show up as targets on the Brew Day sheet, next to what actually happened.">
@@ -484,6 +490,35 @@ export default function RecipeEditPage() {
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+// Estimated IBU and SRM from the recipe's per-litre amounts (so independent of batch size),
+// using alpha acid and colour from the Ingredients page and the target OG for hop utilisation.
+function RecipeEstimates({ recipe, grist, kettle, whirlpool, ingredients }) {
+  const alpha = byName(ingredients, 'alpha_acid_pct')
+  const colour = byName(ingredients, 'color_lovibond')
+  const hops = [
+    ...kettle.map((k) => ({ name: k.item_name, grams: Number(k.qty_g_per_l), minutes: k.boil_time_min })),
+    ...whirlpool.map((w) => ({ name: w.item_name, grams: Number(w.qty_g_per_l), minutes: w.stand_time_min })),
+  ].map((h) => ({ ...h, alphaPct: alpha.get(h.name) }))
+  const malts = grist.map((g) => ({ name: g.ingredient_name, grams: Number(g.qty_g_per_l), lovibond: colour.get(g.ingredient_name) }))
+  const ibu = tinsethIbu(hops, recipe.target_og || 12, 1)
+  const srm = moreySrm(malts, 1)
+  const missingAlpha = hops.filter((h) => h.grams > 0 && h.minutes != null && h.alphaPct == null && ingredients.some((i) => i.name === h.name && i.unleashed_group?.toLowerCase().includes('hop'))).map((h) => h.name)
+  const missingColour = malts.filter((m) => m.grams > 0 && m.lovibond == null).map((m) => m.name)
+  const vs = (est, target) => (est != null && target !== '' && target != null ? ` (target ${target})` : '')
+  return (
+    <div className="rec-est">
+      <div><span>Estimated IBU</span><strong>{ibu != null ? ibu.toFixed(0) : '—'}</strong>{vs(ibu, recipe.target_ibu)}</div>
+      <div><span>Estimated SRM</span><strong>{srm != null ? srm.toFixed(1) : '—'}</strong>{vs(srm, recipe.target_srm)}</div>
+      {(missingAlpha.length > 0 || missingColour.length > 0) && (
+        <p>
+          {missingAlpha.length > 0 && <>No alpha acid % on the Ingredients page for: {[...new Set(missingAlpha)].join(', ')}. </>}
+          {missingColour.length > 0 && <>No colour (°L) on the Ingredients page for: {[...new Set(missingColour)].join(', ')}.</>}
+        </p>
+      )}
     </div>
   )
 }

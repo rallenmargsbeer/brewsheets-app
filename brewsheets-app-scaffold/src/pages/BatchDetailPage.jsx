@@ -15,9 +15,10 @@ import {
   updateBrewRunIngredient,
   listPackagingSessions,
 } from '../lib/api'
-import { batchFigures, actualOg } from '../lib/batchFigures'
+import { batchFigures, actualOg, batchIbuSrm } from '../lib/batchFigures'
 import { blendGravity, waterForGravity, gravityAfter } from '../lib/dilution'
 import { useBuffer, lacticMl, remainingTurnsPh } from '../lib/acid'
+import { tinsethIbu, toSg } from '../lib/beerCalcs'
 
 function toLocalInput(iso) {
   if (!iso) return ''
@@ -72,35 +73,20 @@ function calcMashEfficiency(gristItems, potentialPpgByName, preboilGravity, preb
     }
   }
   if (!matchedAny || potentialPoints === 0) return null
-  const actualPoints = 1000 * (Number(preboilGravity) - 1) * (Number(preboilVolumeL) * L_TO_GAL)
+  // Pre-boil gravity is entered in °P; the points formula needs SG.
+  const actualPoints = 1000 * (toSg(preboilGravity) - 1) * (Number(preboilVolumeL) * L_TO_GAL)
   return (actualPoints / potentialPoints) * 100
 }
 
-// Tinseth IBU estimate. hopItems is kettle + whirlpool brew_run_ingredients rows; alphaAcidByName
-// maps an ingredient's name (as entered on the recipe line) to the Alpha Acid % set for it on
-// the Ingredients page — only items with a match contribute (Irish Moss/whirlfloc-type rows
-// have no Alpha Acid % on file and are correctly skipped). Whirlpool hops use the same formula
-// with their (shorter) stand time in the boil-time factor, which is what gives them reduced
-// utilization relative to a full boil — no separate whirlpool-specific temperature model, per
-// how this was scoped with Ryan.
+// Tinseth IBU for one turn's kettle + whirlpool hops (brew_run_ingredients rows); alpha acid
+// comes from the Ingredients page by name, so rows without one (whirlfloc etc.) are skipped.
+// Whirlpool hops use their stand time, which gives them lower utilisation.
 function calcIBU(hopItems, alphaAcidByName, boilGravity, batchVolumeL) {
-  if (boilGravity == null || boilGravity === '' || !batchVolumeL) return null
-  const volumeGal = Number(batchVolumeL) * L_TO_GAL
-  let total = 0
-  let matchedAny = false
-  for (const item of hopItems) {
-    const weightG = item.actual_qty ?? item.planned_qty
-    const alphaAcidPct = alphaAcidByName.get(item.item_name)
-    if (!weightG || alphaAcidPct == null || item.time_min == null) continue
-    const weightOz = (weightG / 1000) * KG_TO_LB * 16
-    const aaDecimal = alphaAcidPct / 100
-    const bignessFactor = 1.65 * Math.pow(0.000125, Number(boilGravity) - 1)
-    const boilTimeFactor = (1 - Math.exp(-0.04 * Number(item.time_min))) / 4.15
-    const utilization = bignessFactor * boilTimeFactor
-    total += (weightOz * aaDecimal * utilization * 7489) / volumeGal
-    matchedAny = true
-  }
-  return matchedAny ? total : null
+  return tinsethIbu(
+    hopItems.map((i) => ({ grams: i.actual_qty ?? i.planned_qty, alphaPct: alphaAcidByName.get(i.item_name), minutes: i.time_min })),
+    boilGravity,
+    Number(batchVolumeL)
+  )
 }
 
 // The 4 gated brew-day stages, in order. Each one's confirmedField is a
@@ -1030,6 +1016,8 @@ function BatchDetails({ batch, tanks, ingredients, remove }) {
   const [sessions, setSessions] = useState([])
   useEffect(() => { listPackagingSessions(batch.id).then(setSessions).catch(() => setSessions([])) }, [batch.id])
   const f = batchFigures(batch, sessions)
+  const est = batchIbuSrm(batch, ingredients)
+  const target = (v) => (v != null && v !== '' ? `Recipe target ${v}` : 'Estimated from Brew Day')
   const tank = tanks.find((t) => t.id === batch.tank_id)
   const turns = batch.turn_quantity || (batch.brew_runs ?? []).length
   const p = f.packed
@@ -1051,11 +1039,13 @@ function BatchDetails({ batch, tanks, ingredients, remove }) {
       </section>
 
       <section className="bd-card">
-        <h3>Gravity &amp; ABV</h3>
+        <h3>Gravity, ABV, IBU &amp; colour</h3>
         <div className="bd-grid">
           <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={(turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day') + (f.dilutionL ? ', after dilution' : '')} />
           <Fact label="Actual FG" value={fx(f.fg?.plato, 1, ' °P')} from={f.fg ? `Latest fermentation reading, ${fmtDate(f.fg.date)}` : 'Fermentation readings'} />
           <Fact label="ABV" value={fx(f.abv, 2, '%')} from="From actual OG and FG" />
+          <Fact label="IBU (est.)" value={fx(est.ibu, 0)} from={target(batch.recipes?.target_ibu)} />
+          <Fact label="SRM (est.)" value={fx(est.srm, 1)} from={target(batch.recipes?.target_srm)} />
           <Fact label="Target ABV" value={fx(f.targetAbv, 1, '%')} from={f.targetAbv != null ? `Recipe${f.targetOg != null ? `: OG ${f.targetOg} °P, FG ${f.targetFg ?? '?'} °P` : ''}` : 'Set on the recipe'} />
         </div>
       </section>

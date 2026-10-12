@@ -150,6 +150,17 @@ export async function updateIngredientPotentialPpg(id, potentialPpg) {
   return data
 }
 
+export async function updateIngredientLovibond(id, lovibond) {
+  const { data, error } = await supabase
+    .from('ingredients')
+    .update({ color_lovibond: lovibond })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 export async function updateIngredientAlphaAcid(id, alphaAcidPct) {
   const { data, error } = await supabase
     .from('ingredients')
