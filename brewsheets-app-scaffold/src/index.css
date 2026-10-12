@@ -509,3 +509,19 @@ p.bd-empty { color: var(--ink2); }
 .bd-table .bd-qc { background: #f4f7fa; }
 .bd-table th.bd-qc { color: #2f5f7a; }
 .bd-n { color: var(--ink2); font-size: 0.78rem; font-weight: 400; }
+
+/* Dilution */
+.dil-box { margin: 0.75rem 0; padding: 0.7rem 0.9rem; border-radius: 8px; background: #eef5f8; border: 1px solid #c9dde6; }
+.dil-box p { margin: 0.25rem 0; }
+.dil-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #2f5f7a; }
+.dil-answer { font-size: 1.05rem; color: #1f4f66; }
+.dil-answer.ok { color: #1b6e2e; }
+.dil-warn { color: #8a5a00; font-size: 0.85rem; }
+.dil-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; margin-top: 0.4rem; }
+.dil-row label { display: flex; flex-direction: column; font-size: 0.85rem; }
+.dil-after { color: var(--ink2); font-size: 0.9rem; padding-bottom: 0.4rem; }
+.dil-modes { display: flex; gap: 0.4rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
+.dil-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.8rem; }
+.dil-grid label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--ink2); }
+.dil-grid input { font-size: 1.05rem; }
+.dil-result { margin-top: 0.9rem; font-size: 1.15rem; color: #1f4f66; }

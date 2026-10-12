@@ -16,6 +16,7 @@ import {
   listPackagingSessions,
 } from '../lib/api'
 import { batchFigures, actualOg } from '../lib/batchFigures'
+import { blendGravity, waterForGravity, gravityAfter } from '../lib/dilution'
 
 function toLocalInput(iso) {
   if (!iso) return ''
@@ -352,7 +353,7 @@ function IngredientRow({ item, ingredients, onSaved }) {
   )
 }
 
-function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngredients, onSaved }) {
+function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngredients, onSaved, isLastTurn, otherRuns = [] }) {
   const [form, setForm] = useState(() => seedForm(batchId, runNumber, run))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -694,6 +695,15 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
                   {fld('ko_flowmeter_l', 'Flowmeter (L)', 'number', 120)}
                   {fld('whirlpool_gravity', 'Gravity', 'number', 110)}
                   {fld('whirlpool_ph', 'pH', 'number', 100)}
+                  {isLastTurn && (
+                    <DilutionPrompt
+                      turns={[...otherRuns, { ...form, run_number: runNumber }]}
+                      targetPlato={recipe?.target_og}
+                      water={form.correction_l}
+                      onWater={(v) => set('correction_l', v)}
+                      locked={confirmed}
+                    />
+                  )}
                   <IngredientList title="Whirlpool Additions" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
               )}
@@ -710,7 +720,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, masterIngre
                       ? ['first_runnings_gravity', 'last_runnings_gravity']
                       : s.key === 'boil'
                       ? ['preboil_volume_l', 'preboil_gravity', 'postboil_volume_l', 'postboil_gravity']
-                      : ['ko_flowmeter_l', 'whirlpool_gravity', 'whirlpool_ph']
+                      : ['ko_flowmeter_l', 'whirlpool_gravity', 'whirlpool_ph', ...(isLastTurn ? ['correction_l'] : [])]
                   )
                 }
                 disabled={saving}
@@ -977,6 +987,8 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
             turnVolumeL={batch.turn_volume_l}
             masterIngredients={ingredients}
             onSaved={refresh}
+            isLastTurn={n === turnCount}
+            otherRuns={(batch.brew_runs ?? []).filter((r) => r.run_number !== n)}
           />
         </div>
       ))}
@@ -1036,7 +1048,7 @@ function BatchDetails({ batch, tanks, ingredients, remove }) {
       <section className="bd-card">
         <h3>Gravity &amp; ABV</h3>
         <div className="bd-grid">
-          <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day'} />
+          <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={(turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day') + (f.dilutionL ? ', after dilution' : '')} />
           <Fact label="Actual FG" value={fx(f.fg?.plato, 1, ' °P')} from={f.fg ? `Latest fermentation reading, ${fmtDate(f.fg.date)}` : 'Fermentation readings'} />
           <Fact label="ABV" value={fx(f.abv, 2, '%')} from="From actual OG and FG" />
           <Fact label="Target ABV" value={fx(f.targetAbv, 1, '%')} from={f.targetAbv != null ? `Recipe${f.targetOg != null ? `: OG ${f.targetOg} °P, FG ${f.targetFg ?? '?'} °P` : ''}` : 'Set on the recipe'} />
@@ -1046,7 +1058,7 @@ function BatchDetails({ batch, tanks, ingredients, remove }) {
       <section className="bd-card">
         <h3>Volumes</h3>
         <div className="bd-grid">
-          <Fact label="Brewhouse yield" value={fx(f.yieldL, 0, ' L')} from="Knockout flowmeter, all turns" />
+          <Fact label="Brewhouse yield" value={fx(f.yieldL, 0, ' L')} from={f.dilutionL ? `Knockout flowmeter + ${Math.round(f.dilutionL)} L dilution water` : 'Knockout flowmeter, all turns'} />
           <Fact label="FV to BBT" value={fx(batch.fv_to_bbt_l, 0, ' L')} from={batch.bbt_transfer_date ? `Cellar transfer, ${fmtDate(batch.bbt_transfer_date)}` : 'Cellar transfer'} />
           <Fact label="Packaged" value={f.packedLitres ? `${f.packedLitres.toLocaleString()} L` : null} from={packedText || 'Packaging sessions'} />
           <Fact label="Package date" value={packDate} from="Packaging sessions" />
@@ -1143,5 +1155,47 @@ function PackagedTable({ sessions }) {
         </div>
       )}
     </section>
+  )
+}
+
+// Last turn's knockout: how much water takes the whole batch down to the recipe's target OG.
+function DilutionPrompt({ turns, targetPlato, water, onWater, locked }) {
+  const target = Number(targetPlato)
+  const sorted = [...turns].sort((a, b) => a.run_number - b.run_number)
+  const missing = sorted.filter((t) => !(Number(t.ko_flowmeter_l) > 0 && Number(t.whirlpool_gravity) > 0)).map((t) => t.run_number)
+  const blend = blendGravity(sorted.map((t) => ({ volumeL: Number(t.ko_flowmeter_l), plato: Number(t.whirlpool_gravity) })))
+  const need = blend && target > 0 ? waterForGravity(blend.volumeL, blend.plato, target) : null
+  const added = Number(water) || 0
+  const after = blend && added ? gravityAfter(blend.volumeL, blend.plato, added) : null
+  return (
+    <div className="dil-box">
+      <div className="dil-title">Dilution to target OG</div>
+      {!(target > 0) ? (
+        <p>Set a Target OG on the recipe to get a dilution suggestion.</p>
+      ) : !blend ? (
+        <p>Enter this turn's flowmeter and gravity to see the dilution.</p>
+      ) : (
+        <>
+          <p>
+            All turns: <strong>{Math.round(blend.volumeL).toLocaleString()} L at {blend.plato.toFixed(2)} °P</strong> · target {target} °P
+            {missing.length > 0 && <span className="dil-warn"> (turn {missing.join(', ')} has no KO volume / gravity yet)</span>}
+          </p>
+          {need > 0.5 ? (
+            <p className="dil-answer">
+              Add <strong>{Math.round(need).toLocaleString()} L</strong> of water → {Math.round(blend.volumeL + need).toLocaleString()} L at {target} °P
+            </p>
+          ) : (
+            <p className="dil-answer ok">At or under target ({(blend.plato - target).toFixed(2)} °P): no dilution needed.</p>
+          )}
+        </>
+      )}
+      <div className="dil-row">
+        <label>Dilution water added (L)
+          <input type="number" min="0" value={water ?? ''} onChange={(e) => onWater(e.target.value)} disabled={locked} style={{ width: 110 }} />
+        </label>
+        {!locked && need > 0.5 && <button className="secondary" onClick={() => onWater(String(Math.round(need)))}>Use {Math.round(need)} L</button>}
+        {after != null && <span className="dil-after">→ batch OG {after.toFixed(2)} °P, {Math.round(blend.volumeL + added).toLocaleString()} L</span>}
+      </div>
+    </div>
   )
 }
