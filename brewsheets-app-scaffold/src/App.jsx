@@ -31,7 +31,12 @@ export default function App() {
     <AuthProvider>
     <div>
       <header className="app-header">
-        <strong className="brand">Brew<span>sheets</span></strong>
+        {/* Same lock-up as the sensory app: cream logo, divider, app name. */}
+        <div className="brand">
+          <img src="/logo-cream.png" alt="Margaret River Beer Co" />
+          <span className="brand-divider" />
+          <span className="brand-name">Brewsheets</span>
+        </div>
         <nav className="app-nav">
           <NavLink to="/recipes" className={navClass}>
             Recipes
