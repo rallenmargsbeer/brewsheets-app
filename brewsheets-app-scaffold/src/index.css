@@ -539,3 +539,9 @@ p.bd-empty { color: var(--ink2); }
 .ing-stamp { padding: 0.25rem 0.6rem; background: #dcf1e1 !important; color: #1b6e2e !important; border-color: #b5dfc0 !important; font-weight: 600; }
 tr.ing-added td { background: #f3faf5; }
 .ing-addall { margin-top: 0.4rem; }
+.brew-complete { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin: 0.5rem 0 2rem; padding-top: 1rem; border-top: 2px solid var(--line); }
+.brew-complete > button { font-size: 1.05rem; padding: 0.6rem 1.4rem; }
+.brew-complete-done { margin: 0.5rem 0 2rem; padding-top: 1rem; border-top: 2px solid var(--line); color: #1b6e2e; font-weight: 700; }
+.brew-missing { margin: 0 0 1rem; padding-left: 1.1rem; max-height: 50vh; overflow-y: auto; }
+.brew-missing li { margin: 0.2rem 0; }
+.brew-missing span { color: var(--ink2); font-size: 0.85rem; margin-left: 0.3rem; }
