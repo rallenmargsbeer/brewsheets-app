@@ -6,6 +6,7 @@ import {
   todayIso,
   addDays,
   mondayOf,
+  daysBetween,
   BREW_LANES,
   PACK_LANES,
   LANE_LABEL,
@@ -16,7 +17,6 @@ import {
   listCellarTemplates,
   getBooking,
   listBookings,
-  moveBooking,
   cancelBooking,
   suggestBrightTank,
   moveToBrightTank,
@@ -26,10 +26,14 @@ import {
   deleteEntries,
   restoreEntries,
   listBeerColours,
+  syncBookingDates,
+  listBookingEntries,
+  setBookingDates,
   saveBeerColour,
   deleteBeerColour,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
+import { planMove, stayRows, brewGroup, brewDayClashes, daysToNextFreeDay } from '../lib/push'
 import { assignBeers, beerStyle, beerInTank, stayAt, slotKey, packBeer, setBeerColours, hasSavedColours } from '../lib/beerColours'
 
 // How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
@@ -61,7 +65,7 @@ function orderTanks(tanks) {
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, undefined, { numeric: true }))
 }
 
-function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks, allEntries, fvLitres, act, pushUndo, onClose, onChanged }) {
+function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks, allEntries, fvLitres, act, onMoveBooking, onClose, onChanged }) {
   const [rows, setRows] = useState(entries.map((e) => ({ ...e })))
   const [newText, setNewText] = useState('')
   // Canning / kegging: which beer (blank = let the app work it out).
@@ -208,10 +212,7 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
               <input type="date" value={moveTo} onChange={(e) => setMoveTo(e.target.value)} />
-              <button className="secondary" disabled={!moveTo || moveTo === booking.brew_date} onClick={() => run(async () => {
-                  await moveBooking(booking, moveTo)
-                  pushUndo(`Move ${booking.beer_name} brew`, () => moveBooking({ ...booking, brew_date: moveTo }, booking.brew_date))
-                })}>
+              <button className="secondary" disabled={!moveTo || moveTo === booking.brew_date} onClick={() => { onClose(); onMoveBooking(booking, moveTo) }}>
                 Move whole brew
               </button>
               <button
@@ -226,6 +227,93 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
           </div>
         )}
         {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      </div>
+    </div>
+  )
+}
+
+// Sorts out a move's knock-on effects one at a time: each brew day it overfills (more than
+// 3 turns) or pushes onto a weekend is put to you, then everything moving is summarised.
+function MoveResolver({ resolver: r, runs, tankName, groupBeer, onChange, onSave, onClose }) {
+  const plan = useMemo(() => planMove(r.all, runs, r.moves), [r, runs])
+  const clashes = useMemo(() => brewDayClashes(r.all, plan, { maxTurns: 3, accepted: r.accepted }), [r, plan])
+  const c = clashes[0]
+  const choose = (text, move, acceptDate) =>
+    onChange({
+      ...r,
+      moves: move ? [...r.moves, move] : r.moves,
+      accepted: acceptDate ? new Set([...r.accepted, acceptDate]) : r.accepted,
+      choices: [...r.choices, text],
+    })
+
+  // How far a brew is moving under the current plan (a later push can outdo an earlier one).
+  const shiftNow = (rows) => Math.max(0, ...rows.map((x) => plan.shiftOf.get(x.id) ?? 0))
+  let options = []
+  if (c) {
+    const beer = groupBeer(c.group.rows)
+    const k = daysToNextFreeDay(r.all, plan, c.group, { maxTurns: 3 })
+    if (k) {
+      const to = fmtDay(addDays(c.date, k))
+      options.push({ text: `Brew ${beer} on ${to} instead`, move: { rows: c.group.rows, days: shiftNow(c.group.rows) + k, toTankId: c.group.toTankId } })
+    }
+    // The brew(s) already on that day, unless it's the brew you're moving.
+    const rootIds = new Set(plan.groups.filter((g) => g.root).flatMap((g) => g.rows.map((x) => x.id)))
+    const ownIds = new Set(c.group.rows.map((x) => x.id))
+    const seen = new Set()
+    for (const row of c.others) {
+      if (ownIds.has(row.id) || seen.has(row.id)) continue
+      const rows = brewGroup(r.all, runs, row)
+      rows.forEach((x) => seen.add(x.id))
+      if (rows.some((x) => rootIds.has(x.id) || ownIds.has(x.id))) continue
+      const k2 = daysToNextFreeDay(r.all, plan, { rows }, { maxTurns: 3 })
+      if (k2) options.push({ text: `Push ${groupBeer(rows)} back to ${fmtDay(addDays(c.date, k2))}`, move: { rows, days: shiftNow(rows) + k2 } })
+    }
+    if (c.reason === 'full' && c.total <= 4) options.push({ text: `Brew all 4 turns on ${fmtDay(c.date)}`, accept: c.date })
+    if (c.reason === 'weekend') options.push({ text: `Brew ${beer} on ${fmtDay(c.date)} anyway`, accept: c.date })
+  }
+
+  const lines = [
+    ...plan.pushed.map((p) => `${p.beer} in ${tankName(p.tankId)} (from ${fmtDay(p.from)}) moves ${p.days} day${p.days === 1 ? '' : 's'} later`),
+    ...plan.blocked.map((b) => `Overlaps ${b.beer} in ${tankName(b.tankId)} (from ${fmtDay(b.from)}), not moved`),
+    ...r.choices,
+  ]
+
+  return (
+    <div className="sc-overlay" onClick={onClose}>
+      <div className="sc-dialog" onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ margin: '0 0 0.5rem' }}>{r.label}</h3>
+        {c ? (
+          <>
+            <p className="sc-warn" style={{ marginTop: 0 }}>
+              {c.reason === 'full'
+                ? `${fmtDay(c.date)} would have ${c.total} brew turns (${groupBeer(c.group.rows)} plus ${[...new Set(c.others.map((o) => groupBeer([o])))].join(', ') || 'others'}). The usual max is 3.`
+                : `${groupBeer(c.group.rows)} would be pushed to brew on ${fmtDay(c.date)}, a weekend.`}
+            </p>
+            {clashes.length > 1 && <div style={{ color: 'var(--ink2)', fontSize: '0.85rem', marginBottom: 6 }}>{clashes.length - 1} more brew day{clashes.length === 2 ? '' : 's'} to sort out after this.</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              {options.map((o) => (
+                <button key={o.text} onClick={() => choose(o.text, o.move, o.accept)}>{o.text}</button>
+              ))}
+              {!options.length && <div className="sc-warn">No free weekday found in the next 30 days. Cancel and move it by hand.</div>}
+              <button className="secondary" onClick={onClose}>Cancel the move</button>
+            </div>
+          </>
+        ) : (
+          <>
+            {lines.length > 0 && (
+              <>
+                <div>This also changes:</div>
+                <ul style={{ margin: '0.3rem 0 0.75rem', paddingLeft: '1.2rem', fontSize: '0.9rem' }}>
+                  {lines.map((l, i) => <li key={i}>{l}</li>)}
+                </ul>
+              </>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={() => onSave(r, plan)} disabled={!plan.updates.length}>Save</button>
+              <button className="secondary" onClick={onClose}>Cancel</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -352,22 +440,58 @@ export default function SchedulePage() {
   }
 
   // ---- Whole-beer moves (right-click) ----
-  // The jobs that make up a beer's stay: a booked brew's own cells, else the tank's jobs
-  // inside the stay.
-  function stayEntries(c, stay) {
-    const inStay = entries.filter((e) => e.lane === 'tank' && e.tank_id === c.tankId && slotKey(e.entry_date, e.slot) >= stay.start && slotKey(e.entry_date, e.slot) <= stay.end)
-    const bookingId = inStay.find((e) => e.booking_id)?.booking_id
-    return bookingId ? entries.filter((e) => e.booking_id === bookingId) : inStay
+  // The jobs that make up a beer's stay: a booked brew's own cells, else the tank's jobs inside it.
+  const stayEntries = (c, stay) => stayRows(entries, c.tankId, stay)
+  const tankName = (id) => tankLabel(tanks.find((t) => t.id === id)?.name)
+
+  // Moves go through the resolver: it plans the move and every brew it pushes, asks how to
+  // sort out brew days that end up over 3 turns (or pushed onto a weekend), then shows a
+  // summary before saving it all as one undo step.
+  const [resolver, setResolver] = useState(null) // { label, moves, all, accepted: Set, choices: [] }
+  function applyMove(label, move, extraRows = []) {
+    const known = new Set(entries.map((e) => e.id))
+    const all = [...entries, ...extraRows.filter((e) => !known.has(e.id))]
+    const r = { label, moves: [move], all, accepted: new Set(), choices: [] }
+    const plan = planMove(all, runs, r.moves)
+    if (!plan.updates.length) return
+    if (!plan.pushed.length && !plan.blocked.length && !brewDayClashes(all, plan, { accepted: r.accepted }).length) return saveMove(r, plan)
+    setResolver(r)
+  }
+  function saveMove(r, plan) {
+    setResolver(null)
+    const { updates, pushed } = plan
+    const ids = updates.map((u) => u.id)
+    const bookingIds = [...new Set(r.all.filter((e) => ids.includes(e.id) && e.booking_id).map((e) => e.booking_id))]
+    const fullLabel = pushed.length ? `${r.label} (+${pushed.length} pushed)` : r.label
+    perform(async () => {
+      const before = await getEntriesByIds(ids)
+      await updateEntries(updates)
+      const prevDates = await syncBookingDates(bookingIds)
+      pushUndo(fullLabel, async () => {
+        await restoreEntries(before)
+        await setBookingDates(prevDates)
+      })
+    })
+  }
+  const groupBeer = (rows) => {
+    const r = rows.find((x) => beerOf.get(x.id)) ?? rows.find((x) => x.lane === 'brew_1' || x.lane === 'brew_2')
+    return (r && beerOf.get(r.id)) ?? r?.text?.replace(/\s*-?\s*\d+\s*L$/i, '').trim() ?? 'brew'
   }
   function shift(label, rows, days) {
     if (!rows.length || !days) return
-    perform(() => act(label, rows.map((r) => r.id), () => updateEntries(rows.map((r) => ({ id: r.id, entry_date: addDays(r.entry_date, days) }))).then(() => [])))
+    applyMove(label, { rows, days })
   }
   function moveStayToTank(c, stay, toTank) {
     const rows = entries.filter((e) => e.lane === 'tank' && e.tank_id === c.tankId && slotKey(e.entry_date, e.slot) >= stay.start && slotKey(e.entry_date, e.slot) <= stay.end)
-    const clash = entries.some((e) => e.tank_id === toTank.id && slotKey(e.entry_date, e.slot) >= stay.start && slotKey(e.entry_date, e.slot) <= stay.end)
-    if (clash && !window.confirm(`${tankLabel(toTank.name)} already has jobs during ${stay.beer}'s stay. Move it there anyway?`)) return
-    perform(() => act(`Move ${stay.beer} to ${tankLabel(toTank.name)}`, rows.map((r) => r.id), () => updateEntries(rows.map((r) => ({ id: r.id, tank_id: toTank.id }))).then(() => [])))
+    applyMove(`Move ${stay.beer} to ${tankLabel(toTank.name)}`, { rows, days: 0, toTankId: toTank.id })
+  }
+  // All of a booked brew's cells, even ones beyond the loaded weeks, move together.
+  async function moveBookingTo(booking, newDate) {
+    const days = daysBetween(booking.brew_date, newDate)
+    if (!days) return
+    const rows = await listBookingEntries(booking.id)
+    if (!rows.length) return
+    applyMove(`Move ${booking.beer_name} brew ${days > 0 ? '+' : ''}${days} day${Math.abs(days) === 1 ? '' : 's'}`, { rows, days }, rows)
   }
   function askDays(verb) {
     const v = window.prompt(`${verb} by how many days? (negative = earlier)`, '1')
@@ -655,7 +779,7 @@ export default function SchedulePage() {
       {editing && (
         <CellEditor
           act={act}
-          pushUndo={pushUndo}
+          onMoveBooking={moveBookingTo}
           beer={editing.beer}
           beerChoices={weekBeers}
           brightTanks={tanks.filter((t) => t.tank_type === 'BBT')}
@@ -668,6 +792,17 @@ export default function SchedulePage() {
           entries={editing.list}
           onClose={() => setEditing(null)}
           onChanged={refresh}
+        />
+      )}
+      {resolver && (
+        <MoveResolver
+          resolver={resolver}
+          runs={runs}
+          tankName={tankName}
+          groupBeer={groupBeer}
+          onChange={setResolver}
+          onSave={saveMove}
+          onClose={() => setResolver(null)}
         />
       )}
       {booking && (
