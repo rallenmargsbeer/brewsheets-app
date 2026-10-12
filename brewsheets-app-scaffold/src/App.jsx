@@ -24,8 +24,9 @@ export default function App() {
   // Adding a brew (/batches/new) belongs to the Brew Day tab, not Batches
   const { pathname } = useLocation()
   const addingBrew = pathname === '/batches/new'
-  // The schedule grid is wide (every tank is a column), so it gets the full screen width.
-  const wide = pathname === '/schedule'
+  // The schedule grid (every tank is a column) and the stock tables (every location is a column)
+  // get the full screen width.
+  const wide = pathname === '/schedule' || pathname === '/stock'
   return (
     <AuthProvider>
     <div>
