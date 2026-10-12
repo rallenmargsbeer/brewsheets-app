@@ -107,6 +107,35 @@ Deno.serve(async (req: Request) => {
     results.unleashed = 'error: ' + String((e as Error).message || e)
   }
 
+  // ---- Unleashed warehouse transfers not yet completed: stock on its way between warehouses
+  try {
+    const id = env('UNLEASHED_API_ID'), key = env('UNLEASHED_API_KEY')
+    if (!id || !key) throw new Error('Unleashed credentials not set')
+    const transfers = await getAll('WarehouseStockTransfers', {}, id, key)
+    const wh = (w: any) => (typeof w === 'string' ? w : w?.WarehouseName || w?.WarehouseCode || '?')
+    const rows: Record<string, unknown>[] = []
+    for (const t of transfers) {
+      if (/completed|deleted|cancel/i.test(t.TransferStatus || '')) continue
+      const route = `${wh(t.SourceWarehouse)} → ${wh(t.DestinationWarehouse)}`
+      for (const l of t.TransferDetails || t.WarehouseStockTransferLines || []) {
+        const qty = Number(l.TransferQuantity ?? l.Quantity ?? 0)
+        if (!qty) continue
+        rows.push({
+          location: route,
+          code: String(l.Product?.ProductCode || l.ProductCode || '').trim(),
+          description: `${t.TransferNumber || ''} ${t.TransferStatus || ''}`.trim(),
+          on_hand: qty,
+          available: qty,
+        })
+      }
+    }
+    if (rows.length) await save('transit', rows)
+    else await admin.from('stock_items').delete().eq('source', 'transit')
+    results.transit_note = `${rows.length} lines in transit (${transfers.length} transfers checked)`
+  } catch (e) {
+    results.transit_note = 'transfers failed: ' + String((e as Error).message || e)
+  }
+
   // ---- Liquid Mix: 3PL and wholesale accounts
   for (const [source, label, user, pass] of [
     ['lm_3pl', 'LM 3PL', env('LM_3PL_USERNAME'), env('LM_3PL_PASSWORD')],
