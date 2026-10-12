@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { listStock, refreshStock, mapStockProduct, guessFormat, SOURCE_LABEL } from '../lib/stock'
+import { loadIncoming, beerMatch, weeksOfCover } from '../lib/incoming'
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Perth', dateStyle: 'medium', timeStyle: 'short' }) : 'never')
 const num = (n) => (n ? Math.round(n).toLocaleString() : '')
@@ -43,7 +44,10 @@ export default function StockPage() {
   const [windowWeeks, setWindowWeeks] = useSetting('window', 8)
   const [target, setTarget] = useSetting('target', 3)
 
+  const [incoming, setIncoming] = useState([])
   const load = () => listStock().then(setData).catch((e) => setError(e.message))
+  // Packaging already on the schedule counts towards cover from its day.
+  useEffect(() => { loadIncoming().then(setIncoming).catch(() => setIncoming([])) }, [])
   useEffect(() => { load() }, [])
 
   async function refresh() {
@@ -134,12 +138,19 @@ export default function StockPage() {
       // Until there's enough snapshot history, what we sell LM Wholesale stands in for what they sell on.
       const lmWeekly = r.lmDep ?? r.toLm / windowWeeks
       const weekly = r.sold / windowWeeks + lmWeekly
-      return { ...r, weekly, lmEstimated: r.lmDep == null && r.toLm > 0, cover: weekly > 0.05 ? Math.max(0, r.total) / weekly : null }
-    }).filter((r) => r.total || r.weekly)
+      const coming = incoming.filter((i) => i.format === r.format && beerMatch(i.beer) === beerMatch(r.beer))
+      return {
+        ...r,
+        weekly,
+        coming,
+        lmEstimated: r.lmDep == null && r.toLm > 0,
+        cover: weeksOfCover(r.total, weekly, coming),
+      }
+    }).filter((r) => r.total || r.weekly || r.coming.length)
 
     const beerNames = [...new Set(data.products.map((p) => p.beer))].sort()
     return { locations, list, unmapped, beerNames, historyDays }
-  }, [data, windowWeeks])
+  }, [data, windowWeeks, incoming])
 
   const lastRun = data?.runs?.[0]
   return (
@@ -187,6 +198,7 @@ export default function StockPage() {
                         {locs.map((l) => <th key={l}>{locationLabel(l)}</th>)}
                         <th className="stock-total">Total</th>
                         <th>Sold / wk</th>
+                        <th>Packaging</th>
                         <th className="stock-cover-h">Weeks of cover</th>
                       </tr>
                     </thead>
@@ -201,18 +213,24 @@ export default function StockPage() {
                             <td title={r.lmEstimated ? 'LM Wholesale part estimated from our sales to them' : undefined}>
                               {r.weekly ? r.weekly.toFixed(r.weekly < 10 ? 1 : 0) : ''}{r.lmEstimated ? '*' : ''}
                             </td>
+                            <td className="stock-coming">
+                              {r.coming.slice(0, 2).map((i) => (
+                                <div key={i.date}>+{i.qty.toLocaleString()} <span>{new Date(`${i.date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
+                              ))}
+                              {r.coming.length > 2 && <div className="stock-muted">+{r.coming.length - 2} more</div>}
+                            </td>
                             <td className="stock-cover">
                               {r.cover == null ? <span className="stock-muted">no sales</span> : (
                                 <div className={`stock-bar ${c}`}>
                                   <div style={{ width: `${Math.min(100, (r.cover / (target * 3)) * 100)}%` }} />
-                                  <span>{r.cover < 10 ? r.cover.toFixed(1) : Math.round(r.cover)}</span>
+                                  <span>{r.cover >= 26 ? '26+' : r.cover < 10 ? r.cover.toFixed(1) : Math.round(r.cover)}</span>
                                 </div>
                               )}
                             </td>
                           </tr>
                         )
                       })}
-                      {!rows.length && <tr><td colSpan={locs.length + 4} className="stock-muted">No {f.title.toLowerCase()} in stock.</td></tr>}
+                      {!rows.length && <tr><td colSpan={locs.length + 5} className="stock-muted">No {f.title.toLowerCase()} in stock.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -222,6 +240,7 @@ export default function StockPage() {
 
           <p className="stock-muted" style={{ fontSize: '0.8rem' }}>
             Sold / wk = Unleashed sales to everyone except LM Wholesale, plus what leaves LM Wholesale.
+            Weeks of cover counts packaging on the schedule from its day (canning counts are cubes, kegging counts are kegs).
             {view.historyDays < 14
               ? ` * LM Wholesale's part is estimated from what we sell them until there are 2 weeks of daily stock snapshots (${view.historyDays} day${view.historyDays === 1 ? '' : 's'} so far).`
               : ''}
