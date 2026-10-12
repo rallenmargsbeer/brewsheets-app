@@ -33,7 +33,8 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     setRecipeId(id)
     const r = realRecipes.find((x) => x.id === id)
     if (r?.cellar_template_id) setTemplateId(r.cellar_template_id)
-    if (r) setBeerName(r.name)
+    // The schedule uses the template's short name (e.g. In The Pines is "ITP").
+    if (r) setBeerName(templates.find((t) => t.id === r.cellar_template_id)?.name ?? r.name)
   }
   function pickTemplate(id) {
     setTemplateId(id)
