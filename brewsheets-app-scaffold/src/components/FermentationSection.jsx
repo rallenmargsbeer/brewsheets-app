@@ -77,7 +77,7 @@ function GravityChart({ points, events = [] }) {
   )
 }
 
-export default function FermentationSection({ batch, onChanged }) {
+export default function FermentationSection({ batch, og = batch.actual_og, onChanged }) {
   const readings = [...(batch.fermentation_readings ?? [])].sort(
     (a, b) => (a.reading_date ?? '').localeCompare(b.reading_date ?? '') || (a.created_at ?? '').localeCompare(b.created_at ?? '')
   )
@@ -137,7 +137,7 @@ export default function FermentationSection({ batch, onChanged }) {
                 </thead>
                 <tbody>
                   {readings.map((r) => {
-                    const abv = abvTracker(batch.actual_og, r.gravity_plato)
+                    const abv = abvTracker(og, r.gravity_plato)
                     return (
                       <tr key={r.id}>
                         <td>{r.reading_date}</td>
@@ -155,8 +155,8 @@ export default function FermentationSection({ batch, onChanged }) {
                 </tbody>
               </table>
             </div>
-            {batch.actual_og == null && (
-              <p style={{ color: 'var(--ink2)', fontSize: '0.85rem', marginBottom: 0 }}>Enter Actual OG (°P) in Batch Details to see the ABV tracker.</p>
+            {og == null && (
+              <p style={{ color: 'var(--ink2)', fontSize: '0.85rem', marginBottom: 0 }}>The ABV tracker starts once a KO gravity is entered on Brew Day.</p>
             )}
           </>
         )}

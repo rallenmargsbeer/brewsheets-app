@@ -13,7 +13,9 @@ import {
   upsertBrewRun,
   snapshotBrewRunIngredients,
   updateBrewRunIngredient,
+  listPackagingSessions,
 } from '../lib/api'
+import { batchFigures, actualOg } from '../lib/batchFigures'
 
 function toLocalInput(iso) {
   if (!iso) return ''
@@ -820,7 +822,6 @@ export default function BatchDetailPage() {
   const [tanks, setTanks] = useState([])
   const [ingredients, setIngredients] = useState([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
 
   function refresh() {
     Promise.all([getBatch(id), listTanks(), listIngredients()])
@@ -833,45 +834,6 @@ export default function BatchDetailPage() {
   }
 
   useEffect(refresh, [id])
-
-  function set(key, value) {
-    setBatch({ ...batch, [key]: value })
-  }
-
-  async function save() {
-    setSaving(true)
-    try {
-      const payload = blankToNull({
-        id: batch.id,
-        recipe_id: batch.recipe_id,
-        batch_number: batch.batch_number,
-        beer_style: batch.beer_style,
-        status: batch.status,
-        tank_id: batch.tank_id,
-        date_brewed: batch.date_brewed,
-        package_date: batch.package_date,
-        approved_by: batch.approved_by,
-        ready_to_package: batch.ready_to_package,
-        cip_by: batch.cip_by,
-        cip_date: batch.cip_date,
-        actual_og: batch.actual_og,
-        actual_fg: batch.actual_fg,
-        abv: batch.abv,
-        target_abv: batch.target_abv,
-        ready_for_excise: batch.ready_for_excise,
-        brewhouse_yield_l: batch.brewhouse_yield_l,
-        fv_to_bbt_l: batch.fv_to_bbt_l,
-        target_volume_l: batch.target_volume_l,
-        turn_volume_l: batch.turn_volume_l,
-        turn_quantity: batch.turn_quantity,
-        notes: batch.notes,
-      })
-      await upsertBatch(payload)
-      refresh()
-    } finally {
-      setSaving(false)
-    }
-  }
 
   async function remove() {
     if (!confirm(`Delete batch ${batch.batch_number}? This cannot be undone.`)) return
@@ -886,16 +848,13 @@ export default function BatchDetailPage() {
       batch={batch}
       tanks={tanks}
       ingredients={ingredients}
-      set={set}
-      save={save}
-      saving={saving}
       remove={remove}
       refresh={refresh}
     />
   )
 }
 
-function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remove, refresh }) {
+function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
   const runsByNumber = Object.fromEntries((batch.brew_runs ?? []).map((r) => [r.run_number, r]))
   const existingRunNumbers = Object.keys(runsByNumber).map(Number)
   // How many turn tabs to show: the turn_quantity set by the Add Brew wizard, or
@@ -978,7 +937,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
         ))}
       </div>
 
-      {view === 'fermentation' && <FermentationSection batch={batch} onChanged={refresh} />}
+      {view === 'fermentation' && <FermentationSection batch={batch} og={actualOg(batch)} onChanged={refresh} />}
 
       {brewDay && (
       <>
@@ -1024,122 +983,7 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
       </>
       )}
 
-      {view === 'details' && (
-      <>
-      <div className="details-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
-        <label>
-          Status
-          <br />
-          <select value={batch.status} onChange={(e) => set('status', e.target.value)}>
-            {['planned', 'brewing', 'fermenting', 'conditioning', 'packaged', 'archived'].map((s) => (
-              <option key={s} value={s}>{statusLabel(s)}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Tank
-          <br />
-          <select value={batch.tank_id ?? ''} onChange={(e) => set('tank_id', e.target.value || null)}>
-            <option value="">—</option>
-            {tanks.map((t) => (
-              <option key={t.id} value={t.id}>{tankLabel(t.name)}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Date Brewed
-          <br />
-          <input type="date" value={batch.date_brewed ?? ''} onChange={(e) => set('date_brewed', e.target.value)} />
-        </label>
-        <label>
-          Package Date
-          <br />
-          <input type="date" value={batch.package_date ?? ''} onChange={(e) => set('package_date', e.target.value)} />
-        </label>
-        <label>
-          Batch #
-          <br />
-          <input value={batch.batch_number ?? ''} onChange={(e) => set('batch_number', e.target.value)} />
-        </label>
-        <label>
-          Turn Volume (L)
-          <br />
-          <input type="number" value={batch.turn_volume_l ?? ''} onChange={(e) => set('turn_volume_l', e.target.value)} />
-        </label>
-        <label>
-          Turns
-          <br />
-          <input type="number" value={batch.turn_quantity ?? ''} onChange={(e) => set('turn_quantity', e.target.value)} />
-        </label>
-        <label>
-          Target Volume (L)
-          <br />
-          <input type="number" value={batch.target_volume_l ?? ''} onChange={(e) => set('target_volume_l', e.target.value)} />
-        </label>
-        <label>
-          Approved By
-          <br />
-          <input value={batch.approved_by ?? ''} onChange={(e) => set('approved_by', e.target.value)} />
-        </label>
-        <label>
-          CIP By
-          <br />
-          <input value={batch.cip_by ?? ''} onChange={(e) => set('cip_by', e.target.value)} />
-        </label>
-        <label>
-          CIP Date
-          <br />
-          <input type="date" value={batch.cip_date ?? ''} onChange={(e) => set('cip_date', e.target.value)} />
-        </label>
-        <label>
-          Actual OG
-          <br />
-          <input value={batch.actual_og ?? ''} onChange={(e) => set('actual_og', e.target.value)} />
-        </label>
-        <label>
-          Actual FG
-          <br />
-          <input value={batch.actual_fg ?? ''} onChange={(e) => set('actual_fg', e.target.value)} />
-        </label>
-        <label>
-          ABV
-          <br />
-          <input value={batch.abv ?? ''} onChange={(e) => set('abv', e.target.value)} />
-        </label>
-        <label>
-          Target ABV
-          <br />
-          <input value={batch.target_abv ?? ''} onChange={(e) => set('target_abv', e.target.value)} />
-        </label>
-        <label>
-          Brewhouse Yield (L)
-          <br />
-          <input value={batch.brewhouse_yield_l ?? ''} onChange={(e) => set('brewhouse_yield_l', e.target.value)} />
-        </label>
-        <label>
-          FV to BBT (L)
-          <br />
-          <input value={batch.fv_to_bbt_l ?? ''} onChange={(e) => set('fv_to_bbt_l', e.target.value)} />
-        </label>
-        <label>
-          <input type="checkbox" checked={!!batch.ready_to_package} onChange={(e) => set('ready_to_package', e.target.checked)} /> Ready to package
-        </label>
-        <label>
-          <input type="checkbox" checked={!!batch.ready_for_excise} onChange={(e) => set('ready_for_excise', e.target.checked)} /> Ready for excise
-        </label>
-      </div>
-      <label style={{ display: 'block', marginBottom: '1rem' }}>
-        Notes
-        <br />
-        <textarea value={batch.notes ?? ''} onChange={(e) => set('notes', e.target.value)} rows={2} style={{ width: '100%' }} />
-      </label>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
-        <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Batch'}</button>
-        <button className="secondary" onClick={remove}>Delete Batch</button>
-      </div>
-      <IngredientsUsed batch={batch} ingredients={ingredients} />
-      </>
-      )}
+      {view === 'details' && <BatchDetails batch={batch} tanks={tanks} ingredients={ingredients} remove={remove} />}
 
       {brewDay && (
         <div style={{ marginBottom: '2rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
@@ -1147,5 +991,73 @@ function BatchDetailContent({ batch, tanks, ingredients, set, save, saving, remo
         </div>
       )}
     </div>
+  )
+}
+
+// Batch Details: a read-only summary of what's been recorded on Brew Day, Fermentation,
+// Cellar and Packaging. Nothing here is typed in.
+const fmtDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : null)
+const fx = (v, dp, unit = '') => (v == null || Number.isNaN(Number(v)) ? null : `${Number(v).toFixed(dp)}${unit}`)
+
+function Fact({ label, value, from }) {
+  return (
+    <div className="bd-fact">
+      <div className="bd-label">{label}</div>
+      <div className={'bd-value' + (value == null ? ' bd-empty' : '')}>{value ?? 'Not yet'}</div>
+      {from && <div className="bd-from">{from}</div>}
+    </div>
+  )
+}
+
+function BatchDetails({ batch, tanks, ingredients, remove }) {
+  const [sessions, setSessions] = useState([])
+  useEffect(() => { listPackagingSessions(batch.id).then(setSessions).catch(() => setSessions([])) }, [batch.id])
+  const f = batchFigures(batch, sessions)
+  const tank = tanks.find((t) => t.id === batch.tank_id)
+  const turns = batch.turn_quantity || (batch.brew_runs ?? []).length
+  const p = f.packed
+  const packedText = [p.cubes && `${p.cubes} cubes`, p.kegs_50 && `${p.kegs_50} × 50 L`, p.kegs_30 && `${p.kegs_30} × 30 L`, p.kegs_20 && `${p.kegs_20} × 20 L`].filter(Boolean).join(', ')
+  const packDate = f.packFrom ? (f.packFrom === f.packTo ? fmtDate(f.packFrom) : `${fmtDate(f.packFrom)} to ${fmtDate(f.packTo)}`) : null
+
+  return (
+    <>
+      <section className="bd-card">
+        <h3>Batch</h3>
+        <div className="bd-grid">
+          <Fact label="Status" value={statusLabel(batch.status)} from="Moves on with Brew Day, knockout and packaging" />
+          <Fact label="Beer" value={batch.recipes?.name} from={batch.recipes?.style} />
+          <Fact label="Date brewed" value={fmtDate(batch.date_brewed)} from="Add Brew" />
+          <Fact label="Tank" value={tank ? tankLabel(tank.name) : null} from="Brew Day tank step / Cellar transfer" />
+          <Fact label="Turns" value={turns ? `${f.turnsDone} of ${turns} knocked out` : null} from={batch.turn_volume_l ? `${batch.turn_volume_l} L each` : null} />
+          <Fact label="Target volume" value={fx(batch.target_volume_l, 0, ' L')} from="Add Brew" />
+        </div>
+      </section>
+
+      <section className="bd-card">
+        <h3>Gravity &amp; ABV</h3>
+        <div className="bd-grid">
+          <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day'} />
+          <Fact label="Actual FG" value={fx(f.fg?.plato, 1, ' °P')} from={f.fg ? `Latest fermentation reading, ${fmtDate(f.fg.date)}` : 'Fermentation readings'} />
+          <Fact label="ABV" value={fx(f.abv, 2, '%')} from="From actual OG and FG" />
+          <Fact label="Target ABV" value={fx(f.targetAbv, 2, '%')} from={f.targetOg != null ? `Recipe: OG ${f.targetOg} °P, FG ${f.targetFg ?? '?'} °P` : 'Recipe targets'} />
+        </div>
+      </section>
+
+      <section className="bd-card">
+        <h3>Volumes</h3>
+        <div className="bd-grid">
+          <Fact label="Brewhouse yield" value={fx(f.yieldL, 0, ' L')} from="Knockout flowmeter, all turns" />
+          <Fact label="FV to BBT" value={fx(batch.fv_to_bbt_l, 0, ' L')} from={batch.bbt_transfer_date ? `Cellar transfer, ${fmtDate(batch.bbt_transfer_date)}` : 'Cellar transfer'} />
+          <Fact label="Packaged" value={packedText || null} from={f.packedLitres ? `${f.packedLitres.toLocaleString()} L` : 'Packaging sessions'} />
+          <Fact label="Package date" value={packDate} from="Packaging sessions" />
+        </div>
+      </section>
+
+      <IngredientsUsed batch={batch} ingredients={ingredients} />
+
+      <div style={{ margin: '1.5rem 0 2rem' }}>
+        <button className="secondary" onClick={remove}>Delete batch</button>
+      </div>
+    </>
   )
 }
