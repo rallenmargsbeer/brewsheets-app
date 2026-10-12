@@ -246,9 +246,7 @@ function AddSpargeControl({ runId, addedSoFar, onSaved }) {
   )
 }
 
-// Formats an already-computed absolute gram amount from brew_run_ingredients
-// (planned_qty/actual_qty) — distinct from formatMass below, which multiplies
-// a per-litre recipe rate by a volume first.
+// Formats an absolute gram amount from brew_run_ingredients (planned_qty/actual_qty).
 function formatQty(qty) {
   if (qty == null) return '—'
   return qty >= 1000 ? `${(qty / 1000).toFixed(2)} kg` : `${qty.toFixed(1)} g`
@@ -835,69 +833,6 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   )
 }
 
-function formatMass(gPerL, volumeL) {
-  if (gPerL == null || volumeL == null) return null
-  const totalG = gPerL * volumeL
-  return totalG >= 1000 ? `${(totalG / 1000).toFixed(2)} kg` : `${totalG.toFixed(1)} g`
-}
-
-// Whole-batch (all turns combined) ingredient reference — kept as-is,
-// unchanged, alongside the new per-turn view above: still useful for
-// procurement/prep at a glance, distinct from the per-turn editable list.
-function ScaledIngredients({ recipe, volumeL }) {
-  if (!recipe) return null
-
-  if (!volumeL) {
-    return (
-      <div>
-        <h3>Scaled Ingredients</h3>
-        <p style={{ color: '#666' }}>
-          Set a target volume above to see this recipe's ingredient amounts scaled up for this
-          batch (the recipe is stored per litre).
-        </p>
-      </div>
-    )
-  }
-
-  const groups = [
-    { title: 'Grist / Malt Bill', items: recipe.recipe_grist_items ?? [], nameKey: 'ingredient_name' },
-    { title: 'Water Chemistry', items: recipe.recipe_water_additions ?? [], nameKey: 'additive_name' },
-    { title: 'Kettle Additions', items: recipe.recipe_kettle_additions ?? [], nameKey: 'item_name' },
-    { title: 'Whirlpool Additions', items: recipe.recipe_whirlpool_additions ?? [], nameKey: 'item_name' },
-    { title: 'Fermenter Additions', items: recipe.recipe_fermenter_additions ?? [], nameKey: 'item_name' },
-  ]
-
-  return (
-    <div>
-      <h3>Scaled Ingredients <span style={{ fontWeight: 400, fontSize: '0.9rem', color: '#666' }}>(for {volumeL}L)</span></h3>
-      {groups.map((g) => (
-        <div key={g.title} style={{ marginBottom: '1rem' }}>
-          <strong>{g.title}</strong>
-          {g.items.length === 0 ? (
-            <p style={{ color: '#666', margin: '0.25rem 0' }}>None on this recipe.</p>
-          ) : (
-            <table>
-              <tbody>
-                {g.items.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item[g.nameKey]}</td>
-                    <td>{formatMass(item.qty_g_per_l, volumeL) ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      ))}
-      {recipe.biofine_ml_per_l != null && (
-        <p>
-          <strong>Biofine:</strong> {(recipe.biofine_ml_per_l * volumeL).toFixed(0)} mL
-        </p>
-      )}
-    </div>
-  )
-}
-
 export default function BatchDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -948,13 +883,8 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
 
   const [activeTurn, setActiveTurn] = useState(1)
 
-  // Brew day ends with the last knockout: once every turn's Knockout is confirmed,
-  // a batch still marked Brewing moves to Fermenting on its own.
+  // Brew day ends with Complete brew (below the turns) once every turn is knocked out.
   const allKnockedOut = turnNumbers.every((n) => runsByNumber[n]?.knockout_confirmed_at)
-  useEffect(() => {
-    if (batch.status !== 'brewing' || !allKnockedOut) return
-    upsertBatch({ id: batch.id, status: 'fermenting' }).then(() => refresh())
-  }, [batch.id, batch.status, allKnockedOut])
   // Sheet opens on Fermentation; the Add Brew wizard links straight to ?view=brewday.
   const [searchParams, setSearchParams] = useSearchParams()
   const view = ['brewday', 'details'].includes(searchParams.get('view')) ? searchParams.get('view') : 'fermentation'
@@ -1066,16 +996,17 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
           />
         </div>
       ))}
+
+      <CompleteBrew
+        batch={batch}
+        allKnockedOut={allKnockedOut}
+        onDone={() => { refresh(); setSearchParams({}, { replace: true }) }}
+      />
       </>
       )}
 
       {view === 'details' && <BatchDetails batch={batch} tanks={tanks} ingredients={ingredients} remove={remove} />}
 
-      {brewDay && (
-        <div style={{ marginBottom: '2rem', background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
-          <ScaledIngredients recipe={batch.recipes} volumeL={batch.target_volume_l} />
-        </div>
-      )}
     </div>
   )
 }
@@ -1320,6 +1251,65 @@ function KoPhPrompt({ runNumber, turnCount, otherRuns, volumeL, turnVolumeL, ph,
           : <p className="acid-hint">Add about <strong>{ml != null ? Math.round(ml) : '?'} mL</strong> lactic acid (88%) to bring this turn from {ph} to {turnTarget.toFixed(2)}{volumeL ? ` (${Math.round(volumeL).toLocaleString()} L)` : ''}.</p>
       ) : (
         <p className="stock-muted" style={{ fontSize: '0.85rem' }}>Enter the KO pH to see how much lactic acid to add.</p>
+      )}
+    </div>
+  )
+}
+
+// Ends brew day: once every turn is knocked out, moves the batch to Fermenting. Anything on
+// the brew sheet not marked added is listed first so nothing is forgotten.
+const SECTION_NAMES = { grist: 'Grist', kettle: 'Kettle', whirlpool: 'Whirlpool', fermenter: 'Fermenter' }
+const sectionName = (i) => (i.section === 'water' ? `Water (${i.addition_stage ?? 'brew'})` : SECTION_NAMES[i.section] ?? i.section)
+
+function CompleteBrew({ batch, allKnockedOut, onDone }) {
+  const [checking, setChecking] = useState(null) // ingredients not yet added, while asking
+  const [busy, setBusy] = useState(false)
+  const done = batch.status !== 'planned' && batch.status !== 'brewing'
+  const missing = (batch.brew_runs ?? [])
+    .flatMap((r) => (r.brew_run_ingredients ?? []).filter((i) => !i.added_at).map((i) => ({ ...i, turn: r.run_number })))
+    .sort((a, b) => a.turn - b.turn || (a.sort_order ?? 0) - (b.sort_order ?? 0))
+
+  async function complete(markAdded) {
+    setBusy(true)
+    try {
+      if (markAdded.length) {
+        const now = new Date().toISOString()
+        await Promise.all(markAdded.map((i) => updateBrewRunIngredient(i.id, { added_at: now })))
+      }
+      await upsertBatch({ id: batch.id, status: 'fermenting' })
+      setChecking(null)
+      onDone()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (done) return <p className="brew-complete-done">✓ Brew complete · now {statusLabel(batch.status)}</p>
+  return (
+    <div className="brew-complete">
+      <button onClick={() => (missing.length ? setChecking(missing) : complete([]))} disabled={!allKnockedOut || busy}>
+        {busy ? 'Completing…' : 'Complete brew'}
+      </button>
+      {!allKnockedOut && <span className="stock-muted">Available once every turn's Knockout is confirmed.</span>}
+
+      {checking && (
+        <div className="sc-overlay" onClick={() => setChecking(null)}>
+          <div className="sc-dialog" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Not marked as added</h3>
+            <p style={{ marginTop: 0 }}>These haven't been ticked off on the brew sheet. Have they gone into the brew?</p>
+            <ul className="brew-missing">
+              {checking.map((i) => (
+                <li key={i.id}>
+                  <strong>{i.item_name}</strong> <span>Turn {i.turn} · {sectionName(i)}{i.actual_qty != null ? ` · ${formatQty(i.actual_qty)}` : ''}</span>
+                </li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button onClick={() => complete(checking)} disabled={busy}>{busy ? 'Completing…' : 'Yes, they’re all in: complete brew'}</button>
+              <button className="secondary" onClick={() => setChecking(null)} disabled={busy}>Go back</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
