@@ -63,8 +63,8 @@ export default function App() {
           <NavLink to="/ingredients" className={navClass}>
             Ingredients
           </NavLink>
-          <NavLink to="/dilution" className={navClass}>
-            Dilution
+          <NavLink to="/calculators" className={navClass}>
+            Calculators
           </NavLink>
           <NavLink to="/stock" className={navClass}>
             Stock
@@ -92,7 +92,8 @@ export default function App() {
           <Route path="/tanks" element={<TanksPage />} />
           <Route path="/ingredients" element={<IngredientsPage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/dilution" element={<DilutionPage />} />
+          <Route path="/calculators" element={<DilutionPage />} />
+          <Route path="/dilution" element={<Navigate to="/calculators" replace />} />
           <Route path="/stock" element={<RequireAuth><StockPage /></RequireAuth>} />
           <Route path="/reports" element={<RequireAuth><ReportsPage /></RequireAuth>} />
           <Route path="/reports/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
