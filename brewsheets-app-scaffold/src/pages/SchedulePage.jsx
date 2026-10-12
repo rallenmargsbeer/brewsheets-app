@@ -33,7 +33,6 @@ import {
   deleteBeerColour,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
-import { planMove, stayRows, brewGroup, brewDayClashes, daysToNextFreeDay } from '../lib/push'
 import { assignBeers, beerStyle, beerInTank, stayAt, slotKey, packBeer, setBeerColours, hasSavedColours } from '../lib/beerColours'
 
 // How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
@@ -232,111 +231,6 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
   )
 }
 
-// Sorts out a move's knock-on effects one at a time: each brew day it overfills (more than
-// 3 turns) or pushes onto a weekend is put to you, then everything moving is summarised.
-function MoveResolver({ resolver: r, plan, runs, tankName, groupBeer, onChange, onSave, onClose }) {
-  const clashes = useMemo(() => brewDayClashes(r.all, plan, { maxTurns: 3, accepted: r.accepted }), [r, plan])
-  const c = clashes[0]
-  const showDay = (date) => document.querySelector(`tr[data-day="${date}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  useEffect(() => { if (c) showDay(c.date) }, [c?.date])
-  const choose = (text, move, acceptDate) =>
-    onChange({
-      ...r,
-      moves: move ? [...r.moves, move] : r.moves,
-      accepted: acceptDate ? new Set([...r.accepted, acceptDate]) : r.accepted,
-      choices: [...r.choices, text],
-    })
-
-  // How far a brew is moving under the current plan (a later push can outdo an earlier one).
-  const shiftNow = (rows) => Math.max(0, ...rows.map((x) => plan.shiftOf.get(x.id) ?? 0))
-  let options = []
-  if (c) {
-    const beer = groupBeer(c.group.rows)
-    const moveBy = (k) => ({ rows: c.group.rows, days: shiftNow(c.group.rows) + k, toTankId: c.group.toTankId })
-    // The next weekday, busy or not (you then sort out the brews already there)...
-    const kNext = daysToNextFreeDay(r.all, plan, c.group, { maxTurns: Infinity })
-    if (kNext) options.push({ text: `Brew ${beer} on ${fmtDay(addDays(c.date, kNext))}`, move: moveBy(kNext) })
-    // ...and the first weekday with room for all its turns, if that's later.
-    const kFree = daysToNextFreeDay(r.all, plan, c.group, { maxTurns: 3 })
-    if (kFree && kFree !== kNext) options.push({ text: `Brew ${beer} on ${fmtDay(addDays(c.date, kFree))} (first day with room)`, move: moveBy(kFree) })
-    // The brew(s) already on that day, unless it's the brew you're moving.
-    const rootIds = new Set(plan.groups.filter((g) => g.root).flatMap((g) => g.rows.map((x) => x.id)))
-    const ownIds = new Set(c.group.rows.map((x) => x.id))
-    const seen = new Set()
-    for (const row of c.others) {
-      if (ownIds.has(row.id) || seen.has(row.id)) continue
-      const rows = brewGroup(r.all, runs, row)
-      rows.forEach((x) => seen.add(x.id))
-      if (rows.some((x) => rootIds.has(x.id) || ownIds.has(x.id))) continue
-      const k2 = daysToNextFreeDay(r.all, plan, { rows }, { maxTurns: 3 })
-      if (k2) options.push({ text: `Push ${groupBeer(rows)} back to ${fmtDay(addDays(c.date, k2))}`, move: { rows, days: shiftNow(rows) + k2 } })
-    }
-    if (c.reason === 'full' && c.total <= 4) options.push({ text: `Brew all 4 turns on ${fmtDay(c.date)}`, accept: c.date })
-    if (c.reason === 'weekend') options.push({ text: `Brew ${beer} on ${fmtDay(c.date)} anyway`, accept: c.date })
-  }
-
-  const lines = [
-    ...plan.pushed.map((p) => `${p.beer} in ${tankName(p.tankId)} (from ${fmtDay(p.from)}) moves ${p.days} day${p.days === 1 ? '' : 's'} later`),
-    ...plan.blocked.map((b) => `Overlaps ${b.beer} in ${tankName(b.tankId)} (from ${fmtDay(b.from)}), not moved`),
-    ...r.choices,
-  ]
-
-  return (
-    <div className="sc-floating">
-      <div className="sc-dialog">
-        <h3 style={{ margin: '0 0 0.25rem' }}>{r.label}</h3>
-        <div style={{ color: 'var(--ink2)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>The schedule behind shows the moves so far (dashed cells). Scroll it to check before choosing.</div>
-        {c ? (
-          <>
-            <p className="sc-warn" style={{ marginTop: 0 }}>
-              {c.reason === 'full'
-                ? `${fmtDay(c.date)} would have ${c.total} brew turns (${groupBeer(c.group.rows)} plus ${[...new Set(c.others.map((o) => groupBeer([o])))].join(', ') || 'others'}). The usual max is 3.`
-                : `${groupBeer(c.group.rows)} would be pushed to brew on ${fmtDay(c.date)}, a weekend.`}
-              {' '}<a href="#" onClick={(e) => { e.preventDefault(); showDay(c.date) }}>Show</a>
-            </p>
-            {clashes.length > 1 && <div style={{ color: 'var(--ink2)', fontSize: '0.85rem', marginBottom: 6 }}>{clashes.length - 1} more brew day{clashes.length === 2 ? '' : 's'} to sort out after this.</div>}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              {options.map((o) => (
-                <button key={o.text} onClick={() => choose(o.text, o.move, o.accept)}>{o.text}</button>
-              ))}
-              {!options.length && <div className="sc-warn">No free weekday found in the next 60 days. Cancel and move it by hand.</div>}
-              <button className="secondary" onClick={onClose}>Cancel the move</button>
-            </div>
-          </>
-        ) : (
-          <>
-            {lines.length > 0 && (
-              <>
-                <div>This also changes:</div>
-                <ul style={{ margin: '0.3rem 0 0.75rem', paddingLeft: '1.2rem', fontSize: '0.9rem' }}>
-                  {lines.map((l, i) => <li key={i}>{l}</li>)}
-                </ul>
-              </>
-            )}
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => onSave(r, plan)} disabled={!plan.updates.length}>Save</button>
-              <button className="secondary" onClick={onClose}>Cancel</button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// A date picker in the right-click menu: pick the day and Move shifts the jobs there.
-function MoveToDate({ label = 'Move to', from, onMove }) {
-  const [to, setTo] = useState(from)
-  const ok = /^\d{4}-\d{2}-\d{2}$/.test(to) && to !== from
-  return (
-    <div className="sc-menu-row sc-menu-date">
-      <span>{label}</span>
-      <input type="date" value={to} onChange={(e) => setTo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ok && onMove(to)} />
-      <button onClick={() => onMove(to)} disabled={!ok}>Move</button>
-    </div>
-  )
-}
-
 export default function SchedulePage() {
   const liveRange = () => ({ from: monthStart(todayIso()), to: addDays(todayIso(), CHUNK_DAYS * 2) })
   const [range, setRange] = useState(liveRange)
@@ -360,8 +254,11 @@ export default function SchedulePage() {
   }
   useEffect(loadColours, [])
   const [menu, setMenu] = useState(null) // right-click menu
-  const [dropKey, setDropKey] = useState(null) // cell being dragged over
-  const dragged = useRef(null)
+  // Spreadsheet-style selection: a block of cells from anchor a to focus f. Rows count
+  // half-days (rowOf), columns index into `columns`.
+  const [sel, setSel] = useState(null) // { a: { r, c }, f: { r, c } }
+  const selecting = useRef(false)
+  const [clip, setClip] = useState(null) // { mode: 'cut' | 'copy', r0, c0, h, w, items: [{ dr, dc, e }] }
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -425,91 +322,105 @@ export default function SchedulePage() {
   }
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || editing || booking || colourEdit
+      if (e.key === 'Escape') { setMenu(null); setClip(null) }
+      if (typing) return
+      const mod = e.ctrlKey || e.metaKey
+      const k = e.key.toLowerCase()
+      if (mod && k === 'z') { e.preventDefault(); return undoLast() }
+      if (!sel) return
+      const canEdit = editor && !archive
+      if (mod && k === 'c') { e.preventDefault(); copySel('copy') }
+      else if (mod && k === 'x' && canEdit) { e.preventDefault(); copySel('cut') }
+      else if (mod && k === 'v' && canEdit) { e.preventDefault(); pasteAt() }
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && canEdit) { e.preventDefault(); clearSel() }
+      else if (e.key === 'Enter' && canEdit) { e.preventDefault(); editCell(sel.f.r, sel.f.c) }
+      else if (e.key.startsWith('Arrow')) {
         e.preventDefault()
-        undoLast()
+        const [dr, dc] = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key]
+        const f = { r: sel.f.r + dr, c: Math.max(0, Math.min(columns.length - 1, sel.f.c + dc)) }
+        setSel(e.shiftKey ? { a: sel.a, f } : { a: f, f })
+        document.querySelector(`[data-cell="${f.r}|${f.c}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
       }
-      if (e.key === 'Escape') setMenu(null)
     }
+    const onUp = () => { selecting.current = false }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mouseup', onUp) }
   })
 
-  // ---- Drag and drop: move a cell's jobs; Ctrl / Cmd while dropping copies them ----
-  const cellTarget = (c, d, slot) => ({ entry_date: d, slot, lane: c.lane, tank_id: c.tankId ?? null })
-  function onDrop(e, c, d, slot) {
-    e.preventDefault()
-    setDropKey(null)
-    const src = dragged.current
-    dragged.current = null
-    if (!src || (src.date === d && src.slot === slot && src.colKey === c.key)) return
-    const copy = e.ctrlKey || e.metaKey || e.altKey
-    const where = `${c.label} ${fmtDay(d)} ${slot}`
-    const what = src.list.map((x) => x.text).join(', ')
-    perform(() =>
-      copy
-        ? act(`Copy ${what} to ${where}`, [], () =>
-            insertEntries(src.list.map((x) => ({ ...cellTarget(c, d, slot), text: x.text, done: false, beer_name: x.beer_name ?? null })))
-          )
-        : act(`Move ${what} to ${where}`, src.list.map((x) => x.id), () =>
-            updateEntries(src.list.map((x) => ({ id: x.id, ...cellTarget(c, d, slot) }))).then(() => [])
-          )
-    )
+  // ---- Selection, cut / copy / paste ----
+  const rowOf = (d, slot) => Math.round(Date.parse(`${d}T00:00:00Z`) / 86400000) * 2 + (slot === 'PM' ? 1 : 0)
+  const cellAt = (r) => ({ date: new Date(Math.floor(r / 2) * 86400000).toISOString().slice(0, 10), slot: r % 2 ? 'PM' : 'AM' })
+  const rectOf = (s) => s && { r0: Math.min(s.a.r, s.f.r), r1: Math.max(s.a.r, s.f.r), c0: Math.min(s.a.c, s.f.c), c1: Math.max(s.a.c, s.f.c) }
+  const colOf = (e) => colIndex.get(e.lane === 'tank' ? e.tank_id : e.lane) ?? -1
+  const entriesIn = (q) => entries.filter((e) => { const r = rowOf(e.entry_date, e.slot), c = colOf(e); return r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1 })
+  const cellTarget = (c, r) => ({ entry_date: cellAt(r).date, slot: cellAt(r).slot, lane: c.lane, tank_id: c.tankId ?? null })
+  const rectLabel = (q) => {
+    const from = cellAt(q.r0), to = cellAt(q.r1)
+    return `${fmtDay(from.date)} ${from.slot}${q.r1 > q.r0 ? ` to ${fmtDay(to.date)} ${to.slot}` : ''}`
   }
 
-  // ---- Whole-beer moves (right-click) ----
-  // The jobs that make up a beer's stay: a booked brew's own cells, else the tank's jobs inside it.
-  const stayEntries = (c, stay) => stayRows(entries, c.tankId, stay)
-  const tankName = (id) => tankLabel(tanks.find((t) => t.id === id)?.name)
-
-  // Moves go through the resolver: it plans the move and every brew it pushes, asks how to
-  // sort out brew days that end up over 3 turns (or pushed onto a weekend), then shows a
-  // summary before saving it all as one undo step.
-  const [resolver, setResolver] = useState(null) // { label, moves, all, accepted: Set, choices: [] }
-  function applyMove(label, move, extraRows = []) {
-    const known = new Set(entries.map((e) => e.id))
-    const all = [...entries, ...extraRows.filter((e) => !known.has(e.id))]
-    const r = { label, moves: [move], all, accepted: new Set(), choices: [] }
-    const plan = planMove(all, planRuns, r.moves)
-    if (!plan.updates.length) return
-    if (!plan.pushed.length && !plan.blocked.length && !brewDayClashes(all, plan, { accepted: r.accepted }).length) return saveMove(r, plan)
-    setResolver(r)
+  function copySel(mode) {
+    const q = rectOf(sel)
+    const items = entriesIn(q).map((e) => ({ dr: rowOf(e.entry_date, e.slot) - q.r0, dc: colOf(e) - q.c0, e }))
+    setClip({ mode, r0: q.r0, c0: q.c0, h: q.r1 - q.r0 + 1, w: q.c1 - q.c0 + 1, items })
   }
-  function saveMove(r, plan) {
-    setResolver(null)
-    const { updates, pushed } = plan
-    const ids = updates.map((u) => u.id)
-    const bookingIds = [...new Set(r.all.filter((e) => ids.includes(e.id) && e.booking_id).map((e) => e.booking_id))]
-    const fullLabel = pushed.length ? `${r.label} (+${pushed.length} pushed)` : r.label
+  // Pastes the copied / cut block with its top-left on the selected cell, overwriting what's there.
+  function pasteAt() {
+    if (!clip || !sel) return
+    const q = rectOf(sel)
+    const target = { r0: q.r0, c0: q.c0, r1: q.r0 + clip.h - 1, c1: Math.min(columns.length - 1, q.c0 + clip.w - 1) }
+    if (clip.mode === 'cut' && target.r0 === clip.r0 && target.c0 === clip.c0) return setClip(null)
+    const fits = clip.items.filter((it) => q.c0 + it.dc < columns.length)
+    const movingIds = new Set(clip.mode === 'cut' ? fits.map((it) => it.e.id) : [])
+    const del = entriesIn(target).filter((e) => !movingIds.has(e.id))
+    const where = (it) => cellTarget(columns[q.c0 + it.dc], q.r0 + it.dr)
+    const label = `${clip.mode === 'cut' ? 'Move' : 'Copy'} ${clip.items.length} job${clip.items.length === 1 ? '' : 's'} to ${rectLabel(target)}`
+    if (clip.mode === 'cut') {
+      applyCells(label, { del, upd: fits.map((it) => ({ id: it.e.id, ...where(it) })) })
+      setClip(null)
+    } else {
+      applyCells(label, { del, ins: fits.map((it) => ({ ...where(it), text: it.e.text, done: false, beer_name: it.e.beer_name ?? null, cell_bg: it.e.cell_bg ?? null, cell_fg: it.e.cell_fg ?? null })) })
+    }
+    setSel({ a: { r: target.r0, c: target.c0 }, f: { r: target.r1, c: target.c1 } })
+  }
+  function clearSel() {
+    const q = rectOf(sel)
+    const del = entriesIn(q)
+    if (del.length) applyCells(`Clear ${rectLabel(q)}`, { del })
+  }
+  // One undo step for deletes, moves and inserts; booked brews' dates follow their brew cells.
+  function applyCells(label, { del = [], upd = [], ins = [] }) {
     perform(async () => {
-      const before = await getEntriesByIds(ids)
-      await updateEntries(updates)
-      const prevDates = await syncBookingDates(bookingIds)
-      pushUndo(fullLabel, async () => {
-        await restoreEntries(before)
-        await setBookingDates(prevDates)
+      const before = await getEntriesByIds([...del.map((e) => e.id), ...upd.map((u) => u.id)])
+      await deleteEntries(del.map((e) => e.id))
+      if (upd.length) await updateEntries(upd)
+      const created = ins.length ? await insertEntries(ins) : []
+      const bookingIds = before.filter((b) => b.booking_id && upd.some((u) => u.id === b.id)).map((b) => b.booking_id)
+      const prevDates = bookingIds.length ? await syncBookingDates(bookingIds) : []
+      pushUndo(label, async () => {
+        await restoreEntries(before, created)
+        if (prevDates.length) await setBookingDates(prevDates)
       })
     })
   }
-  const groupBeer = (rows) => {
-    const r = rows.find((x) => beerOf.get(x.id)) ?? rows.find((x) => x.lane === 'brew_1' || x.lane === 'brew_2')
-    return (r && beerOf.get(r.id)) ?? r?.text?.replace(/\s*-?\s*\d+\s*L$/i, '').trim() ?? 'brew'
+  function editCell(r, ci) {
+    const c = columns[ci]
+    const { date, slot } = cellAt(r)
+    const list = byCell.get(`${date}|${slot}|${c.key}`) ?? []
+    setEditing({ cell: { date, slot }, column: c, list, beer: cellBeer(c, list, date, slot) })
   }
-  function shift(label, rows, days) {
-    if (!rows.length || !days) return
-    applyMove(label, { rows, days })
-  }
-  function moveStayToTank(c, stay, toTank) {
-    const rows = entries.filter((e) => e.lane === 'tank' && e.tank_id === c.tankId && slotKey(e.entry_date, e.slot) >= stay.start && slotKey(e.entry_date, e.slot) <= stay.end)
-    applyMove(`Move ${stay.beer} to ${tankLabel(toTank.name)}`, { rows, days: 0, toTankId: toTank.id })
-  }
+
   // All of a booked brew's cells, even ones beyond the loaded weeks, move together.
   async function moveBookingTo(booking, newDate) {
     const days = daysBetween(booking.brew_date, newDate)
     if (!days) return
     const rows = await listBookingEntries(booking.id)
     if (!rows.length) return
-    applyMove(`Move ${booking.beer_name} brew ${days > 0 ? '+' : ''}${days} day${Math.abs(days) === 1 ? '' : 's'}`, { rows, days }, rows)
+    applyCells(`Move ${booking.beer_name} brew ${days > 0 ? '+' : ''}${days} day${Math.abs(days) === 1 ? '' : 's'}`, {
+      upd: rows.map((r) => ({ id: r.id, entry_date: addDays(r.entry_date, days) })),
+    })
   }
   function openArchive(ym) {
     setArchive(ym)
@@ -540,48 +451,36 @@ export default function SchedulePage() {
     [tanks]
   )
 
-  // Planning always works from the saved schedule; while a move is being sorted out the
-  // grid shows the schedule as it would be, with the moved cells marked.
-  const saved = useMemo(
+  const colIndex = useMemo(() => new Map(columns.map((c, i) => [c.key, i])), [columns])
+  const { beerOf, runs } = useMemo(
     () => assignBeers(entries, { knownBeers: templates.map((t) => t.name), bookingBeer }),
     [entries, templates, bookingBeer]
-  )
-  const planRuns = saved.runs
-  const resolverPlan = useMemo(() => (resolver ? planMove(resolver.all, planRuns, resolver.moves) : null), [resolver, planRuns])
-  const shown = useMemo(() => {
-    if (!resolverPlan) return entries
-    const u = new Map(resolverPlan.updates.map((x) => [x.id, x]))
-    return entries.map((e) => (u.has(e.id) ? { ...e, ...u.get(e.id) } : e))
-  }, [entries, resolverPlan])
-  const movedIds = useMemo(() => new Set(resolverPlan?.updates.map((u) => u.id) ?? []), [resolverPlan])
-  const { beerOf, runs } = useMemo(
-    () => (shown === entries ? saved : assignBeers(shown, { knownBeers: templates.map((t) => t.name), bookingBeer })),
-    [shown, entries, saved, templates, bookingBeer]
   )
 
   const byCell = useMemo(() => {
     const m = new Map()
-    for (const e of shown) {
+    for (const e of entries) {
       const k = `${e.entry_date}|${e.slot}|${e.lane === 'tank' ? e.tank_id : e.lane}`
       m.set(k, [...(m.get(k) ?? []), e])
     }
     return m
-  }, [shown])
+  }, [entries])
 
   const dayCount = Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86400000) + 1
   const days = Array.from({ length: dayCount }, (_, i) => addDays(range.from, i))
   // Beers on the loaded schedule, for the colour key.
-  const weekBeers = [...new Set(shown.filter((e) => e.entry_date >= range.from && beerOf.get(e.id)).map((e) => beerOf.get(e.id)))].sort()
+  const weekBeers = [...new Set(entries.filter((e) => e.entry_date >= range.from && beerOf.get(e.id)).map((e) => beerOf.get(e.id)))].sort()
   const today = todayIso()
 
   // A cell's beer: its own job's beer, or for a tank, whatever is sitting in the tank then.
   function cellBeer(c, list, d, slot) {
     if (list[0] && beerOf.get(list[0].id)) return beerOf.get(list[0].id)
     if (c.lane === 'tank') return beerInTank(runs, c.tankId, d, slot)
-    if (c.group === 'pack' && list.length) return packBeer(list, d, slot, { entries: shown, beerOf, runs, brightTankIds })
+    if (c.group === 'pack' && list.length) return packBeer(list, d, slot, { entries, beerOf, runs, brightTankIds })
     return null
   }
   const brightTankIds = tanks.filter((t) => t.tank_type === 'BBT').map((t) => t.id)
+  const selRect = rectOf(sel)
 
   return (
     <div>
@@ -614,7 +513,7 @@ export default function SchedulePage() {
           {pastMonths().map((ym) => <option key={ym} value={ym}>{fmtMonth(ym)}</option>)}
         </select>
         {archive && <strong>Archive: {fmtMonth(archive)} (view only)</strong>}
-        {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Drag a cell to move it · Ctrl-drag to copy · right-click for more</span>}
+        {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit</span>}
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
@@ -634,7 +533,7 @@ export default function SchedulePage() {
         </div>
       )}
 
-      <div className={'sc-scroll' + (resolver ? ' sc-previewing' : '')} ref={scrollRef} onScroll={onScroll}>
+      <div className="sc-scroll" ref={scrollRef} onScroll={onScroll}>
         <table className="sc-grid">
           <thead>
             <tr>
@@ -655,7 +554,10 @@ export default function SchedulePage() {
                   <td className="sc-day">
                     {slot === 'AM' ? <strong>{fmtDay(d)}</strong> : null} <span className="sc-slot">{slot}</span>
                   </td>
-                  {columns.map((c) => {
+                  {columns.map((c, ci) => {
+                    const r = rowOf(d, slot)
+                    const inSel = selRect && r >= selRect.r0 && r <= selRect.r1 && ci >= selRect.c0 && ci <= selRect.c1
+                    const inClip = clip && r >= clip.r0 && r < clip.r0 + clip.h && ci >= clip.c0 && ci < clip.c0 + clip.w
                     const list = byCell.get(`${d}|${slot}|${c.key}`) ?? []
                     const beer = cellBeer(c, list, d, slot)
                     // Black outline round each tank stay as a block: sides always, top on its
@@ -668,7 +570,8 @@ export default function SchedulePage() {
                     return (
                       <td
                         key={c.key}
-                        className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '') + (movedIds.size && list.some((e) => movedIds.has(e.id)) ? ' sc-moved' : '')}
+                        className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '') + (inSel ? ' sc-sel' : '') + (inClip ? ' sc-clip' : '')}
+                        data-cell={`${r}|${ci}`}
                         style={(() => {
                           // A cell's own colours win over its beer's.
                           const own = list.find((x) => x.cell_bg || x.cell_fg)
@@ -683,25 +586,21 @@ export default function SchedulePage() {
                           }
                         })()}
                         title={beer ?? undefined}
-                        onClick={editor && !archive ? () => setEditing({ cell: { date: d, slot }, column: c, list, beer }) : undefined}
-                        draggable={editor && !archive && list.length > 0}
-                        onDragStart={(e) => {
-                          dragged.current = { list, date: d, slot, colKey: c.key }
-                          e.dataTransfer.effectAllowed = 'copyMove'
-                          e.dataTransfer.setData('text/plain', list.map((x) => x.text).join(', '))
-                        }}
-                        onDragOver={editor && !archive ? (e) => {
+                        onMouseDown={(e) => {
+                          if (e.button !== 0) return
                           e.preventDefault()
-                          e.dataTransfer.dropEffect = e.ctrlKey || e.metaKey || e.altKey ? 'copy' : 'move'
-                          if (dropKey !== `${d}|${slot}|${c.key}`) setDropKey(`${d}|${slot}|${c.key}`)
-                        } : undefined}
-                        onDragLeave={() => setDropKey((k) => (k === `${d}|${slot}|${c.key}` ? null : k))}
-                        onDrop={editor && !archive ? (e) => onDrop(e, c, d, slot) : undefined}
+                          setMenu(null)
+                          const here = { r, c: ci }
+                          setSel((s) => (e.shiftKey && s ? { a: s.a, f: here } : { a: here, f: here }))
+                          selecting.current = true
+                        }}
+                        onMouseEnter={() => { if (selecting.current) setSel((s) => s && { a: s.a, f: { r, c: ci } }) }}
+                        onDoubleClick={editor && !archive ? () => editCell(r, ci) : undefined}
                         onContextMenu={editor && !archive ? (e) => {
                           e.preventDefault()
-                          setMenu({ x: e.clientX, y: e.clientY, cell: { date: d, slot }, column: c, list, beer, stay })
+                          if (!inSel) setSel({ a: { r, c: ci }, f: { r, c: ci } })
+                          setMenu({ x: e.clientX, y: e.clientY, r, ci })
                         } : undefined}
-                        data-drop={dropKey === `${d}|${slot}|${c.key}` ? 'over' : undefined}
                       >
                         {list.map((e) => (
                           <div key={e.id} className={e.done ? 'sc-done' : ''}>{e.text}</div>
@@ -753,53 +652,22 @@ export default function SchedulePage() {
             style={{ left: Math.min(menu.x, window.innerWidth - 290), top: Math.min(menu.y, window.innerHeight - 400) }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sc-menu-title">{menu.column.label} · {fmtDay(menu.cell.date)} {menu.cell.slot}</div>
-            <button className="sc-menu-item" onClick={() => { setMenu(null); setEditing({ cell: menu.cell, column: menu.column, list: menu.list, beer: menu.beer }) }}>Edit…</button>
-            {menu.stay && (() => {
-              const all = stayEntries(menu.column, menu.stay)
-              const k = slotKey(menu.cell.date, menu.cell.slot)
-              const fromHere = all.filter((e) => slotKey(e.entry_date, e.slot) >= k)
-              const stayStart = menu.stay.start.split('|')[0]
-              const close = (fn) => () => { setMenu(null); fn() }
-              const others = tanks.filter((t) => t.id !== menu.column.tankId && (t.tank_type === 'BBT') === (menu.column.group === 'bbt'))
+            {(() => {
+              const q = rectOf(sel) ?? { r0: menu.r, r1: menu.r, c0: menu.ci, c1: menu.ci }
+              const n = entriesIn(q).length
+              const one = q.r0 === q.r1 && q.c0 === q.c1
+              const run = (fn) => () => { setMenu(null); fn() }
               return (
                 <>
-                  <div className="sc-menu-title">{menu.stay.beer}</div>
-                  <div className="sc-menu-row">
-                    <span>This job and later ({fromHere.length})</span>
-                    <button onClick={close(() => shift(`Shift ${menu.stay.beer} from ${fmtDay(menu.cell.date)} −1 day`, fromHere, -1))}>−1</button>
-                    <button onClick={close(() => shift(`Shift ${menu.stay.beer} from ${fmtDay(menu.cell.date)} +1 day`, fromHere, 1))}>+1</button>
-                  </div>
-                  <MoveToDate from={menu.cell.date} onMove={(to) => close(() => shift(`Move ${menu.stay.beer} from ${fmtDay(menu.cell.date)} to ${fmtDay(to)}`, fromHere, daysBetween(menu.cell.date, to)))()} />
-                  <div className="sc-menu-row">
-                    <span>Whole stay ({all.length})</span>
-                    <button onClick={close(() => shift(`Shift ${menu.stay.beer} −1 day`, all, -1))}>−1</button>
-                    <button onClick={close(() => shift(`Shift ${menu.stay.beer} +1 day`, all, 1))}>+1</button>
-                  </div>
-                  <MoveToDate label="Starts" from={stayStart} onMove={(to) => close(() => shift(`Move ${menu.stay.beer} to start ${fmtDay(to)}`, all, daysBetween(stayStart, to)))()} />
-                  <div className="sc-menu-row">
-                    <span>Move stay to</span>
-                    <select defaultValue="" onChange={(e) => { const t = others.find((x) => x.id === e.target.value); if (t) close(() => moveStayToTank(menu.column, menu.stay, t))() }}>
-                      <option value="" disabled>tank…</option>
-                      {others.map((t) => <option key={t.id} value={t.id}>{tankLabel(t.name)}</option>)}
-                    </select>
-                  </div>
+                  <div className="sc-menu-title">{one ? `${columns[q.c0].label} · ${rectLabel(q)}` : `${q.r1 - q.r0 + 1} × ${q.c1 - q.c0 + 1} cells · ${n} job${n === 1 ? '' : 's'}`}</div>
+                  {one && <button className="sc-menu-item" onClick={run(() => editCell(q.r0, q.c0))}>Edit…</button>}
+                  <button className="sc-menu-item" onClick={run(() => copySel('cut'))}>Cut <span className="sc-kbd">Ctrl+X</span></button>
+                  <button className="sc-menu-item" onClick={run(() => copySel('copy'))}>Copy <span className="sc-kbd">Ctrl+C</span></button>
+                  <button className="sc-menu-item" disabled={!clip} onClick={run(pasteAt)}>Paste <span className="sc-kbd">Ctrl+V</span></button>
+                  {n > 0 && <button className="sc-menu-item sc-menu-danger" onClick={run(clearSel)}>Clear {n} job{n === 1 ? '' : 's'} <span className="sc-kbd">Delete</span></button>}
                 </>
               )
             })()}
-            {menu.list.length > 0 && (
-              <button
-                className="sc-menu-item sc-menu-danger"
-                onClick={() => {
-                  const ids = menu.list.map((x) => x.id)
-                  const label = `Delete ${menu.list.map((x) => x.text).join(', ')} (${menu.column.label} ${fmtDay(menu.cell.date)} ${menu.cell.slot})`
-                  setMenu(null)
-                  perform(() => act(label, ids, () => deleteEntries(ids).then(() => [])))
-                }}
-              >
-                Delete {menu.list.length === 1 ? `“${menu.list[0].text}”` : `${menu.list.length} jobs`}
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -820,18 +688,6 @@ export default function SchedulePage() {
           entries={editing.list}
           onClose={() => setEditing(null)}
           onChanged={refresh}
-        />
-      )}
-      {resolver && (
-        <MoveResolver
-          resolver={resolver}
-          plan={resolverPlan}
-          runs={planRuns}
-          tankName={tankName}
-          groupBeer={groupBeer}
-          onChange={setResolver}
-          onSave={saveMove}
-          onClose={() => setResolver(null)}
         />
       )}
       {booking && (
