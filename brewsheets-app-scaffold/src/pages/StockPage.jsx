@@ -17,6 +17,14 @@ const locationLabel = (key) => (key.startsWith('unleashed|') ? key.slice(10).rep
 // Core range if Unleashed can't be read for the sub-group.
 const CORE_FALLBACK = ['ITP', 'Kolsch', 'Lager', 'Draught', 'Megsy', 'Mermid', 'Pale Ale', 'Red IPA', 'River Dog', 'Stout', 'Brown', 'Drift XPA']
 
+// "Cube-Wander" -> Wander cubes, "30l Keg Beyond the Pines" -> Beyond the Pines kegs.
+function fromUnleashedName(code) {
+  const m = /^(?:\d{2}\s*l\s+)?(cube|keg)\s*-?\s*(.+)$/i.exec(String(code).trim())
+  if (!m) return null
+  const beer = m[2].replace(/\s*\d{2,}\s*l$/i, '').trim()
+  return beer ? { beer, format: m[1].toLowerCase() } : null
+}
+
 const TABLES = [
   { key: 'cube', title: 'Cubes', note: '16 × 375 mL', match: (r) => r.format === 'cube' },
   { key: 'keg', title: '50 L kegs', match: (r) => r.format === 'keg' && r.size === 50 },
@@ -71,10 +79,11 @@ export default function StockPage() {
   const view = useMemo(() => {
     if (!data) return null
     const link = new Map(data.products.map((p) => [`${p.source}|${p.code.toLowerCase()}`, p]))
-    // Transfers in transit carry Unleashed product codes.
+    // Transfers in transit carry Unleashed product codes. An Unleashed code that isn't in the
+    // list yet still counts if its name says what it is ("Cube-Wander", "20L Keg-ITP").
     const find = (source, code, alt) => {
       const src = source === 'transit' ? 'unleashed' : source
-      return link.get(`${src}|${String(code).toLowerCase()}`) ?? (alt ? link.get(`${src}|${String(alt).toLowerCase()}`) : null)
+      return link.get(`${src}|${String(code).toLowerCase()}`) ?? (alt ? link.get(`${src}|${String(alt).toLowerCase()}`) : null) ?? (src === 'unleashed' ? fromUnleashedName(code) : null)
     }
     const counted = data.items.filter((it) => !mirrorsLm(it))
     const locations = [...new Set(counted.map(locationKey))].sort((a, b) => {
