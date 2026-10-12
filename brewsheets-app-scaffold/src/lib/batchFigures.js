@@ -42,7 +42,7 @@ export function batchFigures(batch, sessions = []) {
     abv: og != null && fg ? abvTracker(og, fg.plato) : null,
     targetOg: n(recipe.target_og),
     targetFg: n(recipe.target_fg),
-    targetAbv: n(recipe.target_og) != null && n(recipe.target_fg) != null ? abvTracker(recipe.target_og, recipe.target_fg) : null,
+    targetAbv: n(recipe.target_abv),
     yieldL: koVol || null,
     turnsDone: turns.filter((r) => r.knockout_confirmed_at).length,
     packed,
