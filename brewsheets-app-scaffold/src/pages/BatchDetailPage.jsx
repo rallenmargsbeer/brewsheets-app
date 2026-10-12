@@ -262,7 +262,20 @@ function formatQty(qty) {
 // gating. Saves trigger a full page refresh (onSaved) rather than local
 // state patching, same as everywhere else on this page.
 function IngredientList({ title, items, ingredients, onSaved }) {
+  const [adding, setAdding] = useState(false)
   if (!items || items.length === 0) return null
+  const notAdded = items.filter((i) => !i.added_at)
+  // Marks every ingredient in this section not yet added as added now.
+  async function addAll() {
+    setAdding(true)
+    try {
+      const now = new Date().toISOString()
+      await Promise.all(notAdded.map((i) => updateBrewRunIngredient(i.id, { added_at: now })))
+      onSaved()
+    } finally {
+      setAdding(false)
+    }
+  }
   return (
     <div style={{ marginTop: '0.75rem' }}>
       {title && (
@@ -275,6 +288,7 @@ function IngredientList({ title, items, ingredients, onSaved }) {
             <th style={{ textAlign: 'left' }}>When</th>
             <th style={{ textAlign: 'left' }}>Planned</th>
             <th style={{ textAlign: 'left' }}>Actual</th>
+            <th />
           </tr>
         </thead>
         <tbody>
@@ -283,6 +297,11 @@ function IngredientList({ title, items, ingredients, onSaved }) {
           ))}
         </tbody>
       </table>
+      {items.length > 1 && (
+        <button className="ing-addall" onClick={addAll} disabled={adding || !notAdded.length}>
+          {!notAdded.length ? '✓ All added' : adding ? 'Adding…' : `Add all${title ? ` ${title.toLowerCase()}` : ''} (${notAdded.length})`}
+        </button>
+      )}
     </div>
   )
 }
@@ -327,8 +346,21 @@ function IngredientRow({ item, ingredients, onSaved }) {
 
   const changed = item.actual_qty !== item.planned_qty
 
+  // Add stamps the time it went in; tapping the stamp undoes a mis-tap.
+  async function toggleAdded() {
+    if (item.added_at && !window.confirm(`Mark ${item.item_name} as not added?`)) return
+    setSaving(true)
+    try {
+      await updateBrewRunIngredient(item.id, { added_at: item.added_at ? null : new Date().toISOString() })
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+  const addedTime = item.added_at ? new Date(item.added_at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }) : null
+
   return (
-    <tr>
+    <tr className={item.added_at ? 'ing-added' : ''}>
       <td>
         <IngredientPicker value={item.item_name} section={item.section} ingredients={ingredients ?? []} onCommit={saveName} disabled={saving} width={180} />
       </td>
@@ -349,6 +381,11 @@ function IngredientRow({ item, ingredients, onSaved }) {
           disabled={saving}
         />
         <span style={{ marginLeft: '0.25rem', fontSize: '0.75rem', color: '#888' }}>{kg ? 'kg' : 'g'}</span>
+      </td>
+      <td>
+        {item.added_at
+          ? <button className="ing-stamp" onClick={toggleAdded} disabled={saving} title="Tap to undo">✓ Added {addedTime}</button>
+          : <button className="ing-add" onClick={toggleAdded} disabled={saving}>Add</button>}
       </td>
     </tr>
   )
@@ -441,7 +478,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
 
   // This turn's snapshotted ingredient lines, split out by where each one
   // belongs on the brew sheet.
-  const ingredients = form.brew_run_ingredients ?? []
+  // From the latest load (not the form's snapshot) so Add / Add all show straight away.
+  const ingredients = run?.brew_run_ingredients ?? form.brew_run_ingredients ?? []
   const gristItems = ingredients.filter((i) => i.section === 'grist')
   const mashWaterItems = ingredients.filter((i) => i.section === 'water' && i.addition_stage === 'mash')
   const kettleItems = ingredients.filter((i) => i.section === 'kettle')
