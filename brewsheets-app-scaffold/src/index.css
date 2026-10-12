@@ -398,6 +398,9 @@ tbody tr:hover td {
 .sc-menu-row span { flex: 1; }
 .sc-menu-row button { padding: 0.15rem 0.5rem; font-size: 0.8rem; }
 .sc-menu-row select { font-size: 0.8rem; }
+.sc-menu-date { padding-top: 0; }
+.sc-menu-date span { flex: 0 0 auto; color: var(--ink2); padding-left: 0.75rem; }
+.sc-menu-date input { flex: 1; min-width: 0; font-size: 0.8rem; padding: 0.15rem 0.3rem; }
 
 .sc-chip-edit { cursor: pointer; }
 .sc-chip-edit:hover { outline: 2px solid #1a1a1a; outline-offset: 1px; }
