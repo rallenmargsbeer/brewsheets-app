@@ -16,6 +16,7 @@ create table if not exists public.stock_items (
   source text not null check (source in ('unleashed', 'lm_3pl', 'lm_wholesale')),
   location text not null,
   code text not null,
+  alt_code text,
   description text,
   product_group text,
   on_hand numeric not null default 0,

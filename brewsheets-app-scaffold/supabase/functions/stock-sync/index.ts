@@ -12,8 +12,8 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
-// Unleashed product groups worth keeping (packaged beer); everything else is ingredients etc.
-const GROUPS = /keg|cube|pack|finished/i
+// Unleashed product groups worth keeping: packaged beer only (not labels, cans, boxes etc).
+const GROUPS = /^(kegs|cubes|sellable 4 packs)$/i
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -79,16 +79,24 @@ Deno.serve(async (req: Request) => {
       available: s.AvailableQty ?? (s.QtyOnHand || 0) - (s.AllocatedQty || 0),
     })
     const rows: Record<string, unknown>[] = []
+    let sample = ''
     try {
-      for (const t of totals) {
-        const per = await getJson(`StockOnHand/${t.ProductGuid}/AllWarehouses`, {}, id, key)
-        const list = Array.isArray(per) ? per : per.Items || []
-        for (const w of list) {
-          if (!w.QtyOnHand && !w.AllocatedQty) continue
-          const name = typeof w.Warehouse === 'string' ? w.Warehouse : w.Warehouse?.WarehouseName || w.WarehouseName || w.WarehouseCode || 'Unknown warehouse'
-          rows.push(row({ ...t, ...w, ProductCode: t.ProductCode, ProductDescription: t.ProductDescription, ProductGroupName: t.ProductGroupName }, name))
-        }
+      // A few products at a time keeps it quick without hammering the API.
+      for (let i = 0; i < totals.length; i += 6) {
+        await Promise.all(totals.slice(i, i + 6).map(async (t: any) => {
+          const per = await getJson(`StockOnHand/${t.ProductGuid}/AllWarehouses`, {}, id, key)
+          if (!sample) sample = JSON.stringify(per).slice(0, 700)
+          const list = Array.isArray(per) ? per : per.Items || []
+          for (const w of list) {
+            // This endpoint only gives available qty per warehouse.
+            const qty = w.QtyOnHand ?? w.AvailableQty ?? 0
+            if (!qty && !w.AllocatedQty) continue
+            const name = typeof w.Warehouse === 'string' ? w.Warehouse : w.Warehouse?.WarehouseName || w.WarehouseName || w.WarehouseCode || 'Unknown warehouse'
+            rows.push(row({ ...t, ...w, QtyOnHand: qty, AllocatedQty: w.AllocatedQty ?? 0, AvailableQty: w.AvailableQty ?? qty, ProductCode: t.ProductCode, ProductDescription: t.ProductDescription, ProductGroupName: t.ProductGroupName }, name))
+          }
+        }))
       }
+      if (!rows.length && totals.length) throw new Error('no warehouse rows matched; response looks like ' + sample)
     } catch (e) {
       results.unleashed_note = 'warehouse split unavailable (' + String((e as Error).message) + '); totals only'
       rows.length = 0
@@ -109,7 +117,9 @@ Deno.serve(async (req: Request) => {
       const stock = await lmStock(user, pass)
       const n = await save(source, stock.map((s) => ({
         location: label,
+        // The two LM accounts put their own code and the vendor code in opposite columns; keep both.
         code: s.item,
+        alt_code: s.code,
         description: s.description,
         product_group: s.upc ? `${s.upc} per unit` : null,
         on_hand: s.soh,

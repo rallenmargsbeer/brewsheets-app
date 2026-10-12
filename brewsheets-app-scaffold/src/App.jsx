@@ -15,6 +15,7 @@ import IngredientsPage from './pages/IngredientsPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
+import StockPage from './pages/StockPage.jsx'
 import { AuthProvider, RequireAuth } from './auth.jsx'
 
 const navClass = ({ isActive }) => 'nav-link' + (isActive ? ' active' : '')
@@ -55,6 +56,9 @@ export default function App() {
           <NavLink to="/ingredients" className={navClass}>
             Ingredients
           </NavLink>
+          <NavLink to="/stock" className={navClass}>
+            Stock
+          </NavLink>
           <NavLink to="/reports" className={navClass}>
             Reports
           </NavLink>
@@ -78,6 +82,7 @@ export default function App() {
           <Route path="/tanks" element={<TanksPage />} />
           <Route path="/ingredients" element={<IngredientsPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/stock" element={<RequireAuth><StockPage /></RequireAuth>} />
           <Route path="/reports" element={<RequireAuth><ReportsPage /></RequireAuth>} />
           <Route path="/reports/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
         </Routes>
