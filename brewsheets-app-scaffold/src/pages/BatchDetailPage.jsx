@@ -1048,10 +1048,12 @@ function BatchDetails({ batch, tanks, ingredients, remove }) {
         <div className="bd-grid">
           <Fact label="Brewhouse yield" value={fx(f.yieldL, 0, ' L')} from="Knockout flowmeter, all turns" />
           <Fact label="FV to BBT" value={fx(batch.fv_to_bbt_l, 0, ' L')} from={batch.bbt_transfer_date ? `Cellar transfer, ${fmtDate(batch.bbt_transfer_date)}` : 'Cellar transfer'} />
-          <Fact label="Packaged" value={packedText || null} from={f.packedLitres ? `${f.packedLitres.toLocaleString()} L` : 'Packaging sessions'} />
+          <Fact label="Packaged" value={f.packedLitres ? `${f.packedLitres.toLocaleString()} L` : null} from={packedText || 'Packaging sessions'} />
           <Fact label="Package date" value={packDate} from="Packaging sessions" />
         </div>
       </section>
+
+      <PackagedTable sessions={sessions} />
 
       <IngredientsUsed batch={batch} ingredients={ingredients} />
 
@@ -1059,5 +1061,87 @@ function BatchDetails({ batch, tanks, ingredients, remove }) {
         <button className="secondary" onClick={remove}>Delete batch</button>
       </div>
     </>
+  )
+}
+
+// What was packed, session by session, for building the packaging assemblies in Unleashed.
+const PACK_COLS = [
+  ['cubes', 'Cubes', 6],
+  ['kegs_50', '50 L kegs', 50],
+  ['kegs_30', '30 L kegs', 30],
+  ['kegs_20', '20 L kegs', 20],
+]
+
+// Can DO readings from a session's checks: every fill-head reading (heads 1 to 6, or the
+// single reading on older checks).
+function canDos(session) {
+  const out = []
+  for (const c of session.packaging_do_checks ?? []) {
+    const heads = [1, 2, 3, 4, 5, 6].map((h) => c[`head_${h}`]).filter((v) => v != null && v !== '')
+    out.push(...(heads.length ? heads : c.do_ppb != null ? [c.do_ppb] : []).map(Number))
+  }
+  return out
+}
+const dash = (v, dp = 0) => (v == null || v === '' ? '—' : Number(v).toFixed(dp))
+
+function PackagedTable({ sessions }) {
+  const cols = PACK_COLS.filter(([k]) => sessions.some((s) => Number(s[k])))
+  const litres = (s) => PACK_COLS.reduce((a, [k, , l]) => a + (Number(s[k]) || 0) * l, 0)
+  const total = Object.fromEntries(PACK_COLS.map(([k]) => [k, sessions.reduce((a, s) => a + (Number(s[k]) || 0), 0)]))
+  return (
+    <section className="bd-card">
+      <h3>Packaged &amp; QC</h3>
+      {!sessions.length ? (
+        <p className="bd-empty" style={{ margin: 0 }}>Nothing packaged yet. Pack-off sessions on the Packaging tab show here.</p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="bd-table">
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th>Date</th>
+                <th>Operator</th>
+                {cols.map(([k, label]) => <th key={k} className="num">{label}</th>)}
+                <th className="num">Litres</th>
+                <th className="num bd-qc">Tank CO₂ (vols)</th>
+                <th className="num bd-qc">Tank DO (ppb)</th>
+                <th className="num bd-qc">Can DO avg / max (ppb)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s, i) => (
+                <tr key={s.id}>
+                  <td>{i + 1}</td>
+                  <td>{fmtDate(s.package_date) ?? '—'}</td>
+                  <td>{s.operator || '—'}</td>
+                  {cols.map(([k]) => <td key={k} className="num">{Number(s[k]) ? Number(s[k]).toLocaleString() : ''}</td>)}
+                  <td className="num">{litres(s).toLocaleString()}</td>
+                  <td className="num bd-qc">{dash(s.co2_vols, 2)}</td>
+                  <td className="num bd-qc">{dash(s.do_ppb)}</td>
+                  <td className="num bd-qc">{(() => {
+                    const d = canDos(s)
+                    if (!d.length) return '—'
+                    const avg = d.reduce((a, x) => a + x, 0) / d.length
+                    return `${Math.round(avg)} / ${Math.round(Math.max(...d))}`
+                  })()}<span className="bd-n">{canDos(s).length ? ` (${(s.packaging_do_checks ?? []).length} check${(s.packaging_do_checks ?? []).length === 1 ? '' : 's'})` : ''}</span></td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={3}>Total</td>
+                {cols.map(([k]) => <td key={k} className="num">{total[k].toLocaleString()}</td>)}
+                <td className="num">{litres(total).toLocaleString()}</td>
+                <td colSpan={2} className="bd-qc" />
+                <td className="num bd-qc">{(() => {
+                  const d = sessions.flatMap(canDos)
+                  return d.length ? `${Math.round(d.reduce((a, x) => a + x, 0) / d.length)} / ${Math.round(Math.max(...d))}` : ''
+                })()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }
