@@ -551,3 +551,16 @@ tr.ing-added td { background: #f3faf5; }
 .rec-est span { margin-right: 0.4rem; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.04em; }
 .rec-est strong { font-size: 1.15rem; color: var(--ink); }
 .rec-est p { flex-basis: 100%; margin: 0.2rem 0 0; font-size: 0.8rem; color: #8a5a00; }
+
+/* Forecast and brew plan */
+.stock-plan h2 { background: #3d5a40; }
+.stock-plan thead th { background: #e4efe3; color: #2c4a2f; }
+.plan-table td.plan-need, .plan-table th.plan-need { text-align: center; }
+.plan-sched { margin: 0 0 1rem; max-width: 560px; }
+.plan-sched .stock-table { font-size: 0.85rem; }
+.fc-grid td { padding: 0.15rem 0.25rem; }
+.fc-grid input { width: 4.2rem; text-align: right; padding: 0.2rem 0.3rem; font-size: 0.88rem; }
+.fc-grid .fc-format { text-align: left; font-size: 0.78rem; }
+.fc-grid .fc-min { background: #f4f2ec; }
+.fc-grid tr.fc-keg td { border-bottom: 2px solid var(--line); }
+.stock-table tbody tr.fc-cube, .stock-table tbody tr.fc-keg { background: transparent; }

@@ -53,18 +53,25 @@ export const beerMatch = (name) => {
   return SAME[k] ?? k
 }
 
-// Weeks until stock runs out: it falls by `weekly` a week and rises on each packaging day.
-// Returns null with no sales, or `maxWeeks` when it lasts that long.
+// Weeks until stock runs out: it falls by `weekly` a week (or by `weekly(date)` a day, for a
+// forecast that changes month to month) and rises on each packaging day.
+// Returns null with no demand, or `maxWeeks` when it lasts that long.
 export function weeksOfCover(stock, weekly, incoming = [], { today = todayIso(), maxWeeks = 26 } = {}) {
-  if (!(weekly > 0.05)) return null
+  const perDayOn = typeof weekly === 'function' ? weekly : () => weekly / 7
+  if (typeof weekly !== 'function' && !(weekly > 0.05)) return null
   let s = Math.max(0, stock)
-  const perDay = weekly / 7
   const add = new Map()
   for (const i of incoming) add.set(i.date, (add.get(i.date) ?? 0) + i.qty)
+  let any = false
   for (let d = 0; d < maxWeeks * 7; d++) {
-    s += add.get(addDays(today, d)) ?? 0
-    if (s < perDay) return (d + s / perDay) / 7
+    const date = addDays(today, d)
+    const perDay = perDayOn(date)
+    s += add.get(date) ?? 0
+    if (perDay > 0) {
+      any = true
+      if (s < perDay) return (d + s / perDay) / 7
+    }
     s -= perDay
   }
-  return maxWeeks
+  return any ? maxWeeks : null
 }
