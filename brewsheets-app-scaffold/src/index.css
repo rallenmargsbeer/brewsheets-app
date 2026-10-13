@@ -560,7 +560,20 @@ tr.ing-added td { background: #f3faf5; }
 .plan-sched .stock-table { font-size: 0.85rem; }
 .fc-grid td { padding: 0.15rem 0.25rem; }
 .fc-grid input { width: 4.2rem; text-align: right; padding: 0.2rem 0.3rem; font-size: 0.88rem; }
-.fc-grid .fc-format { text-align: left; font-size: 0.78rem; }
-.fc-grid .fc-min { background: #f4f2ec; }
-.fc-grid tr.fc-keg td { border-bottom: 2px solid var(--line); }
-.stock-table tbody tr.fc-cube, .stock-table tbody tr.fc-keg { background: transparent; }
+.fc-grid .fc-format { text-align: left; }
+.stock-table tbody tr.fc-cube { background: #eef6fa; }
+.stock-table tbody tr.fc-keg { background: #fbf3ea; }
+.fc-grid tr.fc-cube td { border-top: 3px solid #d9d5cc; border-bottom: 1px dashed #c9d9e2; }
+.fc-grid tr.fc-keg td { border-bottom: none; }
+.fc-grid td.stock-beer { background: var(--surface); border-bottom: none; vertical-align: middle; }
+.fc-grid tr.fc-cube input { border-color: #a9c7d6; }
+.fc-grid tr.fc-keg input { border-color: #ddc2a3; }
+.fc-grid tr.fc-cube .fc-min { background: #d7e9f2; }
+.fc-grid tr.fc-keg .fc-min { background: #f3e2cd; }
+.fc-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: #fff; }
+.fc-tag.cube { background: #2f6f8f; }
+.fc-tag.keg { background: #8a4b12; }
+.u-cube, .u-keg { display: inline-block; min-width: 3.2rem; padding: 0.05rem 0.4rem; border-radius: 4px; font-weight: 600; }
+.u-cube { background: #e3eff5; color: #1f4f66; }
+.u-keg { background: #f5e8d9; color: #6b3a0e; margin-left: 0.3rem; }
+.u-cube-h { color: #2f6f8f; } .u-keg-h { color: #8a4b12; }

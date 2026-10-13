@@ -111,7 +111,7 @@ function DemandGrid({ forecast, onSaved }) {
               {beers.map((beer) => FORMATS.map(([format, label], i) => (
                 <tr key={beer + format} className={i ? 'fc-keg' : 'fc-cube'}>
                   {i === 0 && <td className="stock-beer" rowSpan={2}>{beer}</td>}
-                  <td className="stock-muted fc-format">{label}</td>
+                  <td className="fc-format"><span className={`fc-tag ${format}`}>{label}</span></td>
                   {['min', ...monthsShown].map((col) => {
                     const k = `${beer}|${format}|${col}`
                     return (
