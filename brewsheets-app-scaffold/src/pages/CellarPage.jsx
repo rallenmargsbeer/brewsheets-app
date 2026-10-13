@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom'
 import { listTanks, listIngredients, listBatchesInTanks, upsertBatch, upsertFermentationReading } from '../lib/api'
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import AddToTank from '../components/AddToTank.jsx'
+import TankDay from '../components/TankDay.jsx'
+import { loadDay } from '../lib/dayTasks'
+import { isScheduleEditor } from '../lib/schedule'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -16,8 +19,11 @@ function daysSince(date) {
 const daysInTank = (batch, tank) =>
   daysSince(tank.tank_type === 'BBT' && batch.bbt_transfer_date ? batch.bbt_transfer_date : batch.date_brewed)
 
-function TankTile({ tank, batch, onClick }) {
+function TankTile({ tank, batch, day, onClick }) {
   const days = batch ? daysInTank(batch, tank) : null
+  // Today's first job for the tile: scheduled, else the template's suggestion.
+  const next = day ? [...day.scheduled.filter((t) => !t.done), ...day.fromTemplate][0] : null
+  const alert = day?.advice.find((a) => a.level !== 'info')
   return (
     <button
       className="secondary"
@@ -39,6 +45,8 @@ function TankTile({ tank, batch, onClick }) {
       ) : (
         <span style={{ color: 'var(--ink2)' }}>Empty</span>
       )}
+      {next && <span className="tile-task">Today: {next.text}</span>}
+      {alert && <span className={`tile-alert ${alert.level}`}>{alert.level === 'warn' ? 'Check gravity' : alert.level === 'go' ? 'At FG' : 'Near FG'}</span>}
     </button>
   )
 }
@@ -135,7 +143,7 @@ function TransferForm({ batch, bbts, onSaved }) {
   )
 }
 
-function TankPanel({ tank, batch, emptyBbts, ingredients, onClose, onChanged }) {
+function TankPanel({ tank, batch, day, editor, emptyBbts, ingredients, onClose, onChanged }) {
   const [msg, setMsg] = useState(null)
 
   function done(text) {
@@ -161,6 +169,13 @@ function TankPanel({ tank, batch, emptyBbts, ingredients, onClose, onChanged }) 
           <button className="secondary" onClick={onClose} aria-label="Close">✕</button>
         </div>
         {msg && <p style={{ color: '#1a7a1a', marginBottom: 0 }}>{msg}</p>}
+
+        {day && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <h4 style={{ margin: '0 0 0.4rem' }}>Today</h4>
+            <TankDay day={day} editor={editor} onChanged={onChanged} />
+          </div>
+        )}
 
         {!batch ? (
           <p style={{ color: 'var(--ink2)' }}>This tank is empty. Start a brew from the Brew Day tab to fill it.</p>
@@ -204,6 +219,9 @@ export default function CellarPage() {
   const [error, setError] = useState(null)
   const [openTankId, setOpenTankId] = useState(null)
   const [ingredients, setIngredients] = useState([])
+  const [days, setDays] = useState(null)
+  const [editor, setEditor] = useState(false)
+  useEffect(() => { isScheduleEditor().then(setEditor) }, [])
   useEffect(() => {
     listIngredients().then(setIngredients).catch((e) => setError(e.message))
   }, [])
@@ -216,6 +234,8 @@ export default function CellarPage() {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
+    // Today's tasks per tank (schedule, template suggestion, gravity).
+    loadDay(today()).then((d) => setDays(Object.fromEntries(d.tanks.map((x) => [x.tank.id, x])))).catch(() => setDays(null))
   }
 
   useEffect(refresh, [])
@@ -231,7 +251,7 @@ export default function CellarPage() {
   return (
     <div>
       <h1>Cellar</h1>
-      <p style={{ color: 'var(--ink2)', marginTop: '-0.5rem' }}>Tap a tank to log a reading, add dry hops or transfer to a BBT.</p>
+      <p style={{ color: 'var(--ink2)', marginTop: '-0.5rem' }}>Tap a tank for today’s tasks, to log a reading, add dry hops or transfer to a BBT. <Link to="/today">Everything on today →</Link></p>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {loading ? (
         <p>Loading…</p>
@@ -239,13 +259,13 @@ export default function CellarPage() {
         <>
           <h3>Fermenters</h3>
           <div style={grid}>
-            {fvs.map((t) => <TankTile key={t.id} tank={t} batch={batchIn(t)} onClick={() => setOpenTankId(t.id)} />)}
+            {fvs.map((t) => <TankTile key={t.id} tank={t} batch={batchIn(t)} day={days?.[t.id]} onClick={() => setOpenTankId(t.id)} />)}
           </div>
           {bbts.length > 0 && (
             <>
               <h3 style={{ marginTop: '1.5rem' }}>Bright tanks</h3>
               <div style={grid}>
-                {bbts.map((t) => <TankTile key={t.id} tank={t} batch={batchIn(t)} onClick={() => setOpenTankId(t.id)} />)}
+                {bbts.map((t) => <TankTile key={t.id} tank={t} batch={batchIn(t)} day={days?.[t.id]} onClick={() => setOpenTankId(t.id)} />)}
               </div>
             </>
           )}
@@ -257,6 +277,8 @@ export default function CellarPage() {
           ingredients={ingredients}
           tank={openTank}
           batch={batchIn(openTank)}
+          day={days?.[openTank.id]}
+          editor={editor}
           emptyBbts={bbts.filter((t) => !batchIn(t))}
           onClose={() => setOpenTankId(null)}
           onChanged={refresh}
