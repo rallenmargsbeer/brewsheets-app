@@ -3,7 +3,7 @@
 // minimum stock.
 import { supabase } from '../supabaseClient'
 import { listTanks } from './api'
-import { addDays, todayIso, listScheduleEntries, listCellarTemplates, listBookings } from './schedule'
+import { addDays, daysBetween, todayIso, listScheduleEntries, listCellarTemplates, listBookings } from './schedule'
 import { assignBeers, beerKey } from './beerColours'
 import { beerMatch } from './incoming'
 
@@ -24,14 +24,29 @@ export const daysInMonth = (monthIso) => {
   return new Date(Date.UTC(y, m, 0)).getUTCDate()
 }
 
+// Shared planning settings (brew_settings): stock to hold, in weeks of forecast sales, and
+// how much the brewhouse can brew in a month.
+export const DEFAULT_COVER_WEEKS = 6
+export const DEFAULT_CAPACITY_L = 125000
+export const SETTING = { coverWeeks: 'stock_cover_weeks', capacityL: 'brewhouse_month_l' }
+
 export async function loadForecast() {
-  const [f, m] = await Promise.all([
+  const [f, s] = await Promise.all([
     supabase.from('stock_forecast').select('beer, format, month, qty'),
-    supabase.from('stock_min').select('beer, format, qty'),
+    supabase.from('brew_settings').select('key, value').in('key', Object.values(SETTING)),
   ])
   if (f.error) throw f.error
-  if (m.error) throw m.error
-  return { rows: f.data, mins: m.data }
+  const val = (k) => Number(s.data?.find((r) => r.key === k)?.value) || null
+  return {
+    rows: f.data,
+    coverWeeks: val(SETTING.coverWeeks) ?? DEFAULT_COVER_WEEKS,
+    capacityL: val(SETTING.capacityL) ?? DEFAULT_CAPACITY_L,
+  }
+}
+
+export async function saveSetting(name, value) {
+  const { error } = await supabase.from('brew_settings').upsert({ key: SETTING[name], value, updated_at: new Date().toISOString() })
+  if (error) throw error
 }
 
 export async function saveForecast(beer, format, month, qty) {
@@ -39,28 +54,29 @@ export async function saveForecast(beer, format, month, qty) {
   if (error) throw error
 }
 
-export async function saveMin(beer, format, qty) {
-  const { error } = await supabase.from('stock_min').upsert({ beer, format, qty, updated_at: new Date().toISOString() })
-  if (error) throw error
-}
-
 // Lookups by beer (matched loosely, "Pale" = "Pale Ale") and format.
-export function forecastIndex({ rows, mins }) {
+export function forecastIndex({ rows, coverWeeks = DEFAULT_COVER_WEEKS }) {
   const qty = new Map() // "beer|format|month" -> qty
   const beers = new Map() // match key -> display name
   for (const r of rows) {
     qty.set(`${beerMatch(r.beer)}|${r.format}|${r.month}`, Number(r.qty))
     if (Number(r.qty)) beers.set(beerMatch(r.beer), r.beer)
   }
-  const min = new Map(mins.map((r) => [`${beerMatch(r.beer)}|${r.format}`, Number(r.qty)]))
   const month = (beer, format, monthIso) => qty.get(`${beerMatch(beer)}|${format}|${monthIso}`) ?? 0
+  const perDay = (beer, format, iso) => month(beer, format, monthOf(iso)) / daysInMonth(iso)
   return {
+    coverWeeks,
     beers: [...beers.values()],
     has: (beer) => beers.has(beerMatch(beer)),
     month,
     // Forecast units a day on a given date (the month's figure spread over its days).
-    perDay: (beer, format, iso) => month(beer, format, monthOf(iso)) / daysInMonth(iso),
-    min: (beer, format) => min.get(`${beerMatch(beer)}|${format}`) ?? 0,
+    perDay,
+    // Stock to hold on a date: forecast sales over the next `coverWeeks` weeks.
+    target: (beer, format, iso) => {
+      let t = 0
+      for (let i = 0; i < coverWeeks * 7; i++) t += perDay(beer, format, addDays(iso, i))
+      return t
+    },
   }
 }
 
@@ -119,7 +135,7 @@ export async function loadBrews({ days = 200, today = todayIso() } = {}) {
 
 // One line per forecast beer over the next `months` months, in packaged litres:
 // stock now, plus beer coming out of tanks and booked brews on their ready day, less forecast
-// demand day by day, kept above minimum stock.
+// demand day by day, kept above the target (the next `fc.coverWeeks` weeks of forecast sales).
 export function brewPlan({ stock, fc, brews, months = 3, today = todayIso() }) {
   const end = addDays(today, Math.round(months * 30.44))
   const stockOf = new Map()
@@ -132,9 +148,21 @@ export function brewPlan({ stock, fc, brews, months = 3, today = todayIso() }) {
     const k = beerMatch(beer)
     const s = stockOf.get(k) ?? { cubes: 0, kegs: 0, smallKegL: 0 }
     const stockL = Math.max(0, s.cubes) * CUBE_L + Math.max(0, s.kegs) * KEG_L + Math.max(0, s.smallKegL)
-    const minC = fc.min(beer, 'cube')
-    const minK = fc.min(beer, 'keg')
+    const minC = fc.target(beer, 'cube', today)
+    const minK = fc.target(beer, 'keg', today)
     const minL = minC * CUBE_L + minK * KEG_L
+    // Daily demand in litres from today to the end of the period plus the cover window,
+    // so the rolling target can be read off for every day of the period.
+    const coverDays = fc.coverWeeks * 7
+    const days = daysBetween(today, end)
+    const daily = []
+    for (let i = 0; i < days + coverDays; i++) {
+      const d = addDays(today, i)
+      daily.push(fc.perDay(beer, 'cube', d) * CUBE_L + fc.perDay(beer, 'keg', d) * KEG_L)
+    }
+    let window = daily.slice(0, coverDays).reduce((a, x) => a + x, 0)
+    // Brewhouse litres still to brew, by the month they need brewing in (brew-by month).
+    const needByMonth = new Map()
     const mine = brews.filter((b) => beerMatch(b.beer) === k && b.ready <= end)
     const inTank = mine.filter((b) => b.status === 'tank')
     const booked = mine.filter((b) => b.status === 'booked')
@@ -147,16 +175,20 @@ export function brewPlan({ stock, fc, brews, months = 3, today = todayIso() }) {
     let worst = 0
     let belowMin = null
     let runsOut = null
-    for (let d = today; d < end; d = addDays(d, 1)) {
+    for (let i = 0, d = today; i < days; i++, d = addDays(d, 1)) {
+      // Stock held this morning (after today's packaging) against the next weeks' sales.
       level += supply.get(d) ?? 0
-      const c = fc.perDay(beer, 'cube', d)
-      const g = fc.perDay(beer, 'keg', d)
-      demandC += c
-      demandK += g
-      level -= c * CUBE_L + g * KEG_L
-      worst = Math.max(worst, minL - level)
-      if (level < minL && !belowMin) belowMin = d
+      if (window - level > worst) {
+        const by = addDays(d, -LEAD_DAYS) < today ? today : addDays(d, -LEAD_DAYS)
+        needByMonth.set(monthOf(by), (needByMonth.get(monthOf(by)) ?? 0) + (window - level - worst) / YIELD)
+        worst = window - level
+      }
+      if (level < window && !belowMin) belowMin = d
+      demandC += fc.perDay(beer, 'cube', d)
+      demandK += fc.perDay(beer, 'keg', d)
+      level -= daily[i]
       if (level < 0 && !runsOut) runsOut = d
+      window += daily[i + coverDays] - daily[i]
     }
     const brewL = worst > 0 ? worst / YIELD : 0
     return {
@@ -175,9 +207,24 @@ export function brewPlan({ stock, fc, brews, months = 3, today = todayIso() }) {
       bookedL: booked.reduce((a, b) => a + b.packaged, 0),
       endL: level,
       brewL,
+      needByMonth,
       belowMin,
       runsOut,
       brewBy: belowMin ? (addDays(belowMin, -LEAD_DAYS) < today ? today : addDays(belowMin, -LEAD_DAYS)) : null,
     }
   }).sort((a, b) => (a.brewBy ?? '9999').localeCompare(b.brewBy ?? '9999') || b.brewL - a.brewL || a.beer.localeCompare(b.beer))
+}
+
+// Brewhouse load by month over the plan: brews already booked (all beers) plus what the plan
+// says still needs brewing, against the monthly capacity.
+export function capacityPlan({ plan, brews, months = 3, capacityL = DEFAULT_CAPACITY_L, today = todayIso() }) {
+  const end = addDays(today, Math.round(months * 30.44))
+  const out = []
+  for (let m = monthOf(today); m < end; m = addMonths(m, 1)) {
+    const next = addMonths(m, 1)
+    const booked = brews.filter((b) => b.status === 'booked' && b.start >= m && b.start < next).reduce((a, b) => a + b.litres, 0)
+    const needed = plan.reduce((a, r) => a + (r.needByMonth.get(m) ?? 0), 0)
+    out.push({ month: m, booked, needed, total: booked + needed, capacity: capacityL, spare: capacityL - booked - needed })
+  }
+  return out
 }
