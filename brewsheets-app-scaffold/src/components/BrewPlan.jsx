@@ -6,6 +6,9 @@ import { todayIso, daysBetween } from '../lib/schedule'
 
 const litres = (n) => (n >= 50 ? `${(Math.round(n / 100) * 100).toLocaleString()} L` : '0 L')
 const units = (n) => Math.round(n).toLocaleString()
+// Cubes and kegs side by side, each in its own colour.
+const Pair = ({ c, k }) => <><span className="u-cube">{units(c)}</span><span className="u-keg">{units(k)}</span></>
+const PAIR_HEAD = <><br /><span className="u-cube-h">cubes</span> <span className="u-keg-h">kegs</span></>
 export const shortDate = (iso) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '')
 
 // Stock, forecast and the schedule's brews, loaded together; the plan is worked out for `months`.
@@ -62,9 +65,9 @@ export function BrewPlanTable({ plan, months, compact = false }) {
         <thead>
           <tr>
             <th className="stock-beer">Beer</th>
-            <th>Stock now<br />cubes · kegs</th>
-            <th>Forecast next {months} mo<br />cubes · kegs</th>
-            <th>Min stock<br />cubes · kegs</th>
+            <th>Stock now{PAIR_HEAD}</th>
+            <th>Forecast next {months} mo{PAIR_HEAD}</th>
+            <th>Min stock{PAIR_HEAD}</th>
             <th>In tank</th>
             <th>Booked brews</th>
             <th>Left at end</th>
@@ -77,9 +80,9 @@ export function BrewPlanTable({ plan, months, compact = false }) {
           {plan.map((r) => (
             <tr key={r.beer}>
               <td className="stock-beer">{r.beer}</td>
-              <td>{units(r.stock.cubes)} · {units(r.stock.kegs)}</td>
-              <td>{units(r.demandC)} · {units(r.demandK)}</td>
-              <td>{units(r.minC)} · {units(r.minK)}</td>
+              <td><Pair c={r.stock.cubes} k={r.stock.kegs} /></td>
+              <td><Pair c={r.demandC} k={r.demandK} /></td>
+              <td><Pair c={r.minC} k={r.minK} /></td>
               <td title={brewList(r.inTank)}>{r.inTank.length ? litres(r.inTankL) : ''}</td>
               <td title={brewList(r.booked)}>{r.booked.length ? `${litres(r.bookedL)} (${r.booked.length})` : ''}</td>
               <td className={r.endL < r.minL ? 'stock-neg' : ''}>{litres(Math.max(0, r.endL))}</td>
