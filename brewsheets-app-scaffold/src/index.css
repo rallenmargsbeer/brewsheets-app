@@ -661,3 +661,16 @@ tr.ing-added td { background: #f3faf5; }
 .split-new { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.6rem; padding: 0.6rem; background: #f6f3ea; border-radius: 8px; }
 .split-new label { display: flex; flex-direction: column; gap: 3px; font-weight: 600; font-size: 0.82rem; }
 .split-new select, .split-new input { font-size: 0.95rem; padding: 0.35rem; min-width: 160px; }
+
+/* Batches list: bigger, easier to scan */
+.batches-table { font-size: 1.05rem; }
+.batches-table td { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+.batches-table td:first-child a { font-size: 1.15rem; font-weight: 700; }
+.batches-table .pill { font-size: 0.85rem; }
+.batches-archive-head td { background: #f1efe9; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink2); font-weight: 700; }
+/* Recipes: hidden ones */
+.recipe-hide { margin-left: 0.75rem; padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+.recipe-hidden td { color: var(--ink2); }
+.recipe-hidden-head td { background: #f1efe9; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink2); font-weight: 700; }
+.batch-delete { padding: 0.2rem 0.6rem; font-size: 0.8rem; color: #b00020; border-color: #e3b7b7; }
+.batch-delete:hover { background: #fbe0de; }
