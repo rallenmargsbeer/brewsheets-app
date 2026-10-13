@@ -73,3 +73,45 @@ export function kegSize(code, description = '') {
   const tail = /^keg-.*?(20|30)$/i.exec(code)
   return tail ? Number(tail[1]) : 50
 }
+
+// Unleashed's own "Liquid Mix 3PL" warehouse mirrors the LM 3PL report; count LM's figures only.
+export const mirrorsLm = (it) => it.source === 'unleashed' && /liquid mix/i.test(it.location)
+
+// "Cube-Wander" -> Wander cubes, "30l Keg Beyond the Pines" -> Beyond the Pines kegs.
+export function fromUnleashedName(code) {
+  const m = /^(?:\d{2}\s*l\s+)?(cube|keg)\s*-?\s*(.+)$/i.exec(String(code).trim())
+  if (!m) return null
+  const beer = m[2].replace(/\s*\d{2,}\s*l$/i, '').trim()
+  return beer ? { beer, format: m[1].toLowerCase() } : null
+}
+
+// Finds the beer a stock line belongs to. Transfers in transit carry Unleashed product codes.
+// An Unleashed code that isn't in the list yet still counts if its name says what it is.
+export function productFinder(products) {
+  const link = new Map(products.map((p) => [`${p.source}|${p.code.toLowerCase()}`, p]))
+  return (source, code, alt) => {
+    const src = source === 'transit' ? 'unleashed' : source
+    return link.get(`${src}|${String(code).toLowerCase()}`) ?? (alt ? link.get(`${src}|${String(alt).toLowerCase()}`) : null) ?? (src === 'unleashed' ? fromUnleashedName(code) : null)
+  }
+}
+
+// Available stock per beer: { cubes, kegs (50 L), smallKegL (20 / 30 L kegs, in litres) }.
+export function stockByBeer(data) {
+  const find = productFinder(data.products)
+  const out = new Map()
+  for (const it of data.items) {
+    if (mirrorsLm(it)) continue
+    const p = find(it.source, it.code, it.alt_code)
+    if (!p) continue
+    const s = out.get(p.beer) ?? { cubes: 0, kegs: 0, smallKegL: 0 }
+    const qty = Number(it.available) || 0
+    if (p.format === 'cube') s.cubes += qty
+    else {
+      const size = kegSize(it.code, it.description ?? '')
+      if (size === 50) s.kegs += qty
+      else s.smallKegL += qty * size
+    }
+    out.set(p.beer, s)
+  }
+  return out
+}

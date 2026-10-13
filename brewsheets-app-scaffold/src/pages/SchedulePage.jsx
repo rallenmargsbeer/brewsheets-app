@@ -33,6 +33,7 @@ import {
   deleteBeerColour,
 } from '../lib/schedule'
 import BookBrewDialog from '../components/BookBrewDialog.jsx'
+import { SchedulePlanPanel } from '../components/BrewPlan.jsx'
 import { assignBeers, beerStyle, beerInTank, stayAt, slotKey, packBeer, setBeerColours, hasSavedColours } from '../lib/beerColours'
 
 // How far back to look for the brew that started each tank's run of jobs (a lager runs ~4 weeks).
@@ -260,6 +261,7 @@ export default function SchedulePage() {
   const selecting = useRef(false)
   const [clip, setClip] = useState(null) // { mode: 'cut' | 'copy', r0, c0, h, w, items: [{ dr, dc, e }] }
   const [busy, setBusy] = useState(false)
+  const [showPlan, setShowPlan] = useState(false)
 
   useEffect(() => {
     listCellarTemplates().then(setTemplates).catch(() => {})
@@ -498,6 +500,7 @@ export default function SchedulePage() {
                 ↶ Undo{undoStack.length ? `: ${undoStack[undoStack.length - 1].label}` : ''}
               </button>
               <button onClick={() => setBooking(true)}>+ Book a brew</button>
+              <button className="secondary" onClick={() => setShowPlan((v) => !v)}>{showPlan ? 'Hide brew plan' : 'Brew plan'}</button>
               <Link to="/schedule/templates"><button className="secondary">Cellar templates</button></Link>
             </>
           ) : (
@@ -516,6 +519,7 @@ export default function SchedulePage() {
         {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit</span>}
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {showPlan && editor && <SchedulePlanPanel />}
 
       {weekBeers.length > 0 && (
         <div className="sc-legend">

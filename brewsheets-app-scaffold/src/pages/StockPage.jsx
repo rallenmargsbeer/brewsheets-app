@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { listStock, refreshStock, mapStockProduct, guessFormat, kegSize, SOURCE_LABEL } from '../lib/stock'
+import { listStock, refreshStock, mapStockProduct, guessFormat, kegSize, mirrorsLm, productFinder, SOURCE_LABEL } from '../lib/stock'
 import { loadIncoming, beerMatch, weeksOfCover } from '../lib/incoming'
+import { useBrewPlan, BrewPlanTable, PLAN_NOTE } from '../components/BrewPlan'
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Perth', dateStyle: 'medium', timeStyle: 'short' }) : 'never')
 const num = (n) => (n ? Math.round(n).toLocaleString() : '')
 const DAY = 86400000
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY)
 const isLmWholesale = (customer) => /liquid\s*mix.*wholesale/i.test(customer ?? '')
-// Unleashed's own "Liquid Mix 3PL" warehouse mirrors the LM 3PL report; count LM's figures only.
-const mirrorsLm = (it) => it.source === 'unleashed' && /liquid mix/i.test(it.location)
 
 // Columns: each Unleashed warehouse, then the two Liquid Mix accounts.
 const locationKey = (it) => (it.source === 'unleashed' ? `unleashed|${it.location}` : it.source)
@@ -16,14 +15,6 @@ const locationLabel = (key) => (key.startsWith('unleashed|') ? key.slice(10).rep
 
 // Core range if Unleashed can't be read for the sub-group.
 const CORE_FALLBACK = ['ITP', 'Kolsch', 'Lager', 'Draught', 'Megsy', 'Mermid', 'Pale Ale', 'Red IPA', 'River Dog', 'Stout', 'Brown', 'Drift XPA']
-
-// "Cube-Wander" -> Wander cubes, "30l Keg Beyond the Pines" -> Beyond the Pines kegs.
-function fromUnleashedName(code) {
-  const m = /^(?:\d{2}\s*l\s+)?(cube|keg)\s*-?\s*(.+)$/i.exec(String(code).trim())
-  if (!m) return null
-  const beer = m[2].replace(/\s*\d{2,}\s*l$/i, '').trim()
-  return beer ? { beer, format: m[1].toLowerCase() } : null
-}
 
 const TABLES = [
   { key: 'cube', title: 'Cubes', note: '16 × 375 mL', match: (r) => r.format === 'cube' },
@@ -55,12 +46,15 @@ export default function StockPage() {
   const [showUnmapped, setShowUnmapped] = useState(false)
   const [windowWeeks, setWindowWeeks] = useSetting('window', 8)
   const [target, setTarget] = useSetting('target', 3)
+  const [coverFrom, setCoverFrom] = useSetting('coverFrom', 'forecast')
 
   const [incoming, setIncoming] = useState([])
   const load = () => listStock().then(setData).catch((e) => setError(e.message))
   // Packaging already on the schedule counts towards cover from its day.
   useEffect(() => { loadIncoming().then(setIncoming).catch(() => setIncoming([])) }, [])
   useEffect(() => { load() }, [])
+  // Forecast demand and the brew plan (next 3 months) for the meeting.
+  const { plan, fc } = useBrewPlan(3, data)
 
   async function refresh() {
     setBusy(true)
@@ -78,13 +72,7 @@ export default function StockPage() {
 
   const view = useMemo(() => {
     if (!data) return null
-    const link = new Map(data.products.map((p) => [`${p.source}|${p.code.toLowerCase()}`, p]))
-    // Transfers in transit carry Unleashed product codes. An Unleashed code that isn't in the
-    // list yet still counts if its name says what it is ("Cube-Wander", "20L Keg-ITP").
-    const find = (source, code, alt) => {
-      const src = source === 'transit' ? 'unleashed' : source
-      return link.get(`${src}|${String(code).toLowerCase()}`) ?? (alt ? link.get(`${src}|${String(alt).toLowerCase()}`) : null) ?? (src === 'unleashed' ? fromUnleashedName(code) : null)
-    }
+    const find = productFinder(data.products)
     const counted = data.items.filter((it) => !mirrorsLm(it))
     const locations = [...new Set(counted.map(locationKey))].sort((a, b) => {
       const rank = (k) => (k.startsWith('unleashed|') ? 0 : k === 'transit' ? 1 : k === 'lm_3pl' ? 2 : 3)
@@ -159,12 +147,18 @@ export default function StockPage() {
       const lmWeekly = r.lmDep ?? r.toLm / windowWeeks
       const weekly = r.sold / windowWeeks + lmWeekly
       const coming = incoming.filter((i) => i.format === r.format && (r.format !== 'keg' || i.size === r.size) && beerMatch(i.beer) === beerMatch(r.beer))
+      // The forecast is for cubes and 50 L kegs.
+      const forecast = fc?.has(r.beer) && (r.format === 'cube' || r.size === 50)
+      const perDay = (d) => fc.perDay(r.beer, r.format, d)
+      const useForecast = forecast && coverFrom === 'forecast'
       return {
         ...r,
         weekly,
+        fcWeekly: forecast ? perDay(today) * 7 : null,
         coming,
         lmEstimated: r.lmDep == null && r.toLm > 0,
-        cover: weeksOfCover(r.total, weekly, coming),
+        useForecast,
+        cover: useForecast ? weeksOfCover(r.total, perDay, coming) : weeksOfCover(r.total, weekly, coming),
       }
     }).filter((r) => r.total || r.weekly || r.coming.length)
 
@@ -179,7 +173,7 @@ export default function StockPage() {
     const transitRoutes = [...new Set(data.items.filter((it) => it.source === 'transit').map((it) => it.location))].join('\n')
     const beerNames = [...new Set(data.products.map((p) => p.beer))].sort()
     return { locations, list, unmapped, beerNames, historyDays, transitRoutes }
-  }, [data, windowWeeks, incoming])
+  }, [data, windowWeeks, incoming, fc, coverFrom])
 
   const lastRun = data?.runs?.[0]
   return (
@@ -188,7 +182,7 @@ export default function StockPage() {
         <h1 style={{ marginBottom: 0 }}>Stock on hand</h1>
         <div className="stock-print-title">
           Weekly stock meeting · {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-          <span> · sales rate over the last {windowWeeks} weeks · flagged under {target} weeks of cover</span>
+          <span> · weeks of cover from {coverFrom === 'forecast' ? 'the sales forecast where entered, otherwise' : ''} sales over the last {windowWeeks} weeks · flagged under {target} weeks of cover</span>
         </div>
         <div className="stock-actions">
           <button className="secondary" onClick={() => window.print()} disabled={!view}>Generate handout</button>
@@ -208,6 +202,12 @@ export default function StockPage() {
             <label>Sales rate over
               <select value={windowWeeks} onChange={(e) => setWindowWeeks(Number(e.target.value))}>
                 {[4, 8, 13].map((w) => <option key={w} value={w}>last {w} weeks</option>)}
+              </select>
+            </label>
+            <label>Weeks of cover from
+              <select value={coverFrom} onChange={(e) => setCoverFrom(e.target.value)}>
+                <option value="forecast">forecast (where entered)</option>
+                <option value="sales">sales rate</option>
               </select>
             </label>
             <label>Flag under
@@ -237,6 +237,7 @@ export default function StockPage() {
                         {locs.map((l) => <th key={l} className={l === 'transit' ? 'stock-transit' : ''} title={l === 'transit' ? view.transitRoutes : undefined}>{locationLabel(l)}</th>)}
                         <th className="stock-total">Total</th>
                         <th>Sold / wk</th>
+                        <th>Forecast / wk</th>
                         <th>Packaging</th>
                         <th className="stock-cover-h">Weeks of cover</th>
                       </tr>
@@ -246,7 +247,7 @@ export default function StockPage() {
                         const c = coverClass(r.cover, target)
                         return [
                           r === other[0] && (
-                            <tr key="other" className="stock-divider"><td colSpan={locs.length + 5}>Seasonal &amp; other</td></tr>
+                            <tr key="other" className="stock-divider"><td colSpan={locs.length + 6}>Seasonal &amp; other</td></tr>
                           ),
                           <tr key={r.key} className={r.core ? '' : 'stock-other'}>
                             <td className="stock-beer">{r.beer}{f.sizes && <span className={`stock-size s${r.size}`}>{r.size} L</span>}</td>
@@ -255,6 +256,7 @@ export default function StockPage() {
                             <td title={r.lmEstimated ? 'LM Wholesale part estimated from our sales to them' : undefined}>
                               {r.weekly ? r.weekly.toFixed(r.weekly < 10 ? 1 : 0) : ''}{r.lmEstimated ? '*' : ''}
                             </td>
+                            <td className={r.useForecast ? '' : 'stock-muted'}>{r.fcWeekly ? r.fcWeekly.toFixed(r.fcWeekly < 10 ? 1 : 0) : ''}</td>
                             <td className="stock-coming">
                               {r.coming.slice(0, 2).map((i) => (
                                 <div key={i.date}>+{i.qty.toLocaleString()} <span>{new Date(`${i.date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
@@ -272,7 +274,7 @@ export default function StockPage() {
                           </tr>,
                         ]
                       })}
-                      {!rows.length && <tr><td colSpan={locs.length + 5} className="stock-muted">No {f.title.toLowerCase()} in stock.</td></tr>}
+                      {!rows.length && <tr><td colSpan={locs.length + 6} className="stock-muted">No {f.title.toLowerCase()} in stock.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -280,6 +282,14 @@ export default function StockPage() {
             )
           })}
 
+          <section className="stock-card stock-plan">
+            <h2>Brew plan <span>next 3 months · stock + tanks + booked brews against forecast</span></h2>
+            {plan ? <BrewPlanTable plan={plan} months={3} /> : <p className="stock-muted" style={{ padding: '0.5rem 0.9rem' }}>Loading…</p>}
+          </section>
+
+          <p className="stock-muted" style={{ fontSize: '0.8rem' }}>
+            Forecast / wk = this month's forecast (Forecast page) as a weekly rate. {PLAN_NOTE}
+          </p>
           <p className="stock-muted" style={{ fontSize: '0.8rem' }}>
             Weeks of cover is shown for the core range. Sold / wk = Unleashed sales to everyone except LM Wholesale, plus what leaves LM Wholesale.
             Weeks of cover counts packaging on the schedule from its day (canning counts are cubes, kegging counts are kegs).

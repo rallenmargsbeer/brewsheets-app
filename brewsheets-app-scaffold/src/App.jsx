@@ -16,6 +16,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import StockPage from './pages/StockPage.jsx'
+import ForecastPage from './pages/ForecastPage.jsx'
 import DilutionPage from './pages/DilutionPage.jsx'
 import { AuthProvider, RequireAuth } from './auth.jsx'
 
@@ -25,9 +26,9 @@ export default function App() {
   // Adding a brew (/batches/new) belongs to the Brew Day tab, not Batches
   const { pathname } = useLocation()
   const addingBrew = pathname === '/batches/new'
-  // The schedule grid (every tank is a column) and the stock tables (every location is a column)
+  // The schedule grid (every tank is a column) and the stock and forecast tables (every location is a column)
   // get the full screen width.
-  const wide = pathname === '/schedule' || pathname === '/stock'
+  const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast'
   return (
     <AuthProvider>
     <div>
@@ -69,6 +70,9 @@ export default function App() {
           <NavLink to="/stock" className={navClass}>
             Stock
           </NavLink>
+          <NavLink to="/forecast" className={navClass}>
+            Forecast
+          </NavLink>
           <NavLink to="/reports" className={navClass}>
             Reports
           </NavLink>
@@ -95,6 +99,7 @@ export default function App() {
           <Route path="/calculators" element={<DilutionPage />} />
           <Route path="/dilution" element={<Navigate to="/calculators" replace />} />
           <Route path="/stock" element={<RequireAuth><StockPage /></RequireAuth>} />
+          <Route path="/forecast" element={<RequireAuth><ForecastPage /></RequireAuth>} />
           <Route path="/reports" element={<RequireAuth><ReportsPage /></RequireAuth>} />
           <Route path="/reports/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
         </Routes>
