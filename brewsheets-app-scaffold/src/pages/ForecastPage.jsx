@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useBrewPlan, BrewPlanTable, PLAN_NOTE } from '../components/BrewPlan'
-import { saveForecast, saveMin, addMonths, monthOf } from '../lib/forecast'
+import { useBrewPlan, BrewPlanTable, CapacityTable, PlanSettings, planNote } from '../components/BrewPlan'
+import { saveForecast, addMonths, monthOf } from '../lib/forecast'
 import { isScheduleEditor, todayIso } from '../lib/schedule'
 
 const fmtMonth = (m) => new Date(`${m}T00:00:00`).toLocaleDateString('en-AU', { month: 'short', year: '2-digit' })
@@ -11,7 +11,7 @@ export default function ForecastPage() {
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') === 'demand' ? 'demand' : 'plan'
   const [months, setMonths] = useState(3)
-  const { plan, forecast, error, reload } = useBrewPlan(months)
+  const { plan, capacity, fc, forecast, error, reload } = useBrewPlan(months)
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
@@ -31,12 +31,17 @@ export default function ForecastPage() {
                 {[1, 2, 3, 4, 6].map((m) => <option key={m} value={m}>{m} month{m > 1 ? 's' : ''}</option>)}
               </select>
             </label>
+            <PlanSettings forecast={forecast} onSaved={reload} />
           </div>
           <section className="stock-card stock-plan">
             <h2>What to brew <span>stock + tanks + booked brews against forecast</span></h2>
-            <BrewPlanTable plan={plan} months={months} />
+            <BrewPlanTable plan={plan} months={months} weeks={fc.coverWeeks} />
           </section>
-          <p className="stock-muted" style={{ fontSize: '0.8rem' }}>{PLAN_NOTE}</p>
+          <section className="stock-card stock-plan">
+            <h2>Brewhouse capacity <span>booked brews + still to brew (by brew-by month) against {forecast.capacityL.toLocaleString()} L a month</span></h2>
+            <CapacityTable rows={capacity} />
+          </section>
+          <p className="stock-muted" style={{ fontSize: '0.8rem' }}>{planNote(fc.coverWeeks)}</p>
         </>
       )}
       {tab === 'demand' && forecast && <DemandGrid forecast={forecast} onSaved={reload} />}
@@ -44,11 +49,11 @@ export default function ForecastPage() {
   )
 }
 
-// Monthly forecast per beer, cubes and kegs, plus minimum stock. Editors type straight in.
+// Monthly forecast per beer, cubes and kegs. Editors type straight in.
 function DemandGrid({ forecast, onSaved }) {
   const [editor, setEditor] = useState(false)
   const [start, setStart] = useState(monthOf(todayIso()))
-  const [values, setValues] = useState({}) // "beer|format|month" or "beer|format|min" -> string
+  const [values, setValues] = useState({}) // "beer|format|month" -> string
   const [added, setAdded] = useState([])
   const [newBeer, setNewBeer] = useState('')
   const [status, setStatus] = useState(null)
@@ -57,11 +62,10 @@ function DemandGrid({ forecast, onSaved }) {
   const saved = useMemo(() => {
     const m = {}
     for (const r of forecast.rows) m[`${r.beer}|${r.format}|${r.month}`] = Number(r.qty)
-    for (const r of forecast.mins) m[`${r.beer}|${r.format}|min`] = Number(r.qty)
     return m
   }, [forecast])
   const beers = useMemo(() => {
-    const set = new Set([...forecast.rows.map((r) => r.beer), ...forecast.mins.map((r) => r.beer), ...added])
+    const set = new Set([...forecast.rows.map((r) => r.beer), ...added])
     return [...set].sort((a, b) => a.localeCompare(b))
   }, [forecast, added])
   const monthsShown = Array.from({ length: 12 }, (_, i) => addMonths(start, i))
@@ -74,8 +78,7 @@ function DemandGrid({ forecast, onSaved }) {
     if (qty === (saved[k] ?? 0)) return
     setStatus('Saving…')
     try {
-      if (col === 'min') await saveMin(beer, format, qty)
-      else await saveForecast(beer, format, col, qty)
+      await saveForecast(beer, format, col, qty)
       saved[k] = qty
       setStatus('Saved')
       onSaved()
@@ -95,14 +98,13 @@ function DemandGrid({ forecast, onSaved }) {
         {!editor && <span className="stock-muted">View only: schedule editors can change the forecast.</span>}
       </div>
       <section className="stock-card stock-plan">
-        <h2>Forecast demand <span>units sold per month · min = minimum stock to hold</span></h2>
+        <h2>Forecast demand <span>units sold per month · stock to hold is worked out from this ({forecast.coverWeeks} weeks of sales)</span></h2>
         <div className="stock-scroll">
           <table className="stock-table fc-grid">
             <thead>
               <tr>
                 <th className="stock-beer">Beer</th>
                 <th></th>
-                <th className="fc-min">Min stock</th>
                 {monthsShown.map((m) => <th key={m}>{fmtMonth(m)}</th>)}
                 <th>Total</th>
               </tr>
@@ -112,10 +114,10 @@ function DemandGrid({ forecast, onSaved }) {
                 <tr key={beer + format} className={i ? 'fc-keg' : 'fc-cube'}>
                   {i === 0 && <td className="stock-beer" rowSpan={2}>{beer}</td>}
                   <td className="fc-format"><span className={`fc-tag ${format}`}>{label}</span></td>
-                  {['min', ...monthsShown].map((col) => {
+                  {monthsShown.map((col) => {
                     const k = `${beer}|${format}|${col}`
                     return (
-                      <td key={col} className={col === 'min' ? 'fc-min' : ''}>
+                      <td key={col}>
                         {editor ? (
                           <input
                             inputMode="numeric"

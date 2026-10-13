@@ -568,8 +568,6 @@ tr.ing-added td { background: #f3faf5; }
 .fc-grid td.stock-beer { background: var(--surface); border-bottom: none; vertical-align: middle; }
 .fc-grid tr.fc-cube input { border-color: #a9c7d6; }
 .fc-grid tr.fc-keg input { border-color: #ddc2a3; }
-.fc-grid tr.fc-cube .fc-min { background: #d7e9f2; }
-.fc-grid tr.fc-keg .fc-min { background: #f3e2cd; }
 .fc-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700; color: #fff; }
 .fc-tag.cube { background: #2f6f8f; }
 .fc-tag.keg { background: #8a4b12; }
@@ -577,3 +575,13 @@ tr.ing-added td { background: #f3faf5; }
 .u-cube { background: #e3eff5; color: #1f4f66; }
 .u-keg { background: #f5e8d9; color: #6b3a0e; margin-left: 0.3rem; }
 .u-cube-h { color: #2f6f8f; } .u-keg-h { color: #8a4b12; }
+.cap-table .cap-bar-h { width: 45%; min-width: 180px; }
+.cap-bar { position: relative; height: 1.3rem; border-radius: 4px; background: #efede8; overflow: hidden; }
+.cap-bar > div { position: absolute; top: 0; bottom: 0; }
+.cap-booked { left: 0; background: #6b8f6e; }
+.cap-needed { background: repeating-linear-gradient(45deg, #a9c9ab, #a9c9ab 6px, #c4dcc5 6px, #c4dcc5 12px); }
+.cap-bar.tight .cap-booked { background: #c99a2e; } .cap-bar.tight .cap-needed { background: repeating-linear-gradient(45deg, #f2c64d, #f2c64d 6px, #f7dc8e 6px, #f7dc8e 12px); }
+.cap-bar.over .cap-booked { background: #c9483e; } .cap-bar.over .cap-needed { background: repeating-linear-gradient(45deg, #e8776e, #e8776e 6px, #f2a7a1 6px, #f2a7a1 12px); }
+.cap-bar > span { position: relative; display: block; text-align: right; padding-right: 0.4rem; font-weight: 700; font-size: 0.8rem; line-height: 1.3rem; }
+.cap-warn { margin: 0; padding: 0.5rem 0.9rem; background: #fbe0de; color: #7a140d; font-size: 0.85rem; }
+.cap-compact { border-top: 2px solid var(--line); }

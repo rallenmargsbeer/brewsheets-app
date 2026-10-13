@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { listStock, refreshStock, mapStockProduct, guessFormat, kegSize, mirrorsLm, productFinder, SOURCE_LABEL } from '../lib/stock'
 import { loadIncoming, beerMatch, weeksOfCover } from '../lib/incoming'
-import { useBrewPlan, BrewPlanTable, PLAN_NOTE } from '../components/BrewPlan'
+import { useBrewPlan, BrewPlanTable, CapacityTable, planNote } from '../components/BrewPlan'
+import { DEFAULT_COVER_WEEKS } from '../lib/forecast'
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Perth', dateStyle: 'medium', timeStyle: 'short' }) : 'never')
 const num = (n) => (n ? Math.round(n).toLocaleString() : '')
@@ -45,7 +46,6 @@ export default function StockPage() {
   const [msg, setMsg] = useState(null)
   const [showUnmapped, setShowUnmapped] = useState(false)
   const [windowWeeks, setWindowWeeks] = useSetting('window', 8)
-  const [target, setTarget] = useSetting('target', 3)
   const [coverFrom, setCoverFrom] = useSetting('coverFrom', 'forecast')
 
   const [incoming, setIncoming] = useState([])
@@ -54,7 +54,9 @@ export default function StockPage() {
   useEffect(() => { loadIncoming().then(setIncoming).catch(() => setIncoming([])) }, [])
   useEffect(() => { load() }, [])
   // Forecast demand and the brew plan (next 3 months) for the meeting.
-  const { plan, fc } = useBrewPlan(3, data)
+  const { plan, capacity, fc } = useBrewPlan(3, data)
+  // Flag beers under the stock-holding goal (set on the Forecast page).
+  const target = fc?.coverWeeks ?? DEFAULT_COVER_WEEKS
 
   async function refresh() {
     setBusy(true)
@@ -211,7 +213,7 @@ export default function StockPage() {
               </select>
             </label>
             <label>Flag under
-              <input type="number" min="1" max="12" value={target} onChange={(e) => setTarget(Math.max(1, Number(e.target.value) || 1))} /> weeks
+              <strong>{target} weeks</strong> <span className="stock-muted">(stock goal, set on the Forecast page)</span>
             </label>
             <span className="stock-legend">
               <span className="stock-pill low">under {target} wks</span>
@@ -284,11 +286,17 @@ export default function StockPage() {
 
           <section className="stock-card stock-plan">
             <h2>Brew plan <span>next 3 months · stock + tanks + booked brews against forecast</span></h2>
-            {plan ? <BrewPlanTable plan={plan} months={3} /> : <p className="stock-muted" style={{ padding: '0.5rem 0.9rem' }}>Loading…</p>}
+            {plan ? <BrewPlanTable plan={plan} months={3} weeks={target} /> : <p className="stock-muted" style={{ padding: '0.5rem 0.9rem' }}>Loading…</p>}
           </section>
+          {capacity && (
+            <section className="stock-card stock-plan">
+              <h2>Brewhouse capacity <span>booked + still to brew against the monthly limit</span></h2>
+              <CapacityTable rows={capacity} />
+            </section>
+          )}
 
           <p className="stock-muted" style={{ fontSize: '0.8rem' }}>
-            Forecast / wk = this month's forecast (Forecast page) as a weekly rate. {PLAN_NOTE}
+            Forecast / wk = this month's forecast (Forecast page) as a weekly rate. {planNote(target)}
           </p>
           <p className="stock-muted" style={{ fontSize: '0.8rem' }}>
             Weeks of cover is shown for the core range. Sold / wk = Unleashed sales to everyone except LM Wholesale, plus what leaves LM Wholesale.
