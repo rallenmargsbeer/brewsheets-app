@@ -4,6 +4,7 @@ import { tankLabel, statusLabel } from '../lib/tanks'
 import FermentationSection from '../components/FermentationSection.jsx'
 import IngredientPicker from '../components/IngredientPicker.jsx'
 import IngredientsUsed from '../components/IngredientsUsed.jsx'
+import SplitTurnDialog from '../components/SplitTurnDialog.jsx'
 import {
   getBatch,
   upsertBatch,
@@ -868,6 +869,8 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
   const turnNumbers = Array.from({ length: turnCount }, (_, i) => i + 1)
 
   const [activeTurn, setActiveTurn] = useState(1)
+  const [turnMenu, setTurnMenu] = useState(null) // right-click on a turn tab: { n, x, y }
+  const [splitTurn, setSplitTurn] = useState(null) // turn number being split
 
   // Brew day ends with Complete brew (below the turns) once every turn is knocked out.
   const allKnockedOut = turnNumbers.every((n) => runsByNumber[n]?.knockout_confirmed_at)
@@ -949,6 +952,8 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
               key={n}
               className={activeTurn === n ? '' : 'secondary'}
               onClick={() => setActiveTurn(n)}
+              onContextMenu={(e) => { e.preventDefault(); if (run) setTurnMenu({ n, x: e.clientX, y: e.clientY }) }}
+              title="Right-click to split this turn"
             >
               {complete ? '✓ ' : ''}Turn {n}
             </button>
@@ -982,6 +987,18 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
           />
         </div>
       ))}
+
+      {turnMenu && (
+        <div className="sc-menu-back" onClick={() => setTurnMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTurnMenu(null) }}>
+          <div className="sc-menu" style={{ left: Math.min(turnMenu.x, window.innerWidth - 290), top: turnMenu.y + 4 }} onClick={(e) => e.stopPropagation()}>
+            <div className="sc-menu-title">Turn {turnMenu.n}</div>
+            <button className="sc-menu-item" onClick={() => { setSplitTurn(turnMenu.n); setTurnMenu(null) }}>Split this turn…</button>
+          </div>
+        </div>
+      )}
+      {splitTurn && runsByNumber[splitTurn] && (
+        <SplitTurnDialog batch={batch} run={runsByNumber[splitTurn]} onClose={() => setSplitTurn(null)} onDone={refresh} />
+      )}
 
       <CompleteBrew
         batch={batch}
