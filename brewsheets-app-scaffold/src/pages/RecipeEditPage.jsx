@@ -190,7 +190,7 @@ export default function RecipeEditPage() {
     getRecipe(id)
       .then((r) => {
         setRecipe(r)
-        setGrist(r.recipe_grist_items ?? [])
+        setGrist([...(r.recipe_grist_items ?? [])].sort((a, b) => Number(b.qty_g_per_l ?? 0) - Number(a.qty_g_per_l ?? 0))) // base malt first
         setWater(r.recipe_water_additions ?? [])
         setKettle(r.recipe_kettle_additions ?? [])
         setWhirlpool(r.recipe_whirlpool_additions ?? [])

@@ -674,3 +674,13 @@ tr.ing-added td { background: #f3faf5; }
 .recipe-hidden-head td { background: #f1efe9; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink2); font-weight: 700; }
 .batch-delete { padding: 0.2rem 0.6rem; font-size: 0.8rem; color: #b00020; border-color: #e3b7b7; }
 .batch-delete:hover { background: #fbe0de; }
+
+/* New ingredients from the Unleashed sync */
+.ing-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; background: #fdf0cc; border: 1px solid #f2c64d; color: #5c3d00; border-radius: 8px; padding: 0.6rem 0.9rem; margin-bottom: 1rem; }
+.ing-banner button { padding: 0.3rem 0.9rem; }
+.ing-review-bar { background: #fdf0cc; border-radius: 8px; padding: 0.5rem 0.8rem; margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.ing-new { margin-left: 0.5rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: #f2c64d; color: #4a3200; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+.ing-new button { margin-left: 0.4rem; padding: 0.05rem 0.45rem; font-size: 0.72rem; }
+.sc-split { display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; align-items: center; justify-content: space-between; margin-top: 6px; padding: 0.45rem 0.6rem; background: #eef6fa; border: 1px solid #c3dbe7; border-radius: 6px; font-size: 0.85rem; }
+.sc-split-why { color: var(--ink2); }
+.sc-split button { padding: 0.25rem 0.7rem; font-size: 0.8rem; }

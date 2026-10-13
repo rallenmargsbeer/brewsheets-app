@@ -347,7 +347,7 @@ function IngredientRow({ item, ingredients, onSaved }) {
   return (
     <tr className={item.added_at ? 'ing-added' : ''}>
       <td>
-        <IngredientPicker value={item.item_name} section={item.section} ingredients={ingredients ?? []} onCommit={saveName} disabled={saving} width={180} />
+        <IngredientPicker value={item.item_name} section={item.section} ingredients={ingredients ?? []} onCommit={saveName} disabled={saving} width={`${Math.max(16, String(item.item_name ?? '').length + 3)}ch`} />
       </td>
       <td style={{ color: '#666', fontSize: '0.85rem' }}>{item.timing_note ?? '—'}</td>
       <td style={{ color: '#666' }}>
@@ -465,7 +465,9 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   // belongs on the brew sheet.
   // From the latest load (not the form's snapshot) so Add / Add all show straight away.
   const ingredients = run?.brew_run_ingredients ?? form.brew_run_ingredients ?? []
-  const gristItems = ingredients.filter((i) => i.section === 'grist')
+  // Biggest first, so the base malt is always at the top of the grist.
+  const gristQty = (i) => Number(i.planned_qty ?? i.actual_qty ?? 0)
+  const gristItems = ingredients.filter((i) => i.section === 'grist').sort((a, b) => gristQty(b) - gristQty(a))
   const mashWaterItems = ingredients.filter((i) => i.section === 'water' && i.addition_stage === 'mash')
   const kettleItems = ingredients.filter((i) => i.section === 'kettle')
   const kettleWaterItems = ingredients.filter((i) => i.section === 'water' && i.addition_stage === 'kettle')
