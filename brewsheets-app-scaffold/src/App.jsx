@@ -17,6 +17,7 @@ import ReportsPage from './pages/ReportsPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import StockPage from './pages/StockPage.jsx'
 import ForecastPage from './pages/ForecastPage.jsx'
+import TodayPage from './pages/TodayPage.jsx'
 import DilutionPage from './pages/DilutionPage.jsx'
 import { AuthProvider, RequireAuth } from './auth.jsx'
 
@@ -42,6 +43,9 @@ export default function App() {
         <nav className="app-nav">
           <NavLink to="/recipes" className={navClass}>
             Recipes
+          </NavLink>
+          <NavLink to="/today" className={navClass}>
+            Today
           </NavLink>
           <NavLink to="/schedule" className={navClass}>
             Schedule
@@ -88,6 +92,7 @@ export default function App() {
           <Route path="/batches" element={<BatchesPage />} />
           <Route path="/batches/new" element={<AddBrewPage />} />
           <Route path="/batches/:id" element={<BatchDetailPage />} />
+          <Route path="/today" element={<TodayPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/schedule/templates" element={<CellarTemplatesPage />} />
           <Route path="/cellar" element={<CellarPage />} />

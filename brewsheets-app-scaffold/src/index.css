@@ -588,3 +588,28 @@ tr.ing-added td { background: #f3faf5; }
 .plan-early { font-size: 0.72rem; color: #8a5a00; margin-top: 2px; white-space: nowrap; }
 .plan-short { font-size: 0.72rem; color: #b00020; font-weight: 700; margin-top: 2px; white-space: nowrap; }
 .cap-note { margin: 0; padding: 0.5rem 0.9rem; background: #fdf0cc; color: #6b4500; font-size: 0.85rem; }
+
+/* Day at a glance + cellar tank tasks */
+.day-page { max-width: 900px; }
+.day-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
+.day-card h2 { margin: 0; padding: 0.5rem 0.9rem; font-size: 1rem; background: #3d5a40; color: #fff; }
+.day-row { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 0.75rem; padding: 0.55rem 0.9rem; border-top: 1px solid var(--line); align-items: start; }
+.day-row:first-of-type { border-top: none; }
+.day-tank { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.day-beer { padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700; border: 1px solid rgba(0,0,0,0.15); }
+.day-batch { font-size: 0.8rem; color: var(--ink2); }
+.tank-day { display: flex; flex-direction: column; gap: 0.3rem; }
+.day-task { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+.day-task input { width: 18px; height: 18px; margin: 0; }
+.day-task.done span:last-child { text-decoration: line-through; color: var(--ink2); font-weight: 400; }
+.day-task.suggested { font-weight: 400; font-style: italic; color: #4a5a4c; }
+.day-slot { display: inline-block; min-width: 2.2rem; font-size: 0.72rem; font-weight: 700; color: var(--ink2); font-style: normal; }
+.day-from { font-size: 0.75rem; color: var(--ink2); }
+.day-advice { font-size: 0.85rem; padding: 0.3rem 0.55rem; border-radius: 6px; background: #eef2f6; color: #2c3e50; }
+.day-advice.go { background: #dcf1e1; color: #14512a; }
+.day-advice.soon { background: #fdf0cc; color: #6b4500; }
+.day-advice.warn { background: #fbe0de; color: #7a140d; }
+.tile-task { font-size: 0.82rem; font-weight: 600; color: #1f4f66; background: #e3eff5; border-radius: 4px; padding: 0.1rem 0.4rem; align-self: flex-start; }
+.tile-alert { font-size: 0.72rem; font-weight: 700; border-radius: 999px; padding: 0.05rem 0.5rem; align-self: flex-start; }
+.tile-alert.go { background: #dcf1e1; color: #14512a; } .tile-alert.soon { background: #fdf0cc; color: #6b4500; } .tile-alert.warn { background: #fbe0de; color: #7a140d; }
+@media (max-width: 600px) { .day-row { grid-template-columns: 1fr; gap: 0.35rem; } }
