@@ -41,7 +41,7 @@ export default function SplitTurnDialog({ batch, run, onClose, onDone }) {
   const pct = t > 0 ? Math.round((s / t) * 1000) / 10 : 0
   const isNew = recvId === NEW
   const receiving = batches?.find((b) => b.id === recvId)
-  const ok = s > 0 && t > 0 && s < t && shares.length > 0 && (isNew ? !!nb.recipeId : !!receiving)
+  const ok = s > 0 && t > 0 && s < t && shares.length > 0 && (isNew ? !!(nb.recipeId || nb.name.trim()) : !!receiving)
 
   const toggle = (id) => {
     const next = new Set(carried)
@@ -105,11 +105,11 @@ export default function SplitTurnDialog({ batch, run, onClose, onDone }) {
               <div className="split-new">
                 <label>Recipe
                   <select value={nb.recipeId} onChange={(e) => { const r = recipes.find((x) => x.id === e.target.value); setNb({ ...nb, recipeId: e.target.value, name: r?.name ?? '' }) }}>
-                    <option value="">{recipes.length ? 'Choose a recipe…' : 'Loading…'}</option>
+                    <option value="">{recipes.length ? 'No recipe' : 'Loading…'}</option>
                     {recipes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
                 </label>
-                <label>Beer name<input value={nb.name} onChange={(e) => setNb({ ...nb, name: e.target.value })} placeholder="From the recipe" /></label>
+                <label>Beer name<input value={nb.name} onChange={(e) => setNb({ ...nb, name: e.target.value })} placeholder={nb.recipeId ? 'From the recipe' : 'Needed without a recipe'} /></label>
                 <label>Tank
                   <select value={nb.tankId} onChange={(e) => setNb({ ...nb, tankId: e.target.value })}>
                     <option value="">No tank yet</option>
@@ -117,7 +117,7 @@ export default function SplitTurnDialog({ batch, run, onClose, onDone }) {
                   </select>
                 </label>
                 <p className="stock-muted" style={{ margin: 0, fontSize: '0.8rem', flexBasis: '100%' }}>
-                  Makes the next batch number: one {s || ''} L turn set up from the recipe (with its yeast and fermenter additions), then takes the split.
+                  Makes the next batch number as one {s || ''} L turn, then takes the split. A recipe adds its own yeast and fermenter additions; without one, the batch just gets the split ingredients and you add the rest on Brew Day.
                 </p>
               </div>
             )}
