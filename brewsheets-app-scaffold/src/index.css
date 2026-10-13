@@ -658,3 +658,6 @@ tr.ing-added td { background: #f3faf5; }
 .split-table tr.split-off td { color: var(--ink2); }
 .split-move { font-weight: 700; color: #8a4b12; }
 .split-sec { font-size: 0.7rem; color: var(--ink2); margin-left: 0.3rem; text-transform: uppercase; }
+.split-new { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.6rem; padding: 0.6rem; background: #f6f3ea; border-radius: 8px; }
+.split-new label { display: flex; flex-direction: column; gap: 3px; font-weight: 600; font-size: 0.82rem; }
+.split-new select, .split-new input { font-size: 0.95rem; padding: 0.35rem; min-width: 160px; }

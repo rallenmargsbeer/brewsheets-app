@@ -2,6 +2,7 @@
 // 500 L of a 2,500 L turn into YP. The ticked ingredients are shared by volume: the donor
 // turn keeps the rest, the receiving batch gets the split share.
 import { supabase } from '../supabaseClient'
+import { listBatches, getRecipe, upsertBatch, initializeBrewRuns } from './api'
 
 export const qtyOf = (line) => Number(line.actual_qty ?? line.planned_qty ?? 0)
 
@@ -92,4 +93,26 @@ export async function applySplit({ donorBatch, donorRun, shares, splitL, receivi
   }).eq('id', target.id)
   if (r2.error) throw r2.error
   return { targetRunNumber: target.run_number }
+}
+
+// A new receiving batch made from the split dialog: one turn of the split volume, set up
+// from its recipe (so its own yeast and fermenter additions are there), ready to take
+// the split. Same numbering as Add Brew: one past the highest batch number.
+export async function createSplitBatch({ recipeId, beerName, tankId, splitL, date }) {
+  const [all, recipe] = await Promise.all([listBatches(), getRecipe(recipeId)])
+  const nums = all.map((b) => parseInt(b.batch_number, 10)).filter(Number.isInteger)
+  const batch = await upsertBatch({
+    recipe_id: recipeId,
+    batch_number: String(nums.length ? Math.max(...nums) + 1 : 1),
+    beer_style: beerName || recipe.name,
+    status: 'brewing',
+    tank_id: tankId || null,
+    date_brewed: date,
+    turn_volume_l: splitL,
+    turn_quantity: 1,
+    target_volume_l: splitL,
+  })
+  const runs = await initializeBrewRuns(batch.id, 1, recipe, splitL)
+  const { data: tank } = tankId ? await supabase.from('tanks').select('name').eq('id', tankId).single() : { data: null }
+  return { ...batch, tanks: tank, brew_runs: runs }
 }

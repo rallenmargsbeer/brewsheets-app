@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { applySplit, carriedByDefault, listReceivingBatches, qtyOf, splitShares } from '../lib/split'
+import { applySplit, carriedByDefault, createSplitBatch, listReceivingBatches, qtyOf, splitShares } from '../lib/split'
+import { listRecipes, listTanks } from '../lib/api'
+
+const NEW = '__new'
 
 const SECTION = { grist: 'Grist', water: 'Water', kettle: 'Kettle', whirlpool: 'Whirlpool', fermenter: 'Fermenter' }
 // Quantities are stored in grams (mL for liquids); show kg from 1,000.
@@ -18,13 +21,27 @@ export default function SplitTurnDialog({ batch, run, onClose, onDone }) {
   const [error, setError] = useState(null)
   const [done, setDone] = useState(null)
   useEffect(() => { listReceivingBatches(batch.id).then(setBatches).catch((e) => setError(e.message)) }, [batch.id])
+  // "+ New batch": recipe, name and tank (YP by default) for a batch made here.
+  const [recipes, setRecipes] = useState([])
+  const [tanks, setTanks] = useState([])
+  const [nb, setNb] = useState({ recipeId: '', name: '', tankId: '' })
+  useEffect(() => {
+    if (recvId !== NEW || recipes.length) return
+    Promise.all([listRecipes(), listTanks()]).then(([r, t]) => {
+      setRecipes(r.filter((x) => x.is_active !== false && !/historical import/i.test(x.name)))
+      setTanks(t)
+      const yp = t.find((x) => /^yp$/i.test(x.name.trim()))
+      setNb((v) => ({ ...v, tankId: v.tankId || yp?.id || '' }))
+    }).catch((e) => setError(e.message))
+  }, [recvId])
 
   const s = Number(splitL) || 0
   const t = Number(turnL) || 0
   const shares = useMemo(() => splitShares(lines, carried, s, t), [lines, carried, s, t])
   const pct = t > 0 ? Math.round((s / t) * 1000) / 10 : 0
+  const isNew = recvId === NEW
   const receiving = batches?.find((b) => b.id === recvId)
-  const ok = s > 0 && t > 0 && s < t && receiving && shares.length > 0
+  const ok = s > 0 && t > 0 && s < t && shares.length > 0 && (isNew ? !!nb.recipeId : !!receiving)
 
   const toggle = (id) => {
     const next = new Set(carried)
@@ -37,8 +54,11 @@ export default function SplitTurnDialog({ batch, run, onClose, onDone }) {
     setBusy(true)
     setError(null)
     try {
-      const r = await applySplit({ donorBatch: batch, donorRun: run, shares, splitL: s, receiving })
-      setDone({ ...r, receiving })
+      const target = isNew
+        ? await createSplitBatch({ recipeId: nb.recipeId, beerName: nb.name.trim(), tankId: nb.tankId, splitL: s, date: run.brew_date ?? new Date().toLocaleDateString('en-CA') })
+        : receiving
+      const r = await applySplit({ donorBatch: batch, donorRun: run, shares, splitL: s, receiving: target })
+      setDone({ ...r, receiving: target, created: isNew })
       onDone?.()
     } catch (e) {
       setError(e.message)
@@ -58,7 +78,7 @@ export default function SplitTurnDialog({ batch, run, onClose, onDone }) {
         {done ? (
           <div style={{ marginTop: '0.75rem' }}>
             <p style={{ color: '#1b6e2e', fontWeight: 600 }}>
-              Split {s} L to batch #{done.receiving.batch_number} ({done.receiving.beer_style}), turn {done.targetRunNumber}.
+              {done.created ? 'Created and split' : 'Split'} {s} L to batch #{done.receiving.batch_number} ({done.receiving.beer_style}), turn {done.targetRunNumber}.
               This turn's ingredients now show what stays.
             </p>
             <Link to={`/batches/${done.receiving.id}?view=brewday`} onClick={onClose}><button>Open batch #{done.receiving.batch_number}</button></Link>{' '}
@@ -78,8 +98,29 @@ export default function SplitTurnDialog({ batch, run, onClose, onDone }) {
                 {(batches ?? []).map((b) => (
                   <option key={b.id} value={b.id}>#{b.batch_number} · {b.beer_style}{b.tanks?.name ? ` · ${b.tanks.name}` : ''}{b.date_brewed ? ` · ${b.date_brewed}` : ''}</option>
                 ))}
+                {batches && <option value={NEW}>+ New batch…</option>}
               </select>
             </label>
+            {isNew && (
+              <div className="split-new">
+                <label>Recipe
+                  <select value={nb.recipeId} onChange={(e) => { const r = recipes.find((x) => x.id === e.target.value); setNb({ ...nb, recipeId: e.target.value, name: r?.name ?? '' }) }}>
+                    <option value="">{recipes.length ? 'Choose a recipe…' : 'Loading…'}</option>
+                    {recipes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </label>
+                <label>Beer name<input value={nb.name} onChange={(e) => setNb({ ...nb, name: e.target.value })} placeholder="From the recipe" /></label>
+                <label>Tank
+                  <select value={nb.tankId} onChange={(e) => setNb({ ...nb, tankId: e.target.value })}>
+                    <option value="">No tank yet</option>
+                    {tanks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </label>
+                <p className="stock-muted" style={{ margin: 0, fontSize: '0.8rem', flexBasis: '100%' }}>
+                  Makes the next batch number: one {s || ''} L turn set up from the recipe (with its yeast and fermenter additions), then takes the split.
+                </p>
+              </div>
+            )}
 
             <table className="split-table">
               <thead><tr><th></th><th>Ingredient</th><th>Turn total</th><th>Stays</th><th>To split</th></tr></thead>
@@ -106,7 +147,7 @@ export default function SplitTurnDialog({ batch, run, onClose, onDone }) {
             {s >= t && t > 0 && <p style={{ color: '#b00020' }}>The split has to be smaller than the turn.</p>}
             {error && <p style={{ color: '#b00020' }}>{error}</p>}
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={confirm} disabled={!ok || busy}>{busy ? 'Splitting…' : `Split ${s || ''} L to ${receiving ? `#${receiving.batch_number}` : '…'}`}</button>
+              <button onClick={confirm} disabled={!ok || busy}>{busy ? 'Splitting…' : isNew ? `Create batch and split ${s || ''} L` : `Split ${s || ''} L to ${receiving ? `#${receiving.batch_number}` : '…'}`}</button>
               <button className="secondary" onClick={onClose}>Cancel</button>
             </div>
           </>
