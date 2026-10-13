@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { listRecipes, getRecipe, listBatches, listTanks, upsertBatch, initializeBrewRuns } from '../lib/api'
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
-import { getBooking, linkBookingToBatch } from '../lib/schedule'
+import { getBooking, linkBookingToBatch, listScheduleEntries, listBookings } from '../lib/schedule'
+import { beerKey } from '../lib/beerColours'
+import { beerMatch } from '../lib/incoming'
 
 // Fixed brewhouse turn sizes — tell me the values to use if this ever changes.
 const TURN_VOLUMES = [
@@ -198,6 +200,11 @@ export default function AddBrewPage() {
   const navigate = useNavigate()
   const [recipes, setRecipes] = useState([])
   const [recipeId, setRecipeId] = useState('')
+  const [today, setToday] = useState({ names: [], recipeIds: [] })
+  // Hidden recipes aren't offered (unless already chosen, e.g. by a booking).
+  const pickable = recipes.filter((r) => (r.is_active !== false && !/historical import/i.test(r.name)) || r.id === recipeId)
+  const todayKeys = new Set(today.names.map((n) => beerMatch(beerKey(n))))
+  const scheduledRecipes = pickable.filter((r) => today.recipeIds.includes(r.id) || todayKeys.has(beerMatch(beerKey(r.name))))
   const [fullRecipe, setFullRecipe] = useState(null)
   const [turnVolumeL, setTurnVolumeL] = useState(null)
   const [turnQuantity, setTurnQuantity] = useState(null)
@@ -230,6 +237,14 @@ export default function AddBrewPage() {
       .then((t) => setTanks(t.filter((x) => x.is_active !== false && x.tank_type !== 'BBT')))
       .catch((e) => setError(e.message))
     listBatches().then(setBatches).catch((e) => setError(e.message))
+    // Today's brews on the schedule (brewhouse cells and booked brews), to put first in the picker.
+    const day = new Date().toLocaleDateString('en-CA')
+    Promise.all([listScheduleEntries(day, day), listBookings({ fromIso: day, toIso: day })])
+      .then(([entries, bookings]) => setToday({
+        names: entries.filter((e) => /^brew_/.test(e.lane)).map((e) => e.text).concat(bookings.map((b) => b.beer_name)),
+        recipeIds: bookings.map((b) => b.recipe_id).filter(Boolean),
+      }))
+      .catch(() => {})
   }, [])
 
   // Full recipe (with nested grist/water/kettle/whirlpool/fermenter arrays) is needed as
@@ -323,11 +338,20 @@ export default function AddBrewPage() {
           style={{ width: '100%' }}
         >
           <option value="">Select a recipe…</option>
-          {recipes.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name} {r.style ? `— ${r.style}` : ''}
-            </option>
-          ))}
+          {scheduledRecipes.length > 0 && (
+            <optgroup label="On the schedule today">
+              {scheduledRecipes.map((r) => (
+                <option key={r.id} value={r.id}>{r.name} {r.style ? `— ${r.style}` : ''}</option>
+              ))}
+            </optgroup>
+          )}
+          <optgroup label={scheduledRecipes.length ? 'All recipes' : 'Recipes'}>
+            {pickable.filter((r) => !scheduledRecipes.includes(r)).map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name} {r.style ? `— ${r.style}` : ''}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </StepCard>
 

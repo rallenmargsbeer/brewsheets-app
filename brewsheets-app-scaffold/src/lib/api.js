@@ -11,6 +11,12 @@ export async function listRecipes() {
   return data
 }
 
+// Hidden recipes stay in the Recipes list (under Hidden) but not in the brew-day picker.
+export async function setRecipeHidden(id, hidden) {
+  const { error } = await supabase.from('recipes').update({ is_active: !hidden }).eq('id', id)
+  if (error) throw error
+}
+
 export async function getRecipe(id) {
   const { data, error } = await supabase
     .from('recipes')

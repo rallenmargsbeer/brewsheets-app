@@ -1,11 +1,29 @@
 import { useEffect, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
 import { Link } from 'react-router-dom'
-import { listBatches } from '../lib/api'
+import { listBatches, deleteBatch } from '../lib/api'
+import { isScheduleEditor } from '../lib/schedule'
+
+// The most recent batches show; older ones are in the archive below.
+const RECENT = 50
 
 export default function BatchesPage() {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showArchive, setShowArchive] = useState(false)
+  const [error, setError] = useState(null)
+  const [editor, setEditor] = useState(false)
+  useEffect(() => { isScheduleEditor().then(setEditor) }, [])
+
+  async function remove(b) {
+    if (!window.confirm(`Delete batch ${b.batch_number}${b.recipes?.name ? ` (${b.recipes.name})` : ''}? Its brew turns, readings and packaging records go too. This cannot be undone.`)) return
+    try {
+      await deleteBatch(b.id)
+      setBatches((list) => list.filter((x) => x.id !== b.id))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
 
   function refresh() {
     listBatches()
@@ -24,10 +42,12 @@ export default function BatchesPage() {
         </Link>
       </div>
 
+      {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {loading ? (
         <p>Loading…</p>
       ) : (
-        <table>
+        <>
+        <table className="batches-table">
           <thead>
             <tr>
               <th>Batch #</th>
@@ -37,10 +57,12 @@ export default function BatchesPage() {
               <th>Target Vol (L)</th>
               <th>Date Brewed</th>
               <th>Package Date</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {batches.map((b) => (
+            {(showArchive ? batches : batches.slice(0, RECENT)).map((b, i) => [
+              i === RECENT && <tr key="archive" className="batches-archive-head"><td colSpan={8}>Archive</td></tr>,
               <tr key={b.id}>
                 <td>
                   <Link to={`/batches/${b.id}`}>{b.batch_number}</Link>
@@ -51,15 +73,22 @@ export default function BatchesPage() {
                 <td>{b.target_volume_l ?? '—'}</td>
                 <td>{b.date_brewed ?? '—'}</td>
                 <td>{b.package_date ?? '—'}</td>
-              </tr>
-            ))}
+                <td>{editor && <button className="secondary batch-delete" onClick={() => remove(b)} aria-label={`Delete batch ${b.batch_number}`} title="Delete batch">Delete</button>}</td>
+              </tr>,
+            ])}
             {batches.length === 0 && (
               <tr>
-                <td colSpan={7}>No batches yet — click "+ Add Brew" to start today's brew day.</td>
+                <td colSpan={8}>No batches yet — click "+ Add Brew" to start today's brew day.</td>
               </tr>
             )}
           </tbody>
         </table>
+        {batches.length > RECENT && (
+          <button className="secondary" style={{ marginTop: '0.75rem' }} onClick={() => setShowArchive(!showArchive)}>
+            {showArchive ? 'Hide the archive' : `Show the archive (${batches.length - RECENT} older batches)`}
+          </button>
+        )}
+        </>
       )}
     </div>
   )
