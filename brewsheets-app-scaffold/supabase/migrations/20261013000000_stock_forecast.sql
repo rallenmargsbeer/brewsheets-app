@@ -1,5 +1,5 @@
 -- Monthly sales forecast (entered by hand) and minimum stock per beer, for the brew plan
--- and the stock meeting. Seeded from the Brew Schedule Forecast tab of the 2026 schedule sheet.
+-- and the stock meeting. Seeded from the Brew Schedule Forecast tab of the 2026 schedule sheet. "Lager" in the sheet is the Draught.
 create table if not exists public.stock_forecast (
   beer text not null,
   format text not null check (format in ('cube', 'keg')),
@@ -46,8 +46,8 @@ from (values
   ('ITP','keg',array[117,118,150,168,167,263,215,170,165,182,148,166]),
   ('Megsy','cube',array[399,393,411,593,718,807,830,685,514,556,591,516]),
   ('Megsy','keg',array[82,68,90,110,109,177,163,117,124,90,72,65]),
-  ('Lager','cube',array[22,20,31,24,24,24,26,23,23,20,18,17]),
-  ('Lager','keg',array[37,53,68,87,78,82,85,84,94,84,65,73]),
+  ('Draught','cube',array[22,20,31,24,24,24,26,23,23,20,18,17]),
+  ('Draught','keg',array[37,53,68,87,78,82,85,84,94,84,65,73]),
   ('River Dog','cube',array[338,309,336,388,501,514,356,436,349,342,353,343]),
   ('River Dog','keg',array[20,22,25,29,24,36,74,37,27,27,21,21])
 ) as f(beer, format, qty), unnest(qty) with ordinality as u(q, i)
@@ -69,8 +69,8 @@ insert into public.stock_min (beer, format, qty) values
   ('ITP','keg',36),
   ('Megsy','cube',480),
   ('Megsy','keg',45),
-  ('Lager','cube',20),
-  ('Lager','keg',9),
+  ('Draught','cube',20),
+  ('Draught','keg',9),
   ('Brown','cube',20),
   ('Brown','keg',5),
   ('River Dog','cube',288),
