@@ -18,6 +18,7 @@ import DashboardPage from './pages/DashboardPage.jsx'
 import StockPage from './pages/StockPage.jsx'
 import ForecastPage from './pages/ForecastPage.jsx'
 import TodayPage from './pages/TodayPage.jsx'
+import IngredientReviewBanner from './components/IngredientReviewBanner.jsx'
 import DilutionPage from './pages/DilutionPage.jsx'
 import { AuthProvider, RequireAuth } from './auth.jsx'
 
@@ -29,7 +30,7 @@ export default function App() {
   const addingBrew = pathname === '/batches/new'
   // The schedule grid (every tank is a column) and the stock and forecast tables (every location is a column)
   // get the full screen width.
-  const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast'
+  const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast' || pathname === '/ingredients'
   return (
     <AuthProvider>
     <div>
@@ -83,6 +84,7 @@ export default function App() {
         </nav>
       </header>
       <main style={{ padding: '1.5rem', maxWidth: wide ? 'none' : 1100, margin: '0 auto' }}>
+        <IngredientReviewBanner />
         <Routes>
           <Route path="/" element={<Navigate to="/brew-day" replace />} />
           <Route path="/recipes" element={<RecipesPage />} />

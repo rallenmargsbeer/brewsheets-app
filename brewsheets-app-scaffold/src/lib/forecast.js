@@ -329,3 +329,30 @@ export function applyLevelling(plan, levelled, { months = 3, today = todayIso() 
     }
   }).sort(byUrgency)
 }
+
+// Suggested cubes / kegs split for a batch packaged on `packDate`, from the forecast:
+// each format's shortfall against the stock goal (the next coverWeeks of sales) on pack
+// day, after selling from today's stock until then; with no shortfall, the forecast mix.
+// Returns null when the beer has no forecast.
+export function suggestPackSplit({ fc, stock, beer, packDate, packagedL, today = todayIso() }) {
+  if (!fc?.has(beer) || !(packagedL > 0)) return null
+  const k = beerMatch(beer)
+  let s = { cubes: 0, kegs: 0 }
+  for (const [name, v] of stock) if (beerMatch(name) === k) s = { cubes: s.cubes + v.cubes, kegs: s.kegs + v.kegs }
+  const until = (format, from, to) => {
+    let t = 0
+    for (let d = from; d < to; d = addDays(d, 1)) t += fc.perDay(beer, format, d)
+    return t
+  }
+  const start = packDate > today ? packDate : today
+  const line = (format, have, perUnit) => {
+    const atPack = have - until(format, today, start)
+    const goal = fc.target(beer, format, start)
+    return { atPack, goal, needL: Math.max(0, goal - atPack) * perUnit, demandL: goal * perUnit }
+  }
+  const c = line('cube', Math.max(0, s.cubes), CUBE_L)
+  const g = line('keg', Math.max(0, s.kegs), KEG_L)
+  const byNeed = c.needL + g.needL > 0
+  const cubeShare = byNeed ? c.needL / (c.needL + g.needL) : c.demandL + g.demandL > 0 ? c.demandL / (c.demandL + g.demandL) : 0.5
+  return { cubeShare, byNeed, cube: c, keg: g, cubesL: packagedL * cubeShare, kegsL: packagedL * (1 - cubeShare) }
+}

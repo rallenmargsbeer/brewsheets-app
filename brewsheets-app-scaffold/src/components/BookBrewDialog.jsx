@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
 import { addDays, todayIso, stepsForTank, splitAtFilter, suggestBrightTank, listScheduleEntries, createBooking, packDay, packTexts } from '../lib/schedule'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
+import { loadForecast, forecastIndex, suggestPackSplit, YIELD } from '../lib/forecast'
+import { listStock, stockByBeer } from '../lib/stock'
 
 const TURN_SIZES = [1000, 1500, 2500]
 const fmt = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -22,6 +24,13 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const [btChoice, setBtChoice] = useState('auto') // 'auto' = use the suggestion, '' = none, or a tank id
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  // Forecast and stock, for a suggested cubes / kegs split.
+  const [demand, setDemand] = useState(null)
+  useEffect(() => {
+    Promise.all([loadForecast(), listStock()])
+      .then(([f, st]) => setDemand({ fc: forecastIndex(f), stock: stockByBeer(st), weeks: f.coverWeeks }))
+      .catch(() => setDemand(null))
+  }, [])
 
   const template = templates.find((t) => t.id === templateId)
   const tank = tanks.find((t) => t.id === tankId)
@@ -90,6 +99,19 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const packLitres = Math.round((Number(pack.pallets) || 0) * LITRES_PER_PALLET + [50, 30, 20].reduce((t, l) => t + (Number(pack[`kegs_${l}`]) || 0) * l, 0))
   const overPacked = packLitres > turnVolume * turns
   const packWhen = filterStep ? packDay(brewDate, filterStep, btSteps) : null
+  const recipeName = realRecipes.find((r) => r.id === recipeId)?.name
+  const split = useMemo(() => {
+    if (!demand) return null
+    const packDate = packWhen?.date ?? addDays(brewDate, 21)
+    const packagedL = turnVolume * turns * YIELD
+    const args = { fc: demand.fc, stock: demand.stock, packDate, packagedL }
+    // The forecast may name the beer as the recipe does ("Pale Ale") or as the schedule ("Pale").
+    const sp = suggestPackSplit({ ...args, beer: beerName }) ?? (recipeName ? suggestPackSplit({ ...args, beer: recipeName }) : null)
+    if (!sp) return null
+    const pallets = Math.floor(sp.cubesL / LITRES_PER_PALLET + 0.25) // whole pallets, rounding down unless nearly full
+    const kegs = Math.max(0, Math.floor((packagedL - pallets * LITRES_PER_PALLET) / 50))
+    return { ...sp, pallets, kegs, packagedL, packDate }
+  }, [demand, beerName, recipeName, brewDate, turnVolume, turns, packWhen?.date])
 
   return (
     <div className="sc-overlay" onClick={onClose}>
@@ -177,7 +199,22 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
                 {pack.pallets} pallet{Number(pack.pallets) === 1 ? '' : 's'} = {(Number(pack.pallets) * CANS_PER_PALLET).toLocaleString()} cans = {Number(pack.pallets) * CUBES_PER_PALLET} cubes
               </div>
             )}
-            <div style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>Split depends on SKU and demand; enter what this batch needs.</div>
+            {split ? (
+              <div className="sc-split">
+                <div>
+                  <strong>Suggested from the forecast:</strong> {split.pallets} pallet{split.pallets === 1 ? '' : 's'} ({split.pallets * CUBES_PER_PALLET} cubes) and {split.kegs} × 50 L kegs
+                  <span className="sc-split-why">
+                    {' '}· {Math.round(split.cubeShare * 100)}% cubes / {100 - Math.round(split.cubeShare * 100)}% kegs of about {Math.round(split.packagedL).toLocaleString()} L packaged
+                    {split.byNeed
+                      ? `. On ${fmt(split.packDate)} you'd be short ${Math.round(Math.max(0, split.cube.goal - split.cube.atPack))} cubes and ${Math.round(Math.max(0, split.keg.goal - split.keg.atPack))} kegs of ${demand.weeks} weeks' stock.`
+                      : `. Stock covers ${demand.weeks} weeks either way, so this follows the forecast mix.`}
+                  </span>
+                </div>
+                <button type="button" className="secondary" onClick={() => setPack({ ...pack, pallets: String(split.pallets), kegs_50: String(split.kegs) })}>Use suggestion</button>
+              </div>
+            ) : (
+              <div style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>Split depends on SKU and demand; enter what this batch needs.{beerName && demand ? ' (No forecast for this beer yet.)' : ''}</div>
+            )}
           </div>
           <label>Notes
             <input value={notes} onChange={(e) => setNotes(e.target.value)} />
