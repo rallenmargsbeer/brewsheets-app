@@ -503,7 +503,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], alphaAcidByName, form.postboil_gravity, form.postboil_volume_l)
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
+    <div className="brewday-turn" style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <div>

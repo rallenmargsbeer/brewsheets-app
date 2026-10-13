@@ -613,3 +613,32 @@ tr.ing-added td { background: #f3faf5; }
 .tile-alert { font-size: 0.72rem; font-weight: 700; border-radius: 999px; padding: 0.05rem 0.5rem; align-self: flex-start; }
 .tile-alert.go { background: #dcf1e1; color: #14512a; } .tile-alert.soon { background: #fdf0cc; color: #6b4500; } .tile-alert.warn { background: #fbe0de; color: #7a140d; }
 @media (max-width: 600px) { .day-row { grid-template-columns: 1fr; gap: 0.35rem; } }
+
+/* Brew Day: the boxes the brewer fills in stand out (bigger, centred, highlighted). */
+.brewday-turn input[type='number'],
+.brewday-turn input[type='text'],
+.brewday-turn input[type='datetime-local'],
+.brewday-turn input[type='date'],
+.brewday-turn input:not([type]) {
+  font-size: 1.15rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.45rem 0.5rem;
+  background: #fffbea;
+  border: 2px solid #d9b65c;
+  border-radius: 6px;
+  min-width: 96px;
+}
+.brewday-turn input:focus { background: #fff; border-color: #a66a00; outline: 3px solid rgba(166, 106, 0, 0.18); }
+.brewday-turn input:disabled { background: #f3f1ec; border-color: #ddd; color: #777; }
+.brewday-turn textarea { font-size: 1.05rem; background: #fffbea; border: 2px solid #d9b65c; border-radius: 6px; }
+/* Field labels sit centred over their box. */
+.brewday-turn label[style*='inline-block'] { text-align: center; vertical-align: top; }
+.brewday-turn label[style*='inline-block'] > div:first-child { font-weight: 600; color: #3b3f3c !important; font-size: 0.82rem !important; margin-bottom: 0.2rem; }
+/* "Tap to stamp" time buttons match. */
+.brewday-turn label[style*='inline-block'] button { font-size: 1.05rem; min-width: 120px; padding: 0.45rem 0.75rem; }
+.brewday-turn td input[type='number'] { min-width: 90px; }
+/* Ingredient names in the tables are pre-filled, not something to fill in: keep them plain. */
+.brewday-turn td:first-child input { font-size: 0.95rem; font-weight: 600; text-align: left; background: transparent; border: 1px solid transparent; min-width: 0; padding: 0.3rem 0.4rem; }
+.brewday-turn td:first-child input:focus { border-color: var(--line); background: #fff; outline: none; }
+.brewday-turn input[type='date'] { min-width: 175px; }
