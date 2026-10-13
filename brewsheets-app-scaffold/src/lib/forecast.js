@@ -14,6 +14,24 @@ export const YIELD = 0.8
 // Brew day to packaged, roughly: brew this long before stock would drop below minimum.
 export const LEAD_DAYS = 21
 
+// When the brewhouse can't keep up, these get brewed first, in this order; the rest share
+// what's left.
+export const PRIORITY = ['In The Pines', 'Mermid', 'Kolsch', 'Megsy', 'Riverdog', 'Drift']
+export const priorityOf = (beer) => {
+  const i = PRIORITY.findIndex((p) => beerMatch(p) === beerMatch(beer))
+  return i < 0 ? PRIORITY.length : i
+}
+
+// Beers made outside the brewhouse. Megsy (ginger beer RTD) is mixed in a bright tank in a
+// day: no brewhouse capacity, no brewhouse loss, a day or two of lead time.
+const MIXED = { megsy: { leadDays: 2, yield: 1 } }
+export const profileOf = (beer) => {
+  const m = MIXED[beerMatch(beer)]
+  return m ? { ...m, brewhouse: false } : { leadDays: LEAD_DAYS, yield: YIELD, brewhouse: true }
+}
+
+const byUrgency = (a, b) => (a.brewBy ?? '9999').localeCompare(b.brewBy ?? '9999') || a.priority - b.priority || b.brewL - a.brewL || a.beer.localeCompare(b.beer)
+
 export const monthOf = (iso) => `${iso.slice(0, 7)}-01`
 export function addMonths(monthIso, n) {
   const [y, m] = monthIso.split('-').map(Number)
@@ -130,7 +148,7 @@ export async function loadBrews({ days = 200, today = todayIso() } = {}) {
       out.push({ beer: r.beer, tank: t.name, status: 'tank', start, ready: end, litres: from?.litres ?? Number(t.capacity_l) })
     }
   }
-  return out.map((b) => ({ ...b, packaged: b.litres * YIELD })).sort((a, b) => a.ready.localeCompare(b.ready))
+  return out.map((b) => ({ ...b, packaged: b.litres * profileOf(b.beer).yield })).sort((a, b) => a.ready.localeCompare(b.ready))
 }
 
 // One line per forecast beer over the next `months` months, in packaged litres:
@@ -146,6 +164,7 @@ export function brewPlan({ stock, fc, brews, months = 3, today = todayIso() }) {
   }
   return fc.beers.map((beer) => {
     const k = beerMatch(beer)
+    const { leadDays, yield: yld, brewhouse } = profileOf(beer)
     const s = stockOf.get(k) ?? { cubes: 0, kegs: 0, smallKegL: 0 }
     const stockL = Math.max(0, s.cubes) * CUBE_L + Math.max(0, s.kegs) * KEG_L + Math.max(0, s.smallKegL)
     const minC = fc.target(beer, 'cube', today)
@@ -179,8 +198,8 @@ export function brewPlan({ stock, fc, brews, months = 3, today = todayIso() }) {
       // Stock held this morning (after today's packaging) against the next weeks' sales.
       level += supply.get(d) ?? 0
       if (window - level > worst) {
-        const by = addDays(d, -LEAD_DAYS) < today ? today : addDays(d, -LEAD_DAYS)
-        needByMonth.set(monthOf(by), (needByMonth.get(monthOf(by)) ?? 0) + (window - level - worst) / YIELD)
+        const by = addDays(d, -leadDays) < today ? today : addDays(d, -leadDays)
+        needByMonth.set(monthOf(by), (needByMonth.get(monthOf(by)) ?? 0) + (window - level - worst) / yld)
         worst = window - level
       }
       if (level < window && !belowMin) belowMin = d
@@ -190,7 +209,7 @@ export function brewPlan({ stock, fc, brews, months = 3, today = todayIso() }) {
       if (level < 0 && !runsOut) runsOut = d
       window += daily[i + coverDays] - daily[i]
     }
-    const brewL = worst > 0 ? worst / YIELD : 0
+    const brewL = worst > 0 ? worst / yld : 0
     return {
       beer,
       stock: s,
@@ -210,9 +229,11 @@ export function brewPlan({ stock, fc, brews, months = 3, today = todayIso() }) {
       needByMonth,
       belowMin,
       runsOut,
-      brewBy: belowMin ? (addDays(belowMin, -LEAD_DAYS) < today ? today : addDays(belowMin, -LEAD_DAYS)) : null,
+      brewBy: belowMin ? (addDays(belowMin, -leadDays) < today ? today : addDays(belowMin, -leadDays)) : null,
+      brewhouse,
+      priority: priorityOf(beer),
     }
-  }).sort((a, b) => (a.brewBy ?? '9999').localeCompare(b.brewBy ?? '9999') || b.brewL - a.brewL || a.beer.localeCompare(b.beer))
+  }).sort(byUrgency)
 }
 
 // How far ahead the brewhouse plan looks for busy months, whatever period is on screen.
@@ -222,15 +243,17 @@ export const LOOKAHEAD_MONTHS = 12
 // Works back from the furthest month: whatever a month needs beyond the limit (after brews
 // already booked) has to be brewed in earlier months and held as stock. Anything that still
 // doesn't fit by this month is `short`: too late even brewing at the limit from now.
-export function levelBrewing({ plan, brews, capacityL = DEFAULT_CAPACITY_L, today = todayIso() }) {
+export function levelBrewing({ plan: all, brews, capacityL = DEFAULT_CAPACITY_L, today = todayIso() }) {
   const sum = (m) => [...m.values()].reduce((a, x) => a + x, 0)
+  // Mixed beers (Megsy) don't use the brewhouse.
+  const plan = all.filter((r) => r.brewhouse).sort((a, b) => a.priority - b.priority)
   const first = monthOf(today)
   const lastNeed = plan.reduce((a, r) => [...r.needByMonth].reduce((b, [m, l]) => (l > 1 && m > b ? m : b), a), first)
   const months = []
   for (let i = 0; i < LOOKAHEAD_MONTHS; i++) {
     const m = addMonths(first, i)
     const next = addMonths(m, 1)
-    const booked = brews.filter((b) => b.status === 'booked' && b.start >= m && b.start < next).reduce((a, b) => a + b.litres, 0)
+    const booked = brews.filter((b) => b.status === 'booked' && b.start >= m && b.start < next && profileOf(b.beer).brewhouse).reduce((a, b) => a + b.litres, 0)
     if (m > lastNeed && !booked) break
     // This month only has the days left in it.
     const capacity = i === 0 ? (capacityL * daysBetween(today, next)) / daysInMonth(m) : capacityL
@@ -241,20 +264,47 @@ export function levelBrewing({ plan, brews, capacityL = DEFAULT_CAPACITY_L, toda
   for (let i = months.length - 1; i >= 0; i--) {
     const row = months[i]
     const want = new Map(plan.map((r) => [r.beer, (row.need.get(r.beer) ?? 0) + (carry.get(r.beer) ?? 0)]))
-    const total = sum(want)
-    const room = Math.max(0, row.capacity - row.booked)
-    const f = total > room ? room / total : 1
-    row.brew = new Map([...want].map(([b, w]) => [b, w * f]))
-    for (const [b, w] of want) carry.set(b, w * (1 - f))
-    row.planned = total * f
-    row.early = Math.max(0, row.planned - row.needed) // brewed now for later, busier months
+    // Fill the month in priority order; the unlisted beers share what's left. What doesn't
+    // fit moves to the month before (or, this month, is too late).
+    let room = Math.max(0, row.capacity - row.booked)
+    row.brew = new Map()
+    for (const r of plan.filter((x) => x.priority < PRIORITY.length)) {
+      const take = Math.min(want.get(r.beer), room)
+      row.brew.set(r.beer, take)
+      room -= take
+    }
+    const rest = plan.filter((r) => r.priority >= PRIORITY.length)
+    const restWant = rest.reduce((a, r) => a + want.get(r.beer), 0)
+    const f = restWant > room ? room / restWant : 1
+    for (const r of rest) row.brew.set(r.beer, want.get(r.beer) * f)
+    for (const [b, w] of want) carry.set(b, w - row.brew.get(b))
+    row.planned = sum(row.brew)
+    row.early = Math.max(0, row.planned - row.needed) // brewed now for later, busier months (before catch-up)
     // Over the limit: brewed in an earlier month, or for this month, too late to brew at all.
     row.movedEarlier = i > 0 ? Math.max(0, row.needed - row.planned) : 0
+  }
+  // What couldn't be brewed in time is caught up in the first months with spare capacity,
+  // in priority order (stock dips under the goal until then).
+  const late = new Map(carry)
+  for (const row of months) {
+    let room = Math.max(0, row.capacity - row.booked - row.planned)
+    row.catchUp = 0
+    for (const r of plan) {
+      const l = late.get(r.beer) ?? 0
+      if (l <= 0 || room <= 0) continue
+      const take = Math.min(l, room)
+      row.brew.set(r.beer, row.brew.get(r.beer) + take)
+      late.set(r.beer, l - take)
+      room -= take
+      row.catchUp += take
+    }
+    row.planned += row.catchUp
     row.total = row.booked + row.planned
     row.spare = row.capacity - row.total
   }
   if (months.length) months[0].tooLate = sum(carry)
-  return { months, short: sum(carry), shortByBeer: carry }
+  // shortByBeer: brewed late (stock dips under the goal); never: doesn't fit at all.
+  return { months, short: sum(carry), shortByBeer: carry, never: sum(late) }
 }
 
 // The on-screen plan with brewing levelled to the brewhouse limit: brew more includes beer
@@ -263,6 +313,8 @@ export function applyLevelling(plan, levelled, { months = 3, today = todayIso() 
   const end = addDays(today, Math.round(months * 30.44))
   const inView = levelled.months.filter((m) => m.month < end)
   return plan.map((r) => {
+    // Mixed beers aren't levelled: they're made when needed.
+    if (!r.brewhouse) return { ...r, unlevelledL: r.brewL, earlyL: 0, shortL: 0 }
     const plannedL = inView.reduce((a, m) => a + (m.brew.get(r.beer) ?? 0), 0)
     const firstMonth = inView.find((m) => (m.brew.get(r.beer) ?? 0) > 1)?.month
     let brewBy = r.brewBy
@@ -275,5 +327,5 @@ export function applyLevelling(plan, levelled, { months = 3, today = todayIso() 
       brewBy: plannedL > 1 ? brewBy : null,
       shortL: levelled.shortByBeer.get(r.beer) ?? 0,
     }
-  }).sort((a, b) => (a.brewBy ?? '9999').localeCompare(b.brewBy ?? '9999') || b.brewL - a.brewL || a.beer.localeCompare(b.beer))
+  }).sort(byUrgency)
 }

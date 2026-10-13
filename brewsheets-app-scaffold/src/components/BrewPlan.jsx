@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listStock, stockByBeer } from '../lib/stock'
-import { loadForecast, forecastIndex, loadBrews, brewPlan, levelBrewing, applyLevelling, saveSetting, LOOKAHEAD_MONTHS, LEAD_DAYS, YIELD } from '../lib/forecast'
+import { loadForecast, forecastIndex, loadBrews, brewPlan, levelBrewing, applyLevelling, saveSetting, LOOKAHEAD_MONTHS, LEAD_DAYS, YIELD, PRIORITY } from '../lib/forecast'
 import { todayIso, daysBetween, isScheduleEditor } from '../lib/schedule'
 
 const litres = (n) => (n >= 50 ? `${(Math.round(n / 100) * 100).toLocaleString()} L` : '0 L')
@@ -40,6 +40,7 @@ export function useBrewPlan(months, stockData = null) {
 function urgency(r) {
   if (r.brewL < 50) return 'ok'
   const days = daysBetween(todayIso(), r.brewBy)
+  if (!r.brewhouse) return days <= 2 ? 'low' : days <= 7 ? 'mid' : 'ok'
   return days <= 7 ? 'low' : days <= LEAD_DAYS ? 'mid' : 'ok'
 }
 
@@ -93,8 +94,9 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
               <td className={r.endL < r.minL ? 'stock-neg' : ''}>{litres(Math.max(0, r.endL))}</td>
               <td className="plan-need">
                 <span className={`stock-pill ${urgency(r)}`}>{r.brewL >= 50 ? litres(r.brewL) : 'covered'}</span>
-                {r.earlyL >= 50 && <div className="plan-early">incl. {litres(r.earlyL)} early for busy months</div>}
-                {r.shortL >= 50 && <div className="plan-short">{litres(r.shortL)} can't fit in time</div>}
+                {r.earlyL >= 50 && <div className="plan-early">incl. {litres(r.earlyL)} for later months</div>}
+                {r.shortL >= 50 && <div className="plan-short">{litres(r.shortL)} late: dips under the goal</div>}
+                {!r.brewhouse && r.brewL >= 50 && <div className="plan-early">mixed in a BT, not brewhouse</div>}
               </td>
               <td>{r.runsOut ? <span title={`Runs out ${shortDate(r.runsOut)}`}>{shortDate(r.belowMin)} <span className="stock-neg">· out {shortDate(r.runsOut)}</span></span> : shortDate(r.belowMin)}</td>
               <td><strong>{r.brewL >= 50 ? (r.brewBy <= todayIso() ? 'Now' : shortDate(r.brewBy)) : ''}</strong></td>
@@ -106,7 +108,7 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
   )
 }
 
-export const planNote = (weeks) => `Litres are packaged litres (a cube is 6 L, a keg 50 L). Hold ${weeks} wks = the next ${weeks} weeks of forecast sales, the stock to keep on hand; it rolls forward day by day, so it rises ahead of busy months. In tank and booked brews count from the day after they're filtered, at ${Math.round(YIELD * 100)}% of the batch (batch size from the brew cell, e.g. "8 Ball 1500L", or the FV's size). Brew more is brewhouse litres to brew in the period to keep ${weeks} weeks of stock, including beer that has to be brewed early because a later month needs more than the brewhouse limit (the plan looks ${LOOKAHEAD_MONTHS} months ahead); brew by is ${LEAD_DAYS} days before stock would drop below the goal, or sooner when brewing early.`
+export const planNote = (weeks) => `Litres are packaged litres (a cube is 6 L, a keg 50 L). Hold ${weeks} wks = the next ${weeks} weeks of forecast sales, the stock to keep on hand; it rolls forward day by day, so it rises ahead of busy months. In tank and booked brews count from the day after they're filtered, at ${Math.round(YIELD * 100)}% of the batch (batch size from the brew cell, e.g. "8 Ball 1500L", or the FV's size). Brew more is brewhouse litres to brew in the period to keep ${weeks} weeks of stock, including beer that has to be brewed early because a later month needs more than the brewhouse limit (the plan looks ${LOOKAHEAD_MONTHS} months ahead); brew by is ${LEAD_DAYS} days before stock would drop below the goal, or sooner when brewing early. When the brewhouse can't keep up, ${PRIORITY.join(', ')} get brewed first, in that order. Megsy is mixed in a bright tank in a day, so it doesn't count against the brewhouse limit or get brewed early.`
 
 // Compact brew plan for the schedule page: what needs brewing and by when.
 export function SchedulePlanPanel() {
@@ -164,6 +166,7 @@ export function CapacityTable({ plan, compact = false }) {
                 {r.early >= 50 && !(r.tooLate >= 50) && <div className="plan-early">{litres(r.early)} early</div>}
                 {r.movedEarlier >= 50 && <div className="plan-early">{litres(r.movedEarlier)} brewed earlier</div>}
                 {r.tooLate >= 50 && <div className="plan-short">{litres(r.tooLate)} too late to brew</div>}
+                {r.catchUp >= 50 && <div className="plan-short">{litres(r.catchUp)} catch-up</div>}
               </td>
               <td className="cap-bar-h">
                 <div className={`cap-bar ${r.booked > r.capacity ? 'over' : r.spare < r.capacity * 0.1 ? 'tight' : ''}`} title={`${Math.round(r.total).toLocaleString()} of ${Math.round(r.capacity).toLocaleString()} L`}>
@@ -179,7 +182,8 @@ export function CapacityTable({ plan, compact = false }) {
       </table>
       {plan.short >= 50 && (
         <p className="cap-warn">
-          {litres(plan.short)} can't be brewed in time, even running the brewhouse at its limit from now: stock will dip under the goal.
+          {litres(plan.short)} can't be brewed in time, even running the brewhouse at its limit from now. It's caught up in the next months with spare capacity (shown as catch-up), lowest priority beers last, but stock will dip under the goal until then.
+          {plan.never >= 50 && ` ${litres(plan.never)} doesn't fit at all in the next ${plan.months.length} months.`}
         </p>
       )}
       {plan.short < 50 && peaks.length > 0 && (
