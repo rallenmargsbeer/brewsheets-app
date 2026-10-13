@@ -195,8 +195,8 @@ const slotOrder = (a, b) => Number(a.day) - Number(b.day) || (a.slot === b.slot 
 const isFilter = (task) => /^filter\b/i.test(task.trim())
 
 // Splits a template's steps at Filter: up to and including Filter happen in the FV, the
-// rest (Carb, Can & Keg) in the bright tank. Templates with nothing after Filter get the
-// usual Carb (filter afternoon) and Can & Keg (next morning).
+// rest (Can & Keg) in the bright tank. Templates with nothing after Filter get the usual
+// Can & Keg (next morning).
 export function splitAtFilter(steps) {
   const ordered = [...steps].sort(slotOrder)
   const fi = ordered.findIndex((s) => isFilter(s.task))
@@ -204,20 +204,14 @@ export function splitAtFilter(steps) {
   const filterStep = ordered[fi]
   let btSteps = ordered.slice(fi + 1)
   if (btSteps.length === 0) {
-    btSteps = [
-      ...(filterStep.slot === 'AM' ? [{ day: filterStep.day, slot: 'PM', task: 'Carb' }] : []),
-      { day: filterStep.day + 1, slot: 'AM', task: 'Can & Keg' },
-    ]
+    btSteps = [{ day: filterStep.day + 1, slot: 'AM', task: 'Can & Keg' }]
   }
   return { fvSteps: ordered.slice(0, fi + 1), filterStep, btSteps }
 }
 
 // Default bright-tank jobs when a beer is moved over on its filter day.
 export function defaultBtJobs(filterDate, filterSlot) {
-  return [
-    ...(filterSlot === 'AM' ? [{ date: filterDate, slot: 'PM', task: 'Carb' }] : []),
-    { date: addDays(filterDate, 1), slot: 'AM', task: 'Can & Keg' },
-  ]
+  return [{ date: addDays(filterDate, 1), slot: 'AM', task: 'Can & Keg' }]
 }
 
 // Suggests a bright tank that's empty from `fromDate` to `toDate` (no schedule jobs in it

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { isScheduleEditor, listCellarTemplates, saveCellarTemplate, deleteCellarTemplate } from '../lib/schedule'
+import { isScheduleEditor, listCellarTemplates, saveCellarTemplate, deleteCellarTemplate, listBeerColours, saveBeerColour } from '../lib/schedule'
+import { beerStyle, setBeerColours } from '../lib/beerColours'
+
+const hex = (c) => String(c ?? '#ffffff').toLowerCase()
+const SWATCH = { width: 44, height: 30, padding: 2, cursor: 'pointer' }
 
 const VARIANTS = [
   ['all', 'All tanks'],
@@ -10,6 +14,10 @@ const VARIANTS = [
 
 function TemplateEditor({ template, onSaved, onDeleted }) {
   const [name, setName] = useState(template.name)
+  // Cell and font colours on the schedule: shared by every booking of this beer.
+  const start = beerStyle(template.name) ?? { bg: '#e0bfe8', fg: '#1d2421' }
+  const [bg, setBg] = useState(hex(start.bg))
+  const [fg, setFg] = useState(hex(start.fg))
   const [steps, setSteps] = useState(template.cellar_template_steps.map((s) => ({ ...s })))
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -28,6 +36,8 @@ function TemplateEditor({ template, onSaved, onDeleted }) {
       // Keep steps in day / AM-PM order.
       const ordered = [...steps].sort((a, b) => Number(a.day) - Number(b.day) || (a.slot === b.slot ? 0 : a.slot === 'AM' ? -1 : 1))
       const id = await saveCellarTemplate({ id: template.id, name: name.trim() }, ordered)
+      const now = beerStyle(name.trim())
+      if (!now || hex(now.bg) !== bg || hex(now.fg) !== fg || name.trim() !== template.name) await saveBeerColour(name.trim(), bg, fg)
       setMsg('Saved')
       onSaved(id)
     } catch (e) {
@@ -48,6 +58,13 @@ function TemplateEditor({ template, onSaved, onDeleted }) {
       <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.75rem' }}>
         Name <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <span>Schedule colours</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Cell <input type="color" value={bg} onChange={(e) => setBg(e.target.value)} style={SWATCH} /></label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Font <input type="color" value={fg} onChange={(e) => setFg(e.target.value)} style={SWATCH} /></label>
+        <span style={{ background: bg, color: fg, padding: '0.25rem 0.75rem', borderRadius: 4, fontWeight: 600, border: '1px solid var(--line)' }}>{name.trim() || 'Beer'}</span>
+        <span style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>Same colours as the schedule's colour key; saved with the template.</span>
+      </div>
       <p style={{ color: 'var(--ink2)', fontSize: '0.85rem', marginTop: 0 }}>
         Day 1 is brew day. A task that matches the template's name (day 1 PM) is replaced with the booked beer's name.
       </p>
@@ -93,7 +110,10 @@ export default function CellarTemplatesPage() {
   const [selected, setSelected] = useState(null)
   const [editor, setEditor] = useState(null)
 
+  const [, setColoursLoaded] = useState(0)
   function refresh(keepId) {
+    // The schedule's saved beer colours, so buttons and pickers start from them.
+    listBeerColours().then((rows) => { setBeerColours(rows); setColoursLoaded((n) => n + 1) }).catch(() => {})
     listCellarTemplates().then((t) => {
       setTemplates(t)
       setSelected((cur) => t.find((x) => x.id === (keepId ?? cur?.id)) ?? null)
@@ -119,7 +139,13 @@ export default function CellarTemplatesPage() {
       <h1>Cellar templates</h1>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1rem' }}>
         {templates.map((t) => (
-          <button key={t.id} className={selected?.id === t.id ? '' : 'secondary'} onClick={() => setSelected(t)}>{t.name}</button>
+          <button
+            key={t.id}
+            onClick={() => setSelected(t)}
+            style={{ background: beerStyle(t.name)?.bg, color: beerStyle(t.name)?.fg, border: '1px solid rgba(0,0,0,0.25)', outline: selected?.id === t.id ? '3px solid var(--ink)' : 'none', outlineOffset: 2 }}
+          >
+            {t.name}
+          </button>
         ))}
         <button className="secondary" onClick={() => setSelected({ name: '', cellar_template_steps: [{ day: 1, slot: 'AM', task: 'Brew', variant: 'all' }] })}>+ New template</button>
       </div>

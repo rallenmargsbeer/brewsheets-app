@@ -185,7 +185,7 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
           <div className="sc-booking" style={{ background: '#e3edfa', borderLeftColor: '#1d4f91' }}>
             <strong>Move {beer} to a bright tank</strong>
             <div style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>
-              Adds {beer} to the BT on {fmtDay(cell.date)} {cell.slot}, then Carb and Can &amp; Keg.
+              Adds {beer} to the BT on {fmtDay(cell.date)} {cell.slot}, then Can &amp; Keg.
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
               <select value={btId} onChange={(e) => setBtId(e.target.value)}>
