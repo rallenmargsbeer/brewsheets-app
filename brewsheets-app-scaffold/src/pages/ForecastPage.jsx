@@ -38,8 +38,8 @@ export default function ForecastPage() {
             <BrewPlanTable plan={plan} months={months} weeks={fc.coverWeeks} />
           </section>
           <section className="stock-card stock-plan">
-            <h2>Brewhouse capacity <span>booked brews + still to brew (by brew-by month) against {forecast.capacityL.toLocaleString()} L a month</span></h2>
-            <CapacityTable rows={capacity} />
+            <h2>Brewhouse capacity <span>brewing by month within {forecast.capacityL.toLocaleString()} L a month, up to a year ahead</span></h2>
+            <CapacityTable plan={capacity} />
           </section>
           <p className="stock-muted" style={{ fontSize: '0.8rem' }}>{planNote(fc.coverWeeks)}</p>
         </>
