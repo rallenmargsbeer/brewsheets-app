@@ -98,7 +98,19 @@ export async function applySplit({ donorBatch, donorRun, shares, splitL, receivi
 // A new receiving batch made from the split dialog: one turn of the split volume, set up
 // from its recipe (so its own yeast and fermenter additions are there), ready to take
 // the split. Same numbering as Add Brew: one past the highest batch number.
+// Batches need a recipe, so a split batch made without one links to a blank, hidden
+// placeholder (made the first time it's needed).
+const NO_RECIPE = 'No recipe (split / one-off)'
+async function noRecipeId() {
+  const { data } = await supabase.from('recipes').select('id').eq('name', NO_RECIPE).maybeSingle()
+  if (data) return data.id
+  const { data: made, error } = await supabase.from('recipes').insert({ name: NO_RECIPE, is_active: false, is_core_range: false, notes: 'Placeholder for split-wort batches made without a recipe.' }).select('id').single()
+  if (error) throw error
+  return made.id
+}
+
 export async function createSplitBatch({ recipeId, beerName, tankId, splitL, date }) {
+  if (!recipeId) recipeId = await noRecipeId()
   const [all, recipe] = await Promise.all([listBatches(), getRecipe(recipeId)])
   const nums = all.map((b) => parseInt(b.batch_number, 10)).filter(Number.isInteger)
   const batch = await upsertBatch({

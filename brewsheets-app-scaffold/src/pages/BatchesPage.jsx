@@ -16,7 +16,7 @@ export default function BatchesPage() {
   useEffect(() => { isScheduleEditor().then(setEditor) }, [])
 
   async function remove(b) {
-    if (!window.confirm(`Delete batch ${b.batch_number}${b.recipes?.name ? ` (${b.recipes.name})` : ''}? Its brew turns, readings and packaging records go too. This cannot be undone.`)) return
+    if (!window.confirm(`Delete batch ${b.batch_number}${b.beer_style || b.recipes?.name ? ` (${b.beer_style || b.recipes?.name})` : ''}? Its brew turns, readings and packaging records go too. This cannot be undone.`)) return
     try {
       await deleteBatch(b.id)
       setBatches((list) => list.filter((x) => x.id !== b.id))
@@ -51,10 +51,9 @@ export default function BatchesPage() {
           <thead>
             <tr>
               <th>Batch #</th>
-              <th>Recipe</th>
+              <th>SKU</th>
               <th>Status</th>
               <th>Tank</th>
-              <th>Target Vol (L)</th>
               <th>Date Brewed</th>
               <th>Package Date</th>
               <th></th>
@@ -62,15 +61,14 @@ export default function BatchesPage() {
           </thead>
           <tbody>
             {(showArchive ? batches : batches.slice(0, RECENT)).map((b, i) => [
-              i === RECENT && <tr key="archive" className="batches-archive-head"><td colSpan={8}>Archive</td></tr>,
+              i === RECENT && <tr key="archive" className="batches-archive-head"><td colSpan={7}>Archive</td></tr>,
               <tr key={b.id}>
                 <td>
                   <Link to={`/batches/${b.id}`}>{b.batch_number}</Link>
                 </td>
-                <td>{b.recipes?.name}</td>
+                <td>{b.beer_style || b.recipes?.name}</td>
                 <td><span className={'pill pill-' + b.status}>{b.status}</span></td>
                 <td>{tankLabel(b.tanks?.name)}</td>
-                <td>{b.target_volume_l ?? '—'}</td>
                 <td>{b.date_brewed ?? '—'}</td>
                 <td>{b.package_date ?? '—'}</td>
                 <td>{editor && <button className="secondary batch-delete" onClick={() => remove(b)} aria-label={`Delete batch ${b.batch_number}`} title="Delete batch">Delete</button>}</td>
@@ -78,7 +76,7 @@ export default function BatchesPage() {
             ])}
             {batches.length === 0 && (
               <tr>
-                <td colSpan={8}>No batches yet — click "+ Add Brew" to start today's brew day.</td>
+                <td colSpan={7}>No batches yet — click "+ Add Brew" to start today's brew day.</td>
               </tr>
             )}
           </tbody>
