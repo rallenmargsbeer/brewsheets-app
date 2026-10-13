@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listStock, stockByBeer } from '../lib/stock'
-import { loadForecast, forecastIndex, loadBrews, brewPlan, capacityPlan, saveSetting, LEAD_DAYS, YIELD } from '../lib/forecast'
+import { loadForecast, forecastIndex, loadBrews, brewPlan, levelBrewing, applyLevelling, saveSetting, LOOKAHEAD_MONTHS, LEAD_DAYS, YIELD } from '../lib/forecast'
 import { todayIso, daysBetween, isScheduleEditor } from '../lib/schedule'
 
 const litres = (n) => (n >= 50 ? `${(Math.round(n / 100) * 100).toLocaleString()} L` : '0 L')
@@ -27,14 +27,18 @@ export function useBrewPlan(months, stockData = null) {
   const plan = useMemo(() => {
     const stock = stockData ?? src?.stock
     if (!src || !stock) return null
-    return brewPlan({ stock: stockByBeer(stock), fc, brews: src.brews, months })
+    const byBeer = stockByBeer(stock)
+    // The brewhouse plan looks a year ahead so busy months pull brewing forward.
+    const long = brewPlan({ stock: byBeer, fc, brews: src.brews, months: LOOKAHEAD_MONTHS })
+    const levelled = levelBrewing({ plan: long, brews: src.brews, capacityL: src.forecast.capacityL })
+    const rows = applyLevelling(brewPlan({ stock: byBeer, fc, brews: src.brews, months }), levelled, { months })
+    return { rows, levelled }
   }, [src, fc, stockData, months])
-  const capacity = useMemo(() => (plan ? capacityPlan({ plan, brews: src.brews, months, capacityL: src.forecast.capacityL }) : null), [plan, src, months])
-  return { plan, capacity, fc, forecast: src?.forecast, error, reload: load }
+  return { plan: plan?.rows ?? null, capacity: plan?.levelled ?? null, fc, forecast: src?.forecast, error, reload: load }
 }
 
 function urgency(r) {
-  if (!r.brewL) return 'ok'
+  if (r.brewL < 50) return 'ok'
   const days = daysBetween(todayIso(), r.brewBy)
   return days <= 7 ? 'low' : days <= LEAD_DAYS ? 'mid' : 'ok'
 }
@@ -51,8 +55,8 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
           {plan.map((r) => (
             <tr key={r.beer}>
               <td className="stock-beer">{r.beer}</td>
-              <td><span className={`stock-pill ${urgency(r)}`}>{r.brewL ? litres(r.brewL) : 'covered'}</span></td>
-              <td>{r.brewL ? (r.brewBy === todayIso() ? 'now' : shortDate(r.brewBy)) : ''}</td>
+              <td><span className={`stock-pill ${urgency(r)}`}>{r.brewL >= 50 ? litres(r.brewL) : 'covered'}</span></td>
+              <td>{r.brewL >= 50 ? (r.brewBy <= todayIso() ? 'now' : shortDate(r.brewBy)) : ''}</td>
               <td className="stock-muted">{shortDate(r.belowMin)}</td>
             </tr>
           ))}
@@ -87,9 +91,13 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
               <td title={brewList(r.inTank)}>{r.inTank.length ? litres(r.inTankL) : ''}</td>
               <td title={brewList(r.booked)}>{r.booked.length ? `${litres(r.bookedL)} (${r.booked.length})` : ''}</td>
               <td className={r.endL < r.minL ? 'stock-neg' : ''}>{litres(Math.max(0, r.endL))}</td>
-              <td className="plan-need"><span className={`stock-pill ${urgency(r)}`}>{r.brewL ? litres(r.brewL) : 'covered'}</span></td>
+              <td className="plan-need">
+                <span className={`stock-pill ${urgency(r)}`}>{r.brewL >= 50 ? litres(r.brewL) : 'covered'}</span>
+                {r.earlyL >= 50 && <div className="plan-early">incl. {litres(r.earlyL)} early for busy months</div>}
+                {r.shortL >= 50 && <div className="plan-short">{litres(r.shortL)} can't fit in time</div>}
+              </td>
               <td>{r.runsOut ? <span title={`Runs out ${shortDate(r.runsOut)}`}>{shortDate(r.belowMin)} <span className="stock-neg">· out {shortDate(r.runsOut)}</span></span> : shortDate(r.belowMin)}</td>
-              <td><strong>{r.brewL ? (r.brewBy === todayIso() ? 'Now' : shortDate(r.brewBy)) : ''}</strong></td>
+              <td><strong>{r.brewL >= 50 ? (r.brewBy <= todayIso() ? 'Now' : shortDate(r.brewBy)) : ''}</strong></td>
             </tr>
           ))}
         </tbody>
@@ -98,7 +106,7 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
   )
 }
 
-export const planNote = (weeks) => `Litres are packaged litres (a cube is 6 L, a keg 50 L). Hold ${weeks} wks = the next ${weeks} weeks of forecast sales, the stock to keep on hand; it rolls forward day by day, so it rises ahead of busy months. In tank and booked brews count from the day after they're filtered, at ${Math.round(YIELD * 100)}% of the batch (batch size from the brew cell, e.g. "8 Ball 1500L", or the FV's size). Brew more is brewhouse litres needed to keep ${weeks} weeks of stock through the period; brew by is ${LEAD_DAYS} days before stock would drop below that.`
+export const planNote = (weeks) => `Litres are packaged litres (a cube is 6 L, a keg 50 L). Hold ${weeks} wks = the next ${weeks} weeks of forecast sales, the stock to keep on hand; it rolls forward day by day, so it rises ahead of busy months. In tank and booked brews count from the day after they're filtered, at ${Math.round(YIELD * 100)}% of the batch (batch size from the brew cell, e.g. "8 Ball 1500L", or the FV's size). Brew more is brewhouse litres to brew in the period to keep ${weeks} weeks of stock, including beer that has to be brewed early because a later month needs more than the brewhouse limit (the plan looks ${LOOKAHEAD_MONTHS} months ahead); brew by is ${LEAD_DAYS} days before stock would drop below the goal, or sooner when brewing early.`
 
 // Compact brew plan for the schedule page: what needs brewing and by when.
 export function SchedulePlanPanel() {
@@ -119,16 +127,19 @@ export function SchedulePlanPanel() {
       {error && <p style={{ color: '#b00020', padding: '0 0.9rem' }}>{error}</p>}
       {!plan && !error && <p className="stock-muted" style={{ padding: '0.5rem 0.9rem' }}>Loading…</p>}
       {plan && <BrewPlanTable plan={plan} months={months} weeks={fc.coverWeeks} compact />}
-      {capacity && <CapacityTable rows={capacity} compact />}
+      {capacity && <CapacityTable plan={capacity} compact />}
     </section>
   )
 }
 
 const fmtMonth = (m) => new Date(`${m}T00:00:00`).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })
 
-// Brewhouse litres per month: booked brews plus what the plan says to brew, against capacity.
-export function CapacityTable({ rows, compact = false }) {
-  const over = rows.filter((r) => r.spare < 0)
+// Brewhouse litres per month, levelled to the limit: booked brews, plus what the plan brews
+// (including beer brewed early because a later month needs more than the brewhouse can do).
+export function CapacityTable({ plan, compact = false }) {
+  const rows = compact ? plan.months.slice(0, 3) : plan.months
+  const pct = (x, r) => Math.min(100, (x / r.capacity) * 100)
+  const peaks = plan.months.filter((r) => r.movedEarlier >= 50)
   return (
     <div className={compact ? 'cap-compact' : ''}>
       <table className="stock-table cap-table">
@@ -136,9 +147,10 @@ export function CapacityTable({ rows, compact = false }) {
           <tr>
             <th className="stock-beer">Month</th>
             {!compact && <th>Booked</th>}
-            {!compact && <th>Still to brew</th>}
+            {!compact && <th>Needed that month</th>}
+            <th>{compact ? 'To brew' : 'Plan to brew'}</th>
             <th className="cap-bar-h">Brewhouse load</th>
-            <th>{compact ? 'Spare' : 'Spare / over'}</th>
+            {!compact && <th>Spare</th>}
           </tr>
         </thead>
         <tbody>
@@ -146,23 +158,33 @@ export function CapacityTable({ rows, compact = false }) {
             <tr key={r.month}>
               <td className="stock-beer">{fmtMonth(r.month)}</td>
               {!compact && <td>{litres(r.booked)}</td>}
-              {!compact && <td>{litres(r.needed)}</td>}
+              {!compact && <td className={r.movedEarlier >= 50 || r.tooLate >= 50 ? 'stock-neg' : ''}>{litres(r.needed)}</td>}
+              <td>
+                {litres(r.planned)}
+                {r.early >= 50 && !(r.tooLate >= 50) && <div className="plan-early">{litres(r.early)} early</div>}
+                {r.movedEarlier >= 50 && <div className="plan-early">{litres(r.movedEarlier)} brewed earlier</div>}
+                {r.tooLate >= 50 && <div className="plan-short">{litres(r.tooLate)} too late to brew</div>}
+              </td>
               <td className="cap-bar-h">
-                <div className={`cap-bar ${r.spare < 0 ? 'over' : r.spare < r.capacity * 0.1 ? 'tight' : ''}`} title={`${Math.round(r.total).toLocaleString()} of ${r.capacity.toLocaleString()} L`}>
-                  <div className="cap-booked" style={{ width: `${Math.min(100, (r.booked / r.capacity) * 100)}%` }} />
-                  <div className="cap-needed" style={{ left: `${Math.min(100, (r.booked / r.capacity) * 100)}%`, width: `${Math.max(0, Math.min(100, (r.total / r.capacity) * 100) - Math.min(100, (r.booked / r.capacity) * 100))}%` }} />
+                <div className={`cap-bar ${r.booked > r.capacity ? 'over' : r.spare < r.capacity * 0.1 ? 'tight' : ''}`} title={`${Math.round(r.total).toLocaleString()} of ${Math.round(r.capacity).toLocaleString()} L`}>
+                  <div className="cap-booked" style={{ width: `${pct(r.booked, r)}%` }} />
+                  <div className="cap-needed" style={{ left: `${pct(r.booked, r)}%`, width: `${Math.max(0, pct(r.total, r) - pct(r.booked, r))}%` }} />
                   <span>{Math.round((r.total / r.capacity) * 100)}%</span>
                 </div>
               </td>
-              <td className={r.spare < 0 ? 'stock-neg' : ''}><strong>{r.spare < 0 ? `over ${litres(-r.spare)}` : litres(r.spare)}</strong></td>
+              {!compact && <td>{litres(Math.max(0, r.spare))}</td>}
             </tr>
           ))}
         </tbody>
       </table>
-      {over.length > 0 && (
+      {plan.short >= 50 && (
         <p className="cap-warn">
-          Over the brewhouse limit in {over.map((r) => fmtMonth(r.month)).join(' and ')}. Brew some of it earlier, in a month with spare
-          capacity, or accept dropping under the stock goal.
+          {litres(plan.short)} can't be brewed in time, even running the brewhouse at its limit from now: stock will dip under the goal.
+        </p>
+      )}
+      {plan.short < 50 && peaks.length > 0 && (
+        <p className="cap-note">
+          {peaks.map((r) => fmtMonth(r.month)).join(', ')} need{peaks.length === 1 ? 's' : ''} more than the brewhouse can brew, so {litres(peaks.reduce((a, r) => a + r.movedEarlier, 0))} is planned earlier and held as stock.
         </p>
       )}
     </div>

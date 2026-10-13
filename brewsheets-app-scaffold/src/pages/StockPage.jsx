@@ -290,8 +290,8 @@ export default function StockPage() {
           </section>
           {capacity && (
             <section className="stock-card stock-plan">
-              <h2>Brewhouse capacity <span>booked + still to brew against the monthly limit</span></h2>
-              <CapacityTable rows={capacity} />
+              <h2>Brewhouse capacity <span>brewing by month within the monthly limit</span></h2>
+              <CapacityTable plan={capacity} />
             </section>
           )}
 

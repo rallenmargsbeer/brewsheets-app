@@ -585,3 +585,6 @@ tr.ing-added td { background: #f3faf5; }
 .cap-bar > span { position: relative; display: block; text-align: right; padding-right: 0.4rem; font-weight: 700; font-size: 0.8rem; line-height: 1.3rem; }
 .cap-warn { margin: 0; padding: 0.5rem 0.9rem; background: #fbe0de; color: #7a140d; font-size: 0.85rem; }
 .cap-compact { border-top: 2px solid var(--line); }
+.plan-early { font-size: 0.72rem; color: #8a5a00; margin-top: 2px; white-space: nowrap; }
+.plan-short { font-size: 0.72rem; color: #b00020; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+.cap-note { margin: 0; padding: 0.5rem 0.9rem; background: #fdf0cc; color: #6b4500; font-size: 0.85rem; }
