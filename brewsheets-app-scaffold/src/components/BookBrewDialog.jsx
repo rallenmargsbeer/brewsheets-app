@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
-import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday } from '../lib/schedule'
+import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, saveBeerColour } from '../lib/schedule'
+import { beerStyle, savedBeerStyle } from '../lib/beerColours'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 import { loadForecast, forecastIndex, suggestPackSplit, YIELD } from '../lib/forecast'
 import { listStock, stockByBeer } from '../lib/stock'
@@ -20,6 +21,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const [notes, setNotes] = useState('')
   const [pack, setPack] = useState({ pallets: '', kegs_50: '', kegs_30: '', kegs_20: '' })
   const [windowEntries, setWindowEntries] = useState([])
+  const [colours, setColours] = useState(null) // { bg, fg } for a beer with no colours yet
   const [picked, setPicked] = useState(null) // brewhouse turn slots picked by hand; null = suggested
   const [btChoice, setBtChoice] = useState('auto') // 'auto' = use the suggestion, '' = none, or a tank id
   const [saving, setSaving] = useState(false)
@@ -115,10 +117,15 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     return rows
   }, [plan, beerName, template, brightTank, tank])
 
+  // A specialty / new beer has no colours yet: pick them here, saved with the booking.
+  const newBeer = beerName.trim() && !savedBeerStyle(beerName.trim())
+  const shown = colours ?? beerStyle(beerName.trim()) ?? { bg: '#ffffff', fg: '#1d2421' }
+
   async function book() {
     setSaving(true)
     setError(null)
     try {
+      if (newBeer) await saveBeerColour(beerName.trim(), shown.bg, shown.fg)
       const b = await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, turnSlots, notes, pack })
       onBooked(b)
     } catch (e) {
@@ -170,6 +177,16 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
           <label>Beer name on the schedule
             <input value={beerName} onChange={(e) => setBeerName(e.target.value)} placeholder="e.g. Drift XPA" />
           </label>
+          {newBeer && (
+            <div className="sc-newbeer">
+              <div><strong>New beer: pick its colours</strong> <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>used for {beerName.trim()} everywhere in the app</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap', marginTop: 4 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Cell <input type="color" value={shown.bg} onChange={(e) => setColours({ ...shown, bg: e.target.value })} /></label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Font <input type="color" value={shown.fg} onChange={(e) => setColours({ ...shown, fg: e.target.value })} /></label>
+                <span className="sc-chip" style={{ background: shown.bg, color: shown.fg }}>{beerName.trim()}</span>
+              </div>
+            </div>
+          )}
           <label>Brew day
             <input type="date" value={brewDate} onChange={(e) => setBrewDate(e.target.value)} />
           </label>

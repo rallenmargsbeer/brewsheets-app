@@ -349,7 +349,7 @@ export default function SchedulePage() {
         document.querySelector(`[data-cell="${f.r}|${f.c}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
       }
     }
-    const onUp = () => { selecting.current = false }
+    const onUp = () => { selecting.current = false; if (dragging.current) finishDrag() }
     window.addEventListener('keydown', onKey)
     window.addEventListener('mouseup', onUp)
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mouseup', onUp) }
@@ -375,7 +375,25 @@ export default function SchedulePage() {
   // Pastes the copied / cut block with its top-left on the selected cell, overwriting what's there.
   function pasteAt() {
     if (!clip || !sel) return
-    const q = rectOf(sel)
+    placeBlock(clip, rectOf(sel))
+  }
+  // Drag: press on a selected block that has jobs in it and drag it somewhere else (a move,
+  // same as cut and paste).
+  const dragging = useRef(null) // { q, start }
+  const [dropAt, setDropAt] = useState(null) // { r, c } under the pointer while dragging
+  function finishDrag() {
+    const d = dragging.current
+    dragging.current = null
+    setDropAt(null)
+    if (!d || !dropAt) return
+    const dr = dropAt.r - d.start.r, dc = dropAt.c - d.start.c
+    if (!dr && !dc) return
+    const q = d.q
+    const items = entriesIn(q).map((e) => ({ dr: rowOf(e.entry_date, e.slot) - q.r0, dc: colOf(e) - q.c0, e }))
+    const c0 = Math.max(0, Math.min(columns.length - 1, q.c0 + dc))
+    placeBlock({ mode: 'cut', r0: q.r0, c0: q.c0, h: q.r1 - q.r0 + 1, w: q.c1 - q.c0 + 1, items }, { r0: q.r0 + dr, c0 })
+  }
+  function placeBlock(clip, q) {
     const target = { r0: q.r0, c0: q.c0, r1: q.r0 + clip.h - 1, c1: Math.min(columns.length - 1, q.c0 + clip.w - 1) }
     if (clip.mode === 'cut' && target.r0 === clip.r0 && target.c0 === clip.c0) return setClip(null)
     const fits = clip.items.filter((it) => q.c0 + it.dc < columns.length)
@@ -576,7 +594,7 @@ export default function SchedulePage() {
           {pastMonths().map((ym) => <option key={ym} value={ym}>{fmtMonth(ym)}</option>)}
         </select>
         {archive && <strong>Archive: {fmtMonth(archive)} (view only)</strong>}
-        {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit (an empty tank or brew cell books a brew there)</span>}
+        {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · drag a selection to move it · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit (an empty tank or brew cell books a brew there)</span>}
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {showPlan && editor && <SchedulePlanPanel />}
@@ -622,6 +640,8 @@ export default function SchedulePage() {
                     const r = rowOf(d, slot)
                     const inSel = selRect && r >= selRect.r0 && r <= selRect.r1 && ci >= selRect.c0 && ci <= selRect.c1
                     const inClip = clip && r >= clip.r0 && r < clip.r0 + clip.h && ci >= clip.c0 && ci < clip.c0 + clip.w
+                    const dq = dragging.current && dropAt ? dragging.current.q : null
+                    const inDrop = dq && r - (dropAt.r - dragging.current.start.r) >= dq.r0 && r - (dropAt.r - dragging.current.start.r) <= dq.r1 && ci - (dropAt.c - dragging.current.start.c) >= dq.c0 && ci - (dropAt.c - dragging.current.start.c) <= dq.c1
                     const list = byCell.get(`${d}|${slot}|${c.key}`) ?? []
                     const beer = cellBeer(c, list, d, slot)
                     // Black outline round each tank stay as a block: sides always, top on its
@@ -634,7 +654,7 @@ export default function SchedulePage() {
                     return (
                       <td
                         key={c.key}
-                        className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '') + (inSel ? ' sc-sel' : '') + (inClip ? ' sc-clip' : '')}
+                        className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '') + (inSel ? ' sc-sel' : '') + (inClip ? ' sc-clip' : '') + (inDrop ? ' sc-drop' : '')}
                         data-cell={`${r}|${ci}`}
                         style={(() => {
                           // A cell's own colours win over its beer's.
@@ -655,10 +675,15 @@ export default function SchedulePage() {
                           e.preventDefault()
                           setMenu(null)
                           const here = { r, c: ci }
+                          if (inSel && editor && !archive && !e.shiftKey && entriesIn(selRect).length) {
+                            dragging.current = { q: selRect, start: here }
+                            setDropAt(here)
+                            return
+                          }
                           setSel((s) => (e.shiftKey && s ? { a: s.a, f: here } : { a: here, f: here }))
                           selecting.current = true
                         }}
-                        onMouseEnter={() => { if (selecting.current) setSel((s) => s && { a: s.a, f: { r, c: ci } }) }}
+                        onMouseEnter={() => { if (dragging.current) setDropAt({ r, c: ci }); else if (selecting.current) setSel((s) => s && { a: s.a, f: { r, c: ci } }) }}
                         onDoubleClick={editor && !archive ? () => dblClickCell(r, ci) : undefined}
                         onContextMenu={editor && !archive ? (e) => {
                           e.preventDefault()
@@ -764,6 +789,7 @@ export default function SchedulePage() {
           onClose={() => setBooking(false)}
           onBooked={(b) => {
             setBooking(false)
+            loadColours()
             pushUndo(`Book ${b.beer_name}`, () => cancelBooking(b.id))
             // Make sure the whole booked brew is loaded, then show it.
             setRange((r) => ({ from: b.brew_date < r.from ? mondayOf(b.brew_date) : r.from, to: addDays(b.brew_date, 35) > r.to ? addDays(b.brew_date, 35) : r.to }))
