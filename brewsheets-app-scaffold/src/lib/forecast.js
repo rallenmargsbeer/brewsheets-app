@@ -311,11 +311,20 @@ export function levelBrewing({ plan: all, brews, capacityL = DEFAULT_CAPACITY_L,
 // that has to be brewed early for later busy months, and brew by moves forward to match.
 export function applyLevelling(plan, levelled, { months = 3, today = todayIso() } = {}) {
   const end = addDays(today, Math.round(months * 30.44))
-  const inView = levelled.months.filter((m) => m.month < end)
+  // A month only partly in the period counts for the share of its days that are in it
+  // (the current month from today), so "next month" isn't all of this month and next.
+  const share = (m) => {
+    const from = m.month < today ? today : m.month
+    const next = addMonths(m.month, 1)
+    const to = next < end ? next : end
+    const total = daysBetween(from, next)
+    return total > 0 ? Math.max(0, daysBetween(from, to)) / total : 0
+  }
+  const inView = levelled.months.filter((m) => m.month < end).map((m) => ({ ...m, share: share(m) }))
   return plan.map((r) => {
     // Mixed beers aren't levelled: they're made when needed.
     if (!r.brewhouse) return { ...r, unlevelledL: r.brewL, earlyL: 0, shortL: 0 }
-    const plannedL = inView.reduce((a, m) => a + (m.brew.get(r.beer) ?? 0), 0)
+    const plannedL = inView.reduce((a, m) => a + (m.brew.get(r.beer) ?? 0) * m.share, 0)
     const firstMonth = inView.find((m) => (m.brew.get(r.beer) ?? 0) > 1)?.month
     let brewBy = r.brewBy
     if (firstMonth && (!brewBy || monthOf(brewBy) > firstMonth)) brewBy = firstMonth < today ? today : firstMonth
