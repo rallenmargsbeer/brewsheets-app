@@ -1,5 +1,6 @@
-// Bills of materials for the beers (FB- products) -> unl_dataset 'boms'. READ-ONLY toward
-// Unleashed (GET only). Used to draft recipes.
+// Bills of materials from Unleashed. READ-ONLY toward Unleashed (GET only).
+// Beers (FB- products) -> unl_dataset 'boms' (to draft recipes); everything else (cubes,
+// kegs and other packaged products) -> 'pack_boms' (packaging materials report).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getAll } from './unleashed.ts'
 
@@ -15,9 +16,7 @@ Deno.serve(async (req: Request) => {
   if (!id || !key) return json({ error: 'Unleashed credentials not set' }, 500)
   try {
     const boms = await getAll('BillOfMaterials', {}, id, key)
-    const beers = boms
-      .filter((b: any) => /^FB-/i.test(b.Product?.ProductCode || ''))
-      .map((b: any) => ({
+    const shape = (b: any) => ({
         code: b.Product.ProductCode,
         description: b.Product.ProductDescription,
         unit: b.Product.UnitOfMeasure?.Name ?? null,
@@ -29,10 +28,14 @@ Deno.serve(async (req: Request) => {
           unit: l.Product?.UnitOfMeasure?.Name ?? null,
           group: l.Product?.ProductGroup?.GroupName ?? null,
         })),
-      }))
-    const { error } = await admin.from('unl_dataset').upsert({ key: 'boms', data: beers, updated_at: new Date().toISOString() })
+      })
+    const isBeer = (b: any) => /^FB-/i.test(b.Product?.ProductCode || '')
+    const beers = boms.filter(isBeer).map(shape)
+    const packs = boms.filter((b: any) => !isBeer(b) && !b.Obsolete).map(shape)
+    const at = new Date().toISOString()
+    const { error } = await admin.from('unl_dataset').upsert([{ key: 'boms', data: beers, updated_at: at }, { key: 'pack_boms', data: packs, updated_at: at }])
     if (error) throw error
-    return json({ ok: true, boms: boms.length, beers: beers.length, sample: JSON.stringify(boms[0]).slice(0, 1500) })
+    return json({ ok: true, boms: boms.length, beers: beers.length, packs: packs.length })
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500)
   }

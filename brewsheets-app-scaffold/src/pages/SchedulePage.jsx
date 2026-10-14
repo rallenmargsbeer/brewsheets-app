@@ -536,7 +536,11 @@ export default function SchedulePage() {
     }
   }, [tanks])
 
-  const columns = useMemo(
+  // Packaging only: just the Canning / Kegging columns and Notes (e.g. for whoever orders
+  // cans and kegs). Remembered on this device.
+  const [packOnly, setPackOnly] = useState(() => { try { return localStorage.getItem('schedulePackOnly') === '1' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('schedulePackOnly', packOnly ? '1' : '0') } catch { /* private mode */ } }, [packOnly])
+  const allColumns = useMemo(
     () => [
       ...BREW_LANES.map((l) => ({ key: l, lane: l, label: LANE_LABEL[l], group: 'brew' })),
       ...tanks.map((t) => ({ key: t.id, lane: 'tank', tankId: t.id, label: tankLabel(t.name), group: t.tank_type === 'BBT' ? 'bbt' : 'fv' })),
@@ -545,6 +549,8 @@ export default function SchedulePage() {
     ],
     [tanks]
   )
+  const columns = useMemo(() => (packOnly ? allColumns.filter((c) => c.group === 'pack' || c.group === 'notes') : allColumns), [allColumns, packOnly])
+  useEffect(() => { setSel(null); setClip(null) }, [packOnly])
 
   const colIndex = useMemo(() => new Map(columns.map((c, i) => [c.key, i])), [columns])
   const { beerOf, runs } = useMemo(
@@ -596,9 +602,9 @@ export default function SchedulePage() {
               <button className="secondary" onClick={() => setShowPlan((v) => !v)}>{showPlan ? 'Hide brew plan' : 'Brew plan'}</button>
               <Link to="/schedule/templates"><button className="secondary">Cellar templates</button></Link>
             </>
-          ) : (
-            <Link to="/login" state={{ from: '/schedule' }} style={{ fontSize: '0.9rem' }}>Sign in to edit</Link>
-          )}
+          ) : null}
+          <button className={packOnly ? '' : 'secondary'} onClick={() => setPackOnly((v) => !v)} aria-pressed={packOnly}>{packOnly ? 'Packaging only ✓' : 'Packaging only'}</button>
+          <Link to="/schedule/materials"><button className="secondary">Packaging materials</button></Link>
         </div>
       </div>
 

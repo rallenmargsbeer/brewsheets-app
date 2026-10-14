@@ -732,3 +732,11 @@ tr.ing-added td { background: #f3faf5; }
 .sc-newbeer { background: #fff6f1; border-left: 3px solid var(--orange); padding: 0.5rem 0.7rem; border-radius: 6px; }
 .sc-grid td.sc-sel.sc-editable { cursor: grab; }
 .sc-drop::before { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 2px var(--accent); background: rgba(0, 104, 125, 0.12); pointer-events: none; z-index: 1; }
+/* Packaging materials report */
+.pm-table { width: 100%; }
+.pm-table td, .pm-table th { text-align: left; }
+.pm-table .pm-num { text-align: right; font-variant-numeric: tabular-nums; }
+@media print {
+  .app-header, .pm-noprint, .ingredient-review-banner { display: none !important; }
+  .pm-page input { border: none; }
+}
