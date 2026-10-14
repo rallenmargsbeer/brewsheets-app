@@ -22,6 +22,7 @@ import {
   addWorkdays,
   nextWorkday,
   freePackLane,
+  freePackSlots,
   addDays as plusDays,
   isWeekend,
   moveToBrightTank,
@@ -255,6 +256,7 @@ export default function SchedulePage() {
   const [undoStack, setUndoStack] = useState([]) // [{ label, undo }]
   const [colourRows, setColourRows] = useState([]) // beer_colours, kept in state so the grid re-renders on change
   const [colourEdit, setColourEdit] = useState(null) // { beer, bg, fg, x, y }
+  const [packClash, setPackClash] = useState([]) // moved packaging with both columns taken: [{ id, kind, text, date, slot }]
   function loadColours() {
     listBeerColours().then((rows) => { setBeerColours(rows); setColourRows(rows) }).catch(() => {})
   }
@@ -329,7 +331,7 @@ export default function SchedulePage() {
   }
   useEffect(() => {
     const onKey = (e) => {
-      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || editing || booking || colourEdit
+      const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || editing || booking || colourEdit || packClash.length
       if (e.key === 'Escape') { setMenu(null); setClip(null) }
       if (typing) return
       const mod = e.ctrlKey || e.metaKey
@@ -404,8 +406,9 @@ export default function SchedulePage() {
     const label = `${clip.mode === 'cut' ? 'Move' : 'Copy'} ${clip.items.length} job${clip.items.length === 1 ? '' : 's'} to ${rectLabel(target)}`
     if (clip.mode === 'cut') {
       const upd = fits.map((it) => ({ id: it.e.id, ...where(it) }))
-      const followers = filterFollowers(upd)
+      const { extra: followers, clashes } = filterFollowers(upd)
       applyCells(followers.length ? `${label} (packaging follows)` : label, { del, upd: [...upd, ...followers] })
+      if (clashes.length) setPackClash(clashes)
       setClip(null)
     } else {
       applyCells(label, { del, ins: fits.map((it) => ({ ...where(it), text: it.e.text, done: false, beer_name: it.e.beer_name ?? null, cell_bg: it.e.cell_bg ?? null, cell_fg: it.e.cell_fg ?? null })) })
@@ -418,6 +421,7 @@ export default function SchedulePage() {
   function filterFollowers(upd) {
     const moving = new Set(upd.map((u) => u.id))
     const extra = []
+    const clashes = []
     const isPackJob = (x) => /can|keg|packag/i.test(x.text ?? '')
     for (const u of upd) {
       const e = entries.find((x) => x.id === u.id)
@@ -457,12 +461,14 @@ export default function SchedulePage() {
         if (PACK_LANES.includes(x.lane)) {
           const landed = [...upd, ...extra].map((m) => ({ ...entries.find((y) => y.id === m.id), ...m }))
           const there = [...entries.filter((y) => !moving.has(y.id)), ...landed]
-          lane = freePackLane(x.lane.split('_')[0], d, slot, there) ?? x.lane
+          const free = freePackLane(x.lane.split('_')[0], d, slot, there)
+          if (!free) clashes.push({ id: x.id, kind: x.lane.split('_')[0], text: x.text, beer: x.beer_name ?? beerOf.get(x.id), date: d, slot })
+          lane = free ?? x.lane
         }
         extra.push({ id: x.id, entry_date: d, slot, lane })
       }
     }
-    return extra
+    return { extra, clashes }
   }
   function clearSel() {
     const q = rectOf(sel)
@@ -713,6 +719,32 @@ export default function SchedulePage() {
         </table>
       </div>
 
+      {packClash.length > 0 && (() => {
+        const c = packClash[0]
+        const opts = freePackSlots(c.kind, c.date, c.slot, entries, 8, new Set([c.id]))
+        const next = () => setPackClash((l) => l.slice(1))
+        return (
+          <div className="sc-overlay">
+            <div className="sc-dialog" style={{ maxWidth: 440 }}>
+              <h3 style={{ marginTop: 0 }}>Both {c.kind} columns are full</h3>
+              <p>{c.beer ? `${c.beer}'s ` : ''}{c.kind} ({c.text}) moved with its Filter to {fmtDay(c.date)} {c.slot}, but both {c.kind} columns are already booked then. When should it go?</p>
+              <div style={{ display: 'grid', gap: '0.4rem' }}>
+                {opts.map((o) => (
+                  <button key={o.date + o.slot + o.lane} className="secondary" onClick={() => {
+                    next()
+                    perform(async () => {
+                      const before = await getEntriesByIds([c.id])
+                      await updateEntries([{ id: c.id, entry_date: o.date, slot: o.slot, lane: o.lane }])
+                      pushUndo(`Move ${c.kind} to ${fmtDay(o.date)} ${o.slot}`, () => restoreEntries(before, []))
+                    })
+                  }}>{fmtDay(o.date)} {o.slot} · {LANE_LABEL[o.lane]} column {o.lane.slice(-1)}</button>
+                ))}
+                <button className="secondary" onClick={next}>Leave it sharing the cell on {fmtDay(c.date)} {c.slot}</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
       {colourEdit && (
         <div className="sc-menu-back" onClick={() => setColourEdit(null)}>
           <div className="sc-menu" style={{ left: Math.min(colourEdit.x, window.innerWidth - 290), top: colourEdit.y + 12, padding: '0.6rem' }} onClick={(e) => e.stopPropagation()}>
