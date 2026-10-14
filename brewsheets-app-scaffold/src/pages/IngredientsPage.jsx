@@ -23,12 +23,12 @@ const SECTION_LABELS = {
 }
 
 // Keeps the header row visible while scrolling through a ~300-row list.
-// Matches the page background (#f7f5f2, from index.css) so rows scrolling
+// Matches the page background (#f4f6f8, from index.css) so rows scrolling
 // underneath don't show through, plus a shadow so it reads as "on top."
 const stickyHeaderCellStyle = {
   position: 'sticky',
   top: 0,
-  background: '#f7f5f2',
+  background: '#f4f6f8',
   boxShadow: '0 1px 0 #ddd',
   zIndex: 1,
 }
@@ -208,7 +208,7 @@ export default function IngredientsPage() {
       )}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {!loading && unassignedCount > 0 && (
-        <p style={{ color: '#a66a00' }}>
+        <p style={{ color: '#d9561f' }}>
           {unassignedCount} ingredient{unassignedCount === 1 ? '' : 's'} not assigned to any
           section yet — they won't show up as suggestions anywhere on the recipe form until you
           check at least one section for them below.
