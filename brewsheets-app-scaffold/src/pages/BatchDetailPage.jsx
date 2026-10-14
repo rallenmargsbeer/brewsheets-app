@@ -23,6 +23,7 @@ import { batchFigures, actualOg, batchIbuSrm } from '../lib/batchFigures'
 import { blendGravity, waterForGravity, gravityAfter } from '../lib/dilution'
 import { useBuffer, lacticMl, remainingTurnsPh } from '../lib/acid'
 import { tinsethIbu, toSg } from '../lib/beerCalcs'
+import BeerDot from '../components/BeerDot.jsx'
 
 function toLocalInput(iso) {
   if (!iso) return ''
@@ -989,7 +990,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
 
       <h1>Batch {batch.batch_number}</h1>
       <p style={{ color: '#666' }}>
-        {batch.recipes?.name} — {batch.recipes?.style}
+        <BeerDot name={batch.beer_style || batch.recipes?.name} />{batch.recipes?.name} — {batch.recipes?.style}
         {batch.turn_volume_l && batch.turn_quantity
           ? ` · ${turnCount} turn${turnCount === 1 ? '' : 's'} × ${batch.turn_volume_l}L = ${batch.target_volume_l ?? batch.turn_volume_l * turnCount}L total`
           : ''}

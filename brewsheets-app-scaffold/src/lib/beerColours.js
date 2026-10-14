@@ -16,14 +16,29 @@ export const beerKey = (name) => {
 
 const FALLBACK = ['#e0bfe8', '#a9d8e2', '#f4b8b8', '#cbdc93', '#a9c8f0', '#f5b5d8', '#d6c7a2', '#b3e2ae', '#c3b8ec', '#f0cf86']
 let saved = new Map() // beerKey -> { bg, fg }
+let loose = new Map() // looseKey -> { bg, fg }, so "Pale Ale" finds "Pale"
+
+// Stock and recipes name some beers longer than the schedule does.
+const LOOSE_ALIASES = { paleale: 'pale', redipa: 'red', inthepines: 'itp', margsdraught: 'draught', driftxpa: 'drift' }
+const looseKey = (name) => {
+  const k = beerKey(name).replace(/[^a-z0-9]/g, '')
+  return LOOSE_ALIASES[k] ?? k
+}
 
 // Loads the saved colours (rows from beer_colours).
 export function setBeerColours(rows) {
   saved = new Map(rows.map((r) => [beerKey(r.beer_name), { bg: r.bg, fg: r.fg }]))
+  loose = new Map(rows.map((r) => [looseKey(r.beer_name), { bg: r.bg, fg: r.fg }]))
 }
 
 export function hasSavedColours(name) {
   return saved.has(beerKey(name))
+}
+
+// A beer's saved colours, matching loosely ("Pale Ale" = "Pale"); null if it has none.
+export function savedBeerStyle(name) {
+  if (!name) return null
+  return saved.get(beerKey(name)) ?? loose.get(looseKey(name)) ?? null
 }
 
 // { bg, fg } for a beer, or null when there's no beer.

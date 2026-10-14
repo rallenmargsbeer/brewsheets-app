@@ -21,6 +21,7 @@ import TodayPage from './pages/TodayPage.jsx'
 import IngredientReviewBanner from './components/IngredientReviewBanner.jsx'
 import DilutionPage from './pages/DilutionPage.jsx'
 import { AuthProvider, RequireAuth } from './auth.jsx'
+import { BeerColoursProvider } from './components/BeerDot.jsx'
 
 const navClass = ({ isActive }) => 'nav-link' + (isActive ? ' active' : '')
 
@@ -33,6 +34,7 @@ export default function App() {
   const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast' || pathname === '/ingredients'
   return (
     <AuthProvider>
+    <BeerColoursProvider>
     <div>
       <header className="app-header">
         {/* Same lock-up as the sensory app: cream logo, divider, app name. */}
@@ -112,6 +114,7 @@ export default function App() {
         </Routes>
       </main>
     </div>
+    </BeerColoursProvider>
     </AuthProvider>
   )
 }

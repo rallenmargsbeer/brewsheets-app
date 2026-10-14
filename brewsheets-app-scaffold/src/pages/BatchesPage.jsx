@@ -3,6 +3,7 @@ import { tankLabel } from '../lib/tanks'
 import { Link } from 'react-router-dom'
 import { listBatches, deleteBatch } from '../lib/api'
 import { isScheduleEditor } from '../lib/schedule'
+import BeerDot from '../components/BeerDot.jsx'
 
 // The most recent batches show; older ones are in the archive below.
 const RECENT = 50
@@ -66,7 +67,7 @@ export default function BatchesPage() {
                 <td>
                   <Link to={`/batches/${b.id}`}>{b.batch_number}</Link>
                 </td>
-                <td>{b.beer_style || b.recipes?.name}</td>
+                <td><BeerDot name={b.beer_style || b.recipes?.name} />{b.beer_style || b.recipes?.name}</td>
                 <td><span className={'pill pill-' + b.status}>{b.status}</span></td>
                 <td>{tankLabel(b.tanks?.name)}</td>
                 <td>{b.date_brewed ?? '—'}</td>

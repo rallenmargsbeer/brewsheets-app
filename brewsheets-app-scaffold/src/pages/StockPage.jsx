@@ -3,6 +3,7 @@ import { listStock, refreshStock, mapStockProduct, guessFormat, kegSize, mirrors
 import { loadIncoming, beerMatch, weeksOfCover } from '../lib/incoming'
 import { useBrewPlan, BrewPlanTable, CapacityTable, planNote } from '../components/BrewPlan'
 import { DEFAULT_COVER_WEEKS } from '../lib/forecast'
+import BeerDot from '../components/BeerDot.jsx'
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Perth', dateStyle: 'medium', timeStyle: 'short' }) : 'never')
 const num = (n) => (n ? Math.round(n).toLocaleString() : '')
@@ -252,7 +253,7 @@ export default function StockPage() {
                             <tr key="other" className="stock-divider"><td colSpan={locs.length + 6}>Seasonal &amp; other</td></tr>
                           ),
                           <tr key={r.key} className={r.core ? '' : 'stock-other'}>
-                            <td className="stock-beer">{r.beer}{f.sizes && <span className={`stock-size s${r.size}`}>{r.size} L</span>}</td>
+                            <td className="stock-beer"><BeerDot name={r.beer} />{r.beer}{f.sizes && <span className={`stock-size s${r.size}`}>{r.size} L</span>}</td>
                             {locs.map((l) => <td key={l} className={(r.at[l] < 0 ? 'stock-neg ' : '') + (l === 'transit' ? 'stock-transit' : '')}>{num(r.at[l])}</td>)}
                             <td className={'stock-total' + (r.total < 0 ? ' stock-neg' : '')}>{num(r.total) || '0'}</td>
                             <td title={r.lmEstimated ? 'LM Wholesale part estimated from our sales to them' : undefined}>

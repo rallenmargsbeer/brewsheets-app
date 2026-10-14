@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useBrewPlan, BrewPlanTable, CapacityTable, PlanSettings, planNote } from '../components/BrewPlan'
 import { saveForecast, addMonths, monthOf } from '../lib/forecast'
 import { isScheduleEditor, todayIso } from '../lib/schedule'
+import BeerDot from '../components/BeerDot.jsx'
 
 const fmtMonth = (m) => new Date(`${m}T00:00:00`).toLocaleDateString('en-AU', { month: 'short', year: '2-digit' })
 const FORMATS = [['cube', 'Cubes'], ['keg', 'Kegs (50 L)']]
@@ -112,7 +113,7 @@ function DemandGrid({ forecast, onSaved }) {
             <tbody>
               {beers.map((beer) => FORMATS.map(([format, label], i) => (
                 <tr key={beer + format} className={i ? 'fc-keg' : 'fc-cube'}>
-                  {i === 0 && <td className="stock-beer" rowSpan={2}>{beer}</td>}
+                  {i === 0 && <td className="stock-beer" rowSpan={2}><BeerDot name={beer} />{beer}</td>}
                   <td className="fc-format"><span className={`fc-tag ${format}`}>{label}</span></td>
                   {monthsShown.map((col) => {
                     const k = `${beer}|${format}|${col}`

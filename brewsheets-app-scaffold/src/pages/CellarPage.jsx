@@ -6,6 +6,7 @@ import AddToTank from '../components/AddToTank.jsx'
 import TankDay from '../components/TankDay.jsx'
 import { loadDay } from '../lib/dayTasks'
 import { isScheduleEditor } from '../lib/schedule'
+import BeerDot, { useBeerColour } from '../components/BeerDot.jsx'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -20,6 +21,7 @@ const daysInTank = (batch, tank) =>
   daysSince(tank.tank_type === 'BBT' && batch.bbt_transfer_date ? batch.bbt_transfer_date : batch.date_brewed)
 
 function TankTile({ tank, batch, day, onClick }) {
+  const colour = useBeerColour(batch?.beer_style)
   const days = batch ? daysInTank(batch, tank) : null
   // Today's first job for the tile: scheduled, else the template's suggestion.
   const next = day ? [...day.scheduled.filter((t) => !t.done), ...day.fromTemplate][0] : null
@@ -28,7 +30,7 @@ function TankTile({ tank, batch, day, onClick }) {
     <button
       className="secondary"
       onClick={onClick}
-      style={{ textAlign: 'left', padding: '0.75rem', minHeight: 120, display: 'flex', flexDirection: 'column', gap: 4, fontWeight: 400 }}
+      style={{ textAlign: 'left', padding: '0.75rem', minHeight: 120, display: 'flex', flexDirection: 'column', gap: 4, fontWeight: 400, ...(colour ? { borderLeft: `5px solid ${colour.bg}` } : {}) }}
     >
       <span style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'baseline' }}>
         <strong style={{ fontSize: '1.15rem' }}>{tankLabel(tank.name)}</strong>
@@ -38,7 +40,7 @@ function TankTile({ tank, batch, day, onClick }) {
       </span>
       {batch ? (
         <>
-          <span style={{ fontWeight: 600 }}>{batch.beer_style}</span>
+          <span style={{ fontWeight: 600 }}><BeerDot name={batch.beer_style} />{batch.beer_style}</span>
           <span style={{ color: 'var(--ink2)' }}>#{batch.batch_number}{days != null ? ` · Day ${days}` : ''}</span>
           <span className={'pill pill-' + batch.status} style={{ alignSelf: 'flex-start' }}>{batch.status}</span>
         </>

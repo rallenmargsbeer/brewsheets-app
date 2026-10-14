@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listRecipes, setRecipeHidden } from '../lib/api'
+import BeerDot from '../components/BeerDot.jsx'
 
 export default function RecipesPage() {
   const [recipes, setRecipes] = useState([])
@@ -28,7 +29,7 @@ export default function RecipesPage() {
   const hidden = recipes.filter((r) => r.is_active === false)
   const rows = (list) => list.map((r) => (
     <tr key={r.id} className={r.is_active === false ? 'recipe-hidden' : ''}>
-      <td>{r.name}</td>
+      <td><BeerDot name={r.name} />{r.name}</td>
       <td>{r.style}</td>
       <td>{r.target_og ?? '—'}</td>
       <td>{r.target_fg ?? '—'}</td>
