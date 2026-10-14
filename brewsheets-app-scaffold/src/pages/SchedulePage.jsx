@@ -20,6 +20,8 @@ import {
   cancelBooking,
   suggestBrightTank,
   addWorkdays,
+  nextWorkday,
+  addDays as plusDays,
   isWeekend,
   moveToBrightTank,
   getEntriesByIds,
@@ -382,12 +384,58 @@ export default function SchedulePage() {
     const where = (it) => cellTarget(columns[q.c0 + it.dc], q.r0 + it.dr)
     const label = `${clip.mode === 'cut' ? 'Move' : 'Copy'} ${clip.items.length} job${clip.items.length === 1 ? '' : 's'} to ${rectLabel(target)}`
     if (clip.mode === 'cut') {
-      applyCells(label, { del, upd: fits.map((it) => ({ id: it.e.id, ...where(it) })) })
+      const upd = fits.map((it) => ({ id: it.e.id, ...where(it) }))
+      const followers = filterFollowers(upd)
+      applyCells(followers.length ? `${label} (packaging follows)` : label, { del, upd: [...upd, ...followers] })
       setClip(null)
     } else {
       applyCells(label, { del, ins: fits.map((it) => ({ ...where(it), text: it.e.text, done: false, beer_name: it.e.beer_name ?? null, cell_bg: it.e.cell_bg ?? null, cell_fg: it.e.cell_fg ?? null })) })
     }
     setSel({ a: { r: target.r0, c: target.c0 }, f: { r: target.r1, c: target.c1 } })
+  }
+  // Packaging follows Filter: when a Filter is moved, its beer's bright tank arrival, BT jobs
+  // and Canning / Kegging cells move the same number of days (kept off weekends). A booked
+  // brew's cells are found by its booking; otherwise by the beer, within a week of the Filter.
+  function filterFollowers(upd) {
+    const moving = new Set(upd.map((u) => u.id))
+    const extra = []
+    const isPackJob = (x) => /can|keg|packag/i.test(x.text ?? '')
+    for (const u of upd) {
+      const e = entries.find((x) => x.id === u.id)
+      if (!e || e.lane !== 'tank' || brightTankIds.includes(e.tank_id) || !/^filter\b/i.test(e.text?.trim() ?? '')) continue
+      const delta = daysBetween(e.entry_date, u.entry_date)
+      if (!delta && e.slot === u.slot) continue
+      const weekOn = plusDays(e.entry_date, 7)
+      const inWindow = (x) => x.entry_date >= e.entry_date && x.entry_date <= weekOn
+      let follow
+      if (e.booking_id) {
+        follow = entries.filter((x) => x.booking_id === e.booking_id && x.entry_date >= e.entry_date && (PACK_LANES.includes(x.lane) || brightTankIds.includes(x.tank_id)))
+      } else {
+        const beer = beerOf.get(e.id) ?? beerInTank(runs, e.tank_id, e.entry_date, e.slot)
+        if (!beer) continue
+        const arrival = entries.find((x) => brightTankIds.includes(x.tank_id) && x.entry_date === e.entry_date && x.text?.trim() === beer)
+        const btJobs = []
+        if (arrival) {
+          for (const x of entries.filter((y) => y.tank_id === arrival.tank_id && y.id !== arrival.id && inWindow(y)).sort((a, b) => rowOf(a.entry_date, a.slot) - rowOf(b.entry_date, b.slot))) {
+            if (rowOf(x.entry_date, x.slot) < rowOf(arrival.entry_date, arrival.slot)) continue
+            btJobs.push(x)
+            if (isPackJob(x)) break
+          }
+        }
+        const pack = entries.filter((x) => PACK_LANES.includes(x.lane) && inWindow(x) && (x.beer_name ?? beerOf.get(x.id)) === beer)
+        follow = [...(arrival ? [arrival] : []), ...btJobs, ...pack]
+      }
+      for (const x of follow) {
+        if (moving.has(x.id)) continue
+        moving.add(x.id)
+        // The arrival in the BT is at the Filter itself; the rest keep their gap.
+        const isArrival = brightTankIds.includes(x.tank_id) && x.entry_date === e.entry_date && x.slot === e.slot
+        let d = isArrival ? u.entry_date : nextWorkday(plusDays(x.entry_date, delta))
+        if (d < u.entry_date) d = u.entry_date
+        extra.push({ id: x.id, entry_date: d, slot: isArrival ? u.slot : x.slot })
+      }
+    }
+    return extra
   }
   function clearSel() {
     const q = rectOf(sel)
