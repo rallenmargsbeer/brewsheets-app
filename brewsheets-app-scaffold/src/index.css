@@ -729,3 +729,6 @@ tr.ing-added td { background: #f3faf5; }
 .turn-picker button.turn-on { font-weight: 600; }
 .turn-taken { display: block; color: var(--ink2); font-size: 0.75rem; background: #eef1f4; border-radius: 6px; padding: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
 .turn-picker tr.turn-wkend td, .turn-picker tr.turn-wkend th { background: #fbe3e3; }
+.sc-newbeer { background: #fff6f1; border-left: 3px solid var(--orange); padding: 0.5rem 0.7rem; border-radius: 6px; }
+.sc-grid td.sc-sel.sc-editable { cursor: grab; }
+.sc-drop::before { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 2px var(--accent); background: rgba(0, 104, 125, 0.12); pointer-events: none; z-index: 1; }
