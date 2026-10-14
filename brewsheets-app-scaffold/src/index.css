@@ -13,9 +13,11 @@
   --ink2: #4f5b66;
   --muted: #85909a;
   --line: #dce2e8;
-  --accent: #f3703a;
-  --accent-dark: #d9561f;
-  --accent-soft: #fde7dc;
+  /* Buttons and highlights are teal; brand orange is kept for small touches. */
+  --accent: #00687d;
+  --accent-dark: #004f5f;
+  --accent-soft: #e1f0f3;
+  --orange: #f3703a;
   --hl: #f0f7f9;
   --danger: #b00020;
   --font: 'Schibsted Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -262,11 +264,11 @@ td a {
 .nav-link.active {
   background: rgba(242, 237, 226, 0.14);
   color: #f2ede2;
-  box-shadow: inset 0 -2px 0 var(--accent);
+  box-shadow: inset 0 -2px 0 var(--orange);
 }
 
 h1 {
-  border-left: 5px solid var(--accent);
+  border-left: 5px solid var(--orange);
   padding-left: 0.6rem;
 }
 
@@ -326,7 +328,7 @@ tbody tr:hover td {
   justify-content: space-between;
   align-items: center;
   background: var(--navy);
-  border-bottom: 3px solid var(--accent);
+  border-bottom: 3px solid var(--orange);
   padding: 0.6rem 1rem;
 }
 .pk-session-head h3 { margin: 0; color: #fff; }
@@ -344,7 +346,7 @@ tbody tr:hover td {
 .pk-chip { font-size: 0.8rem; font-weight: 600; background: rgba(255, 255, 255, 0.7); border-radius: 999px; padding: 0.1rem 0.6rem; }
 .pk-tank { background: #eaf1fb; border-color: #1d4f91; }
 .pk-tank h4 { color: #1d4f91; }
-.pk-pack { background: #fff3ec; border-color: var(--accent); }
+.pk-pack { background: #fff3ec; border-color: var(--orange); }
 .pk-pack h4 { color: #7a5600; }
 .pk-do { background: #e7f4ec; border-color: #11603f; }
 .pk-do h4 { color: #11603f; }
@@ -365,7 +367,7 @@ tbody tr:hover td {
   padding: 0.5rem 0.6rem;
   border-radius: 6px;
   background: #fff3ec;
-  border-left: 4px solid var(--accent);
+  border-left: 4px solid var(--orange);
 }
 .ta-done { background: #e7f4ec; border-left-color: #11603f; }
 
@@ -398,12 +400,12 @@ tbody tr:hover td {
 .sc-dialog { background: var(--surface); border-radius: 8px; padding: 1rem; width: 100%; max-width: 460px; }
 .sc-form { display: grid; gap: 0.6rem; margin-top: 0.75rem; }
 .sc-form label { display: flex; flex-direction: column; gap: 2px; }
-.sc-booking { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; background: #fff3ec; border-left: 4px solid var(--accent); }
-.sc-warn { background: #fff3ec; border-left: 4px solid var(--accent); padding: 0.5rem 0.6rem; border-radius: 6px; font-size: 0.85rem; }
+.sc-booking { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; background: #fff3ec; border-left: 4px solid var(--orange); }
+.sc-warn { background: #fff3ec; border-left: 4px solid var(--orange); padding: 0.5rem 0.6rem; border-radius: 6px; font-size: 0.85rem; }
 
 /* ---- Brew Day: booked brews ---- */
-.bd-booking { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; margin-bottom: 0.5rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); }
-.bd-today { background: #fff3ec; border-left-color: var(--accent); }
+.bd-booking { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; margin-bottom: 0.5rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--orange); }
+.bd-today { background: #fff3ec; border-left-color: var(--orange); }
 
 .sc-pack-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; margin-top: 2px; }
 .sc-pack-grid label { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; }
@@ -633,14 +635,14 @@ tr.ing-added td { background: #f3faf5; }
   font-weight: 600;
   text-align: center;
   padding: 0.45rem 0.5rem;
-  background: #fff6f1;
-  border: 2px solid #f6b08f;
+  background: #f0f8fa;
+  border: 2px solid #8cc4cf;
   border-radius: 6px;
   min-width: 96px;
 }
-.brewday-turn input:focus { background: #fff; border-color: var(--accent); outline: 3px solid rgba(243, 112, 58, 0.2); }
+.brewday-turn input:focus { background: #fff; border-color: var(--accent); outline: 3px solid rgba(0, 104, 125, 0.18); }
 .brewday-turn input:disabled { background: #f3f1ec; border-color: #ddd; color: #777; }
-.brewday-turn textarea { font-size: 1.05rem; background: #fff6f1; border: 2px solid #f6b08f; border-radius: 6px; }
+.brewday-turn textarea { font-size: 1.05rem; background: #f0f8fa; border: 2px solid #8cc4cf; border-radius: 6px; }
 /* Field labels sit centred over their box. */
 .brewday-turn label[style*='inline-block'] { text-align: center; vertical-align: top; }
 .brewday-turn label[style*='inline-block'] > div:first-child { font-weight: 600; color: #3b3f3c !important; font-size: 0.82rem !important; margin-bottom: 0.2rem; }
@@ -657,7 +659,7 @@ tr.ing-added td { background: #f3faf5; }
 .split-dialog { background: var(--surface, #fff); border-radius: 10px; padding: 1rem 1.1rem; width: 100%; max-width: 680px; }
 .split-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin: 0.9rem 0 0.6rem; }
 .split-row label, .split-recv { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 0.85rem; }
-.split-row input { font-size: 1.15rem; font-weight: 600; text-align: center; width: 150px; background: #fff6f1; border: 2px solid #f6b08f; border-radius: 6px; padding: 0.4rem; }
+.split-row input { font-size: 1.15rem; font-weight: 600; text-align: center; width: 150px; background: #f0f8fa; border: 2px solid #8cc4cf; border-radius: 6px; padding: 0.4rem; }
 .split-recv select { font-size: 1rem; padding: 0.4rem; max-width: 100%; }
 .split-pct { font-weight: 700; color: var(--keg); padding-bottom: 0.5rem; }
 .split-table { width: 100%; border-collapse: collapse; margin-top: 0.8rem; font-size: 0.9rem; }
