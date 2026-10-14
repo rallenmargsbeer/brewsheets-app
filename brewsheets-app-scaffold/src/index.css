@@ -698,3 +698,24 @@ tr.ing-added td { background: #f3faf5; }
 
 /* Beer colour accents (from the schedule's colour key) */
 .beer-dot { display: inline-block; width: 0.62em; height: 0.62em; border-radius: 50%; margin-right: 0.4em; vertical-align: 0.05em; box-shadow: 0 0 0 1px rgba(20, 26, 36, 0.18); flex-shrink: 0; }
+
+/* Sign in / sign up */
+.auth-card { max-width: 340px; margin: 2.5rem auto; display: grid; gap: 0.75rem; text-align: center; }
+.auth-card h1 { margin: 0; }
+.auth-card input { font-size: 1.05rem; padding: 0.6rem 0.7rem; }
+.auth-error { color: #b00020; margin: 0; }
+.auth-ok { color: var(--accent); margin: 0; }
+.auth-links { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.linklike { background: none; border: none; color: var(--accent); padding: 0; cursor: pointer; font: inherit; text-decoration: underline; }
+.pinpad { display: grid; gap: 1.1rem; justify-items: center; }
+.pin-dots { display: flex; gap: 0.9rem; }
+.pin-dots span { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--accent); }
+.pin-dots span.on { background: var(--accent); }
+.pin-keys { display: grid; grid-template-columns: repeat(3, 76px); gap: 0.6rem; }
+.pin-keys button { height: 64px; font-size: 1.6rem; border-radius: 12px; }
+.pin-keys button.pin-clear { font-size: 1rem; background: #fff; color: var(--accent); border: 1px solid #cfd8de; }
+.nav-signout { background: none; border: none; cursor: pointer; font: inherit; opacity: 0.8; }
+.users-table { width: 100%; border-collapse: collapse; }
+.users-table th, .users-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid #e3e8ec; text-align: left; }
+.users-pending td { background: #fff6f1; }
+.users-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }

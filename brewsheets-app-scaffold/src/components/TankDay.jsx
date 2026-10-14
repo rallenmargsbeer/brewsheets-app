@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { setTaskDone } from '../lib/dayTasks'
 
-// A tick box for a schedule task (editors only); everyone else sees the text.
+// A tick box for a schedule task (any signed-in user).
 export function TaskLine({ task, editor, onChanged }) {
   const [done, setDone] = useState(task.done)
   const [busy, setBusy] = useState(false)
@@ -17,7 +17,7 @@ export function TaskLine({ task, editor, onChanged }) {
   }
   return (
     <label className={`day-task${done ? ' done' : ''}`}>
-      {editor && task.id ? <input type="checkbox" checked={done} disabled={busy} onChange={toggle} /> : null}
+      {task.id ? <input type="checkbox" checked={done} disabled={busy} onChange={toggle} /> : null}
       <span className="day-slot">{task.slot}</span>
       <span>{task.text}</span>
     </label>
