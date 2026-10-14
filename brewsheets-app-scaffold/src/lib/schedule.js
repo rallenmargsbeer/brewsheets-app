@@ -18,6 +18,20 @@ export function mondayOf(isoDate) {
 }
 export const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000)
 
+// We don't work weekends.
+export const isWeekend = (isoDate) => [0, 6].includes(new Date(`${isoDate}T00:00:00`).getDay())
+export function nextWorkday(isoDate) {
+  let d = isoDate
+  while (isWeekend(d)) d = addDays(d, 1)
+  return d
+}
+// n working days after a date (0 = the date itself, moved off a weekend).
+export function addWorkdays(isoDate, n) {
+  let d = nextWorkday(isoDate)
+  for (let i = 0; i < n; i++) d = nextWorkday(addDays(d, 1))
+  return d
+}
+
 // ---- Lanes (grid columns that aren't tanks) ----
 
 export const BREW_LANES = ['brew_1', 'brew_2']
@@ -200,27 +214,70 @@ const isFilter = (task) => /^filter\b/i.test(task.trim())
 export function splitAtFilter(steps) {
   const ordered = [...steps].sort(slotOrder)
   const fi = ordered.findIndex((s) => isFilter(s.task))
-  if (fi === -1) return { fvSteps: ordered, filterStep: null, btSteps: [] }
+  if (fi === -1) return { fvSteps: ordered, filterStep: null, btSteps: [], afterFilter: [] }
   const filterStep = ordered[fi]
-  let btSteps = ordered.slice(fi + 1)
-  if (btSteps.length === 0) {
-    btSteps = [{ day: filterStep.day + 1, slot: 'AM', task: 'Can & Keg' }]
+  const afterFilter = ordered.slice(fi + 1)
+  const btSteps = afterFilter.length ? afterFilter : [{ day: filterStep.day + 1, slot: 'AM', task: 'Can & Keg' }]
+  return { fvSteps: ordered.slice(0, fi + 1), filterStep, btSteps, afterFilter }
+}
+
+// The template's steps dated from the brew day (day 1). Filter never lands on a weekend:
+// it moves to the Monday, and everything after it moves with it (and off weekends too).
+// fv: FV jobs up to and including Filter; bt: jobs after Filter (in the bright tank);
+// afterFilter: the template's own jobs after Filter (for a beer left in the FV);
+// pack: when packaging happens (the Can & Keg job, else the working day after Filter).
+export function planSteps(brewDate, steps) {
+  const { fvSteps, filterStep, btSteps, afterFilter } = splitAtFilter(steps)
+  const at = (s, shift = 0) => ({ ...s, date: addDays(brewDate, s.day - 1 + shift) })
+  if (!filterStep) return { fv: fvSteps.map((s) => at(s)), filter: null, bt: [], afterFilter: [], pack: null }
+  const raw = addDays(brewDate, filterStep.day - 1)
+  const shift = daysBetween(raw, nextWorkday(raw))
+  const filter = at(filterStep, shift)
+  const fv = [...fvSteps.slice(0, -1).map((s) => at(s)), filter]
+  const later = (list) => {
+    let prev = filter.date
+    return list.map((s) => {
+      let d = nextWorkday(addDays(brewDate, s.day - 1 + shift))
+      if (d < prev) d = prev
+      prev = d
+      return { ...s, date: d }
+    })
   }
-  return { fvSteps: ordered.slice(0, fi + 1), filterStep, btSteps }
+  const bt = later(btSteps)
+  const job = bt.find((s) => /can|keg|packag/i.test(s.task))
+  const pack = job ? { date: job.date, slot: job.slot } : { date: addWorkdays(filter.date, 1), slot: 'AM' }
+  return { fv, filter, bt, afterFilter: later(afterFilter), pack }
 }
 
 // Default bright-tank jobs when a beer is moved over on its filter day.
 export function defaultBtJobs(filterDate, filterSlot) {
-  return [{ date: addDays(filterDate, 1), slot: 'AM', task: 'Can & Keg' }]
+  return [{ date: addWorkdays(filterDate, 1), slot: 'AM', task: 'Can & Keg' }]
 }
 
-// Suggests a bright tank that's empty from `fromDate` to `toDate` (no schedule jobs in it
-// then) and big enough for `litres`. Smallest that fits wins, so big BTs stay free.
-export function suggestBrightTank(brightTanks, entries, fromDate, toDate, litres) {
-  const busy = new Set(entries.filter((e) => e.lane === 'tank' && e.entry_date >= fromDate && e.entry_date <= toDate).map((e) => e.tank_id))
+// Emptying a bright tank takes working days: 2 for a 10,000 L BT, 1 for the smaller ones.
+export const emptyingDays = (tank) => (Number(tank?.capacity_l) >= 10000 ? 2 : 1)
+// Last day a BT is tied up by a beer packaged from it on packDate.
+export const btFreeAfter = (tank, packDate) => addWorkdays(packDate, emptyingDays(tank) - 1)
+
+// Days each bright tank is tied up, from the schedule: a job holds its day, and a
+// packaging job (Can & Keg) holds the tank until it's empty.
+function btBusy(tank, entries) {
+  return entries
+    .filter((e) => e.lane === 'tank' && e.tank_id === tank.id)
+    .map((e) => ({ from: e.entry_date, to: /can|keg|packag/i.test(e.text ?? '') ? btFreeAfter(tank, e.entry_date) : e.entry_date }))
+}
+
+// Suggests a bright tank that's free from the filter day until the beer packaged on
+// packDate is out of it (emptying included), and big enough for `litres`. Smallest
+// that fits wins, so big BTs stay free. `entries` should run a week either side.
+export function suggestBrightTank(brightTanks, entries, fromDate, packDate, litres) {
   return (
     brightTanks
-      .filter((t) => !busy.has(t.id) && (t.capacity_l == null || !litres || Number(t.capacity_l) >= litres))
+      .filter((t) => t.capacity_l == null || !litres || Number(t.capacity_l) >= litres)
+      .filter((t) => {
+        const until = btFreeAfter(t, packDate)
+        return !btBusy(t, entries).some((b) => b.from <= until && b.to >= fromDate)
+      })
       .sort((a, b) => (Number(a.capacity_l) || 0) - (Number(b.capacity_l) || 0) || a.name.localeCompare(b.name, undefined, { numeric: true }))[0] ?? null
   )
 }
@@ -249,15 +306,21 @@ export function packTexts(pack) {
   return { canning: pallets ? `${pallets} pallet${pallets === 1 ? '' : 's'} (${cubes} cubes)` : null, kegging: kegs.length ? kegs.join(', ') : null }
 }
 
-// When packaging happens: the Can & Keg job in the bright tank, else the morning after Filter.
-export function packDay(brewDate, filterStep, btSteps) {
-  const job = btSteps.find((s) => /can|keg|packag/i.test(s.task))
-  if (job) return { date: addDays(brewDate, job.day - 1), slot: job.slot }
-  if (filterStep) return { date: addDays(brewDate, filterStep.day), slot: 'AM' }
-  return null
+// Brewhouse slots in order: AM Brew 1, AM Brew 2, PM Brew 1, PM Brew 2, then the next working day.
+export const TURN_SLOTS = [['AM', 'brew_1'], ['AM', 'brew_2'], ['PM', 'brew_1'], ['PM', 'brew_2']]
+export function defaultTurnSlots(brewDate, n, taken = new Set()) {
+  const out = []
+  let d = brewDate
+  for (let guard = 0; out.length < n && guard < 60; guard++) {
+    for (const [slot, lane] of TURN_SLOTS) {
+      if (out.length < n && !taken.has(`${d}|${slot}|${lane}`)) out.push({ date: d, slot, lane })
+    }
+    d = nextWorkday(addDays(d, 1))
+  }
+  return out
 }
 
-export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, turnQuantity, notes, pack }) {
+export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, turnQuantity, turnSlots, notes, pack }) {
   const { data: booking, error } = await supabase
     .from('brew_bookings')
     .insert({
@@ -279,40 +342,21 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
   if (error) throw error
 
   const entries = []
-  const turnLabel = beerName
-  for (let i = 0; i < (turnQuantity || 0); i++) {
-    // 2 turns per half-day: AM Brew 1, AM Brew 2, PM Brew 1, PM Brew 2, then next day.
-    const day = Math.floor(i / 4)
-    entries.push({
-      entry_date: addDays(brewDate, day),
-      slot: i % 4 < 2 ? 'AM' : 'PM',
-      lane: BREW_LANES[i % 2],
-      text: turnLabel,
-      booking_id: booking.id,
-    })
-  }
-  const { fvSteps, filterStep, btSteps } = splitAtFilter(stepsForTank(template, tank))
-  for (const s of brightTank ? fvSteps : stepsForTank(template, tank)) {
-    entries.push({
-      entry_date: addDays(brewDate, s.day - 1),
-      slot: s.slot,
-      lane: 'tank',
-      tank_id: tank.id,
-      // The template's day-1 PM cell is the beer's name; use this booking's beer.
-      text: s.task === template.name ? beerName : s.task,
-      booking_id: booking.id,
-    })
-  }
+  // Brewhouse turns go in the slots picked (date, AM/PM, Brew 1/2); without them, AM Brew 1,
+  // AM Brew 2, PM Brew 1, PM Brew 2 from the brew day.
+  const slots = turnSlots?.length ? turnSlots : defaultTurnSlots(brewDate, turnQuantity || 0)
+  for (const t of slots) entries.push({ entry_date: t.date, slot: t.slot, lane: t.lane, text: beerName, booking_id: booking.id })
+  const plan = planSteps(brewDate, stepsForTank(template, tank))
+  // The template's day-1 PM cell is the beer's name; use this booking's beer.
+  const fvRow = (s) => ({ entry_date: s.date, slot: s.slot, lane: 'tank', tank_id: tank.id, text: s.task === template.name ? beerName : s.task, booking_id: booking.id })
+  for (const s of brightTank && plan.filter ? plan.fv : [...plan.fv, ...plan.afterFilter]) entries.push(fvRow(s))
   // Filter day: the beer moves to the bright tank, where the rest of its jobs happen.
-  if (brightTank && filterStep) {
-    const filterDate = addDays(brewDate, filterStep.day - 1)
-    entries.push({ entry_date: filterDate, slot: filterStep.slot, lane: 'tank', tank_id: brightTank.id, text: beerName, booking_id: booking.id })
-    for (const s of btSteps) {
-      entries.push({ entry_date: addDays(brewDate, s.day - 1), slot: s.slot, lane: 'tank', tank_id: brightTank.id, text: s.task, booking_id: booking.id })
-    }
+  if (brightTank && plan.filter) {
+    entries.push({ entry_date: plan.filter.date, slot: plan.filter.slot, lane: 'tank', tank_id: brightTank.id, text: beerName, booking_id: booking.id })
+    for (const s of plan.bt) entries.push({ entry_date: s.date, slot: s.slot, lane: 'tank', tank_id: brightTank.id, text: s.task, booking_id: booking.id })
   }
   // Planned packaging goes straight into the Canning / Kegging columns on pack day.
-  const when = packDay(brewDate, filterStep, btSteps)
+  const when = plan.pack
   const { canning, kegging } = packTexts(pack)
   if (when && canning) entries.push({ entry_date: when.date, slot: when.slot, lane: 'canning_1', text: canning, beer_name: beerName, booking_id: booking.id })
   if (when && kegging) entries.push({ entry_date: when.date, slot: when.slot, lane: 'kegging_1', text: kegging, beer_name: beerName, booking_id: booking.id })
