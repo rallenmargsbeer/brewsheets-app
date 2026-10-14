@@ -452,7 +452,15 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   const activeIndex = STAGES.findIndex((s) => !form[s.confirmedField])
   const allConfirmed = activeIndex === -1
 
+  // Knockout can't be confirmed without the KO volume, gravity and pH.
+  const KO_REQUIRED = [['ko_flowmeter_l', 'volume'], ['whirlpool_gravity', 'gravity'], ['whirlpool_ph', 'pH']]
+  const koMissing = KO_REQUIRED.filter(([k]) => !(Number(form[k]) > 0)).map(([, label]) => label)
+
   async function confirmStage(stage, fieldKeys) {
+    if (stage.key === 'knockout' && koMissing.length) {
+      setError(`Enter the knockout ${koMissing.join(', ')} before confirming knockout.`)
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -830,11 +838,17 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                       : ['ko_flowmeter_l', 'whirlpool_gravity', 'whirlpool_ph', ...(isLastTurn ? ['correction_l'] : [])]
                   )
                 }
-                disabled={saving}
+                disabled={saving || (s.key === 'knockout' && koMissing.length > 0)}
+                title={s.key === 'knockout' && koMissing.length ? `Needs the knockout ${koMissing.join(', ')}` : undefined}
                 style={{ marginTop: '0.5rem' }}
               >
                 {saving ? 'Saving…' : `Confirm ${s.label} & Continue`}
               </button>
+            )}
+            {!confirmed && s.key === 'knockout' && koMissing.length > 0 && (
+              <p style={{ color: '#b00020', fontSize: '0.85rem', margin: '0.35rem 0 0' }}>
+                Enter the knockout {koMissing.join(', ')} to confirm knockout.
+              </p>
             )}
           </div>
         )
