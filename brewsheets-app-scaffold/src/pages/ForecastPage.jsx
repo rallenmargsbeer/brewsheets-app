@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useBrewPlan, BrewPlanTable, CapacityTable, PlanSettings, planNote } from '../components/BrewPlan'
+import { useBrewPlan, BrewPlanTable, BrewsToBookTable, CapacityTable, PlanSettings, planNote } from '../components/BrewPlan'
 import { saveForecast, addMonths, monthOf } from '../lib/forecast'
 import { isScheduleEditor, todayIso } from '../lib/schedule'
 import BeerDot from '../components/BeerDot.jsx'
@@ -12,7 +12,7 @@ export default function ForecastPage() {
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') === 'demand' ? 'demand' : 'plan'
   const [months, setMonths] = useState(3)
-  const { plan, capacity, fc, forecast, error, reload } = useBrewPlan(months)
+  const { plan, capacity, toBook, fc, forecast, error, reload } = useBrewPlan(months)
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
@@ -34,6 +34,10 @@ export default function ForecastPage() {
             </label>
             <PlanSettings forecast={forecast} onSaved={reload} />
           </div>
+          <section className="stock-card stock-plan">
+            <h2>Brews to book <span>one line per brew, with the date to brew it by</span></h2>
+            <BrewsToBookTable list={toBook} months={months} weeks={fc.coverWeeks} />
+          </section>
           <section className="stock-card stock-plan">
             <h2>What to brew <span>stock + tanks + booked brews against forecast</span></h2>
             <BrewPlanTable plan={plan} months={months} weeks={fc.coverWeeks} />

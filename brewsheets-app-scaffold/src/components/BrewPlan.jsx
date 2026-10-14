@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BeerDot from './BeerDot.jsx'
 import { listStock, stockByBeer } from '../lib/stock'
-import { loadForecast, forecastIndex, loadBrews, brewPlan, levelBrewing, applyLevelling, saveSetting, LOOKAHEAD_MONTHS, LEAD_DAYS, YIELD, PRIORITY } from '../lib/forecast'
-import { todayIso, daysBetween, isScheduleEditor } from '../lib/schedule'
+import { loadForecast, forecastIndex, loadBrews, brewPlan, levelBrewing, applyLevelling, brewsToBook, saveSetting, LOOKAHEAD_MONTHS, LEAD_DAYS, YIELD, PRIORITY } from '../lib/forecast'
+import { useAuth } from '../auth'
+import { todayIso, daysBetween, isScheduleEditor, addDays as addDaysIso } from '../lib/schedule'
 
 const litres = (n) => (n >= 50 ? `${(Math.round(n / 100) * 100).toLocaleString()} L` : '0 L')
 const units = (n) => Math.round(n).toLocaleString()
@@ -33,9 +34,10 @@ export function useBrewPlan(months, stockData = null) {
     const long = brewPlan({ stock: byBeer, fc, brews: src.brews, months: LOOKAHEAD_MONTHS })
     const levelled = levelBrewing({ plan: long, brews: src.brews, capacityL: src.forecast.capacityL })
     const rows = applyLevelling(brewPlan({ stock: byBeer, fc, brews: src.brews, months }), levelled, { months })
-    return { rows, levelled }
+    const toBook = brewsToBook({ stock: byBeer, fc, brews: src.brews, capacityL: src.forecast.capacityL })
+    return { rows, levelled, toBook }
   }, [src, fc, stockData, months])
-  return { plan: plan?.rows ?? null, capacity: plan?.levelled ?? null, fc, forecast: src?.forecast, error, reload: load }
+  return { plan: plan?.rows ?? null, capacity: plan?.levelled ?? null, toBook: plan?.toBook ?? null, fc, forecast: src?.forecast, error, reload: load }
 }
 
 function urgency(r) {
@@ -105,6 +107,48 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+// The plan as separate brews to book, each with the date to brew it by.
+export function BrewsToBookTable({ list, months, weeks }) {
+  const { isAdmin } = useAuth()
+  const end = addDaysIso(todayIso(), Math.round(months * 30.44))
+  const rows = list.filter((b) => b.bookOn < end)
+  if (!rows.length) return <p className="stock-muted" style={{ padding: '0.5rem 0.9rem' }}>Nothing more to brew in this period: stock, tanks and booked brews cover the goal.</p>
+  const total = rows.filter((b) => b.brewhouse).reduce((a, b) => a + b.size, 0)
+  const today = todayIso()
+  const note = (b) => {
+    if (b.late) return <span className="plan-short">catching up: stock is under the {weeks}-week goal until this is ready, about {shortDate(addDaysIso(b.bookOn, b.leadDays))}</span>
+    if (b.early) return <span className="plan-early">early: the brewhouse is full nearer {shortDate(b.brewBy)}</span>
+    return <span className="stock-muted">for stock from {shortDate(b.neededFor)}</span>
+  }
+  return (
+    <div className="stock-scroll">
+      <table className="stock-table plan-table book-table">
+        <thead><tr><th>Brew by</th><th className="stock-beer">Beer</th><th>Batch</th><th></th>{isAdmin && <th></th>}</tr></thead>
+        <tbody>
+          {rows.map((b, i) => (
+            <tr key={i}>
+              <td><strong>{b.bookOn <= today ? 'Now' : shortDate(b.bookOn)}</strong></td>
+              <td className="stock-beer"><BeerDot name={b.beer} />{b.beer}</td>
+              <td>{b.size.toLocaleString()} L{b.brewhouse ? '' : ' (mixed in a BT)'}</td>
+              <td>{note(b)}</td>
+              {isAdmin && (
+                <td>
+                  <Link to={`/schedule?${new URLSearchParams({ book: '1', beer: b.beer, date: b.bookOn, litres: String(b.size) })}`}>
+                    <button className="secondary">Book</button>
+                  </Link>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="stock-muted" style={{ fontSize: '0.8rem', padding: '0 0.9rem' }}>
+        {rows.length} brew{rows.length === 1 ? '' : 's'}, {total.toLocaleString()} L through the brewhouse, on top of what's booked. Each is dated {LEAD_DAYS} days before stock would drop under the goal (Megsy 2 days), within the brewhouse limit spread week by week: earlier when the brewhouse is full nearer the time, later (late) when it can't be fitted in sooner. Book it on or before that day.
+      </p>
     </div>
   )
 }
