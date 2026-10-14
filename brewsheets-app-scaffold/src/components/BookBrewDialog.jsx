@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
-import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, saveBeerColour, freePackLane } from '../lib/schedule'
+import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, saveBeerColour, freePackLane, freePackSlots } from '../lib/schedule'
 import { beerStyle, savedBeerStyle } from '../lib/beerColours'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 import { loadForecast, forecastIndex, suggestPackSplit, YIELD } from '../lib/forecast'
@@ -21,6 +21,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const [notes, setNotes] = useState('')
   const [pack, setPack] = useState({ pallets: '', kegs_50: '', kegs_30: '', kegs_20: '' })
   const [windowEntries, setWindowEntries] = useState([])
+  const [packPick, setPackPick] = useState({}) // kind -> 'date|slot|lane' when both columns are taken
   const [colours, setColours] = useState(null) // { bg, fg } for a beer with no colours yet
   const [picked, setPicked] = useState(null) // brewhouse turn slots picked by hand; null = suggested
   const [btChoice, setBtChoice] = useState('auto') // 'auto' = use the suggestion, '' = none, or a tank id
@@ -57,7 +58,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   // tanks (a week either side, for emptying and weekend moves).
   useEffect(() => {
     if (!brewDate) return
-    const until = addDays(brewDate, lastDay + 10)
+    const until = addDays(brewDate, lastDay + 24)
     listScheduleEntries(addDays(brewDate, -7), until)
       .then(setWindowEntries)
       .catch(() => setWindowEntries([]))
@@ -121,12 +122,19 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const newBeer = beerName.trim() && !savedBeerStyle(beerName.trim())
   const shown = colours ?? beerStyle(beerName.trim()) ?? { bg: '#ffffff', fg: '#1d2421' }
 
+  // Both Canning (or Kegging) columns taken on pack day: pick another slot.
+  const packClash = plan.pack ? Object.entries(packTexts(pack)).filter(([kind, t]) => t && !freePackLane(kind, plan.pack.date, plan.pack.slot, windowEntries)).map(([kind]) => kind) : []
+  const packSlots = Object.fromEntries(packClash.filter((k) => packPick[k]).map((k) => {
+    const [date, slot, lane] = packPick[k].split('|')
+    return [k, { date, slot, lane }]
+  }))
+
   async function book() {
     setSaving(true)
     setError(null)
     try {
       if (newBeer) await saveBeerColour(beerName.trim(), shown.bg, shown.fg)
-      const b = await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, turnSlots, notes, pack })
+      const b = await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, turnSlots, packSlots, notes, pack })
       onBooked(b)
     } catch (e) {
       setError(e.message)
@@ -135,7 +143,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   }
 
   const tooBig = tank?.capacity_l != null && turnVolume * turns > Number(tank.capacity_l)
-  const ready = beerName.trim() && brewDate && tank && template && !tooBig && turnSlots.length === turns
+  const ready = beerName.trim() && brewDate && tank && template && !tooBig && turnSlots.length === turns && packClash.every((k) => packPick[k])
   const packLitres = Math.round((Number(pack.pallets) || 0) * LITRES_PER_PALLET + [50, 30, 20].reduce((t, l) => t + (Number(pack[`kegs_${l}`]) || 0) * l, 0))
   const overPacked = packLitres > turnVolume * turns
   const packWhen = plan.pack
@@ -278,9 +286,18 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
               {overPacked ? ' (more than the batch)' : ''}
               {packWhen ? ` · ${fmt(packWhen.date)} ${packWhen.slot}` : ''}
             </div>
-            {packWhen && Object.entries(packTexts(pack)).filter(([kind, t]) => t && !freePackLane(kind, packWhen.date, packWhen.slot, windowEntries)).map(([kind]) => (
-              <div key={kind} className="sc-warn" style={{ margin: '4px 0 0' }}>Both {kind} columns are already booked {fmt(packWhen.date)} {packWhen.slot}. It will share the first one; move it after booking.</div>
-            ))}
+            {packClash.map((kind) => {
+              const opts = freePackSlots(kind, packWhen.date, packWhen.slot, windowEntries)
+              return (
+                <label key={kind} className="sc-warn" style={{ margin: '4px 0 0', display: 'block' }}>
+                  Both {kind} columns are already booked {fmt(packWhen.date)} {packWhen.slot}. Pick when to {kind === 'canning' ? 'can' : 'keg'}:
+                  <select value={packPick[kind] ?? ''} onChange={(e) => setPackPick({ ...packPick, [kind]: e.target.value })} style={{ display: 'block', marginTop: 4 }}>
+                    <option value="">Pick a slot…</option>
+                    {opts.map((o) => <option key={o.date + o.slot + o.lane} value={`${o.date}|${o.slot}|${o.lane}`}>{fmt(o.date)} {o.slot} · {LANE_LABEL[o.lane]} column {o.lane.slice(-1)}</option>)}
+                  </select>
+                </label>
+              )
+            })}
             {Number(pack.pallets) > 0 && (
               <div style={{ color: 'var(--ink2)', fontSize: '0.8rem' }}>
                 {pack.pallets} pallet{Number(pack.pallets) === 1 ? '' : 's'} = {(Number(pack.pallets) * CANS_PER_PALLET).toLocaleString()} cans = {Number(pack.pallets) * CUBES_PER_PALLET} cubes
@@ -321,8 +338,8 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
             <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
               {preview.map((p) => <li key={p.key}>{fmt(p.date)} {p.slot} · {p.where} · {p.text}</li>)}
               {packWhen && Object.entries(packTexts(pack)).filter(([, t]) => t).map(([kind, t]) => {
-                const lane = freePackLane(kind, packWhen.date, packWhen.slot, windowEntries)
-                return <li key={kind}>{fmt(packWhen.date)} {packWhen.slot} · {lane ? `${LANE_LABEL[lane]} column ${lane.slice(-1)}` : `${kind === 'canning' ? 'Canning' : 'Kegging'} (both columns already booked)`} · {t}</li>
+                const at = packSlots[kind] ?? { ...packWhen, lane: freePackLane(kind, packWhen.date, packWhen.slot, windowEntries) }
+                return <li key={kind}>{fmt(at.date)} {at.slot} · {at.lane ? `${LANE_LABEL[at.lane]} column ${at.lane.slice(-1)}` : `${kind === 'canning' ? 'Canning' : 'Kegging'} (pick a slot)`} · {t}</li>
               })}
             </ul>
           </details>

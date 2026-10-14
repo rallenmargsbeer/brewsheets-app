@@ -304,6 +304,23 @@ export function freePackLane(kind, date, slot, entries, ignore = new Set()) {
   return [`${kind}_1`, `${kind}_2`].find((l) => !entries.some((e) => e.lane === l && e.entry_date === date && e.slot === slot && !ignore.has(e.id) && (e.text ?? '').trim())) ?? null
 }
 
+// The next free Canning / Kegging slots from a time on (working days only), for when both
+// columns are taken then: [{ date, slot, lane }].
+export function freePackSlots(kind, fromDate, fromSlot, entries, n = 8, ignore = new Set()) {
+  const out = []
+  let d = nextWorkday(fromDate)
+  let slots = d === fromDate && fromSlot === 'PM' ? ['PM'] : ['AM', 'PM']
+  for (let guard = 0; guard < 30 && out.length < n; guard++) {
+    for (const slot of slots) {
+      const lane = freePackLane(kind, d, slot, entries, ignore)
+      if (lane && out.length < n) out.push({ date: d, slot, lane })
+    }
+    d = nextWorkday(addDays(d, 1))
+    slots = ['AM', 'PM']
+  }
+  return out
+}
+
 // Text for the Canning / Kegging cells from a packaging plan.
 export function packTexts(pack) {
   const pallets = Number(pack?.pallets) || 0
@@ -326,7 +343,7 @@ export function defaultTurnSlots(brewDate, n, taken = new Set()) {
   return out
 }
 
-export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, turnQuantity, turnSlots, notes, pack }) {
+export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, turnQuantity, turnSlots, packSlots, notes, pack }) {
   const { data: booking, error } = await supabase
     .from('brew_bookings')
     .insert({
@@ -364,10 +381,14 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
   // Planned packaging goes straight into the Canning / Kegging columns on pack day.
   const when = plan.pack
   const { canning, kegging } = packTexts(pack)
-  // In whichever Canning / Kegging column is free then.
+  // In whichever Canning / Kegging column is free then, or the slot picked when both were taken.
   const there = when && (canning || kegging) ? await listScheduleEntries(when.date, when.date) : []
-  if (when && canning) entries.push({ entry_date: when.date, slot: when.slot, lane: freePackLane('canning', when.date, when.slot, there) ?? 'canning_1', text: canning, beer_name: beerName, booking_id: booking.id })
-  if (when && kegging) entries.push({ entry_date: when.date, slot: when.slot, lane: freePackLane('kegging', when.date, when.slot, there) ?? 'kegging_1', text: kegging, beer_name: beerName, booking_id: booking.id })
+  const place = (kind) => packSlots?.[kind] ?? { date: when.date, slot: when.slot, lane: freePackLane(kind, when.date, when.slot, there) ?? `${kind}_1` }
+  for (const [kind, text] of [['canning', canning], ['kegging', kegging]]) {
+    if (!when || !text) continue
+    const at = place(kind)
+    entries.push({ entry_date: at.date, slot: at.slot, lane: at.lane, text, beer_name: beerName, booking_id: booking.id })
+  }
   if (entries.length) {
     const { error: e2 } = await supabase.from('schedule_entries').insert(entries)
     if (e2) throw e2
