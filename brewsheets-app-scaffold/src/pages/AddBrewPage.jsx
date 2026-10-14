@@ -26,7 +26,7 @@ function StepCard({ number, title, done, active, children }) {
       style={{
         marginBottom: '1rem',
         padding: '1rem',
-        background: active ? '#fff' : '#f0efec',
+        background: active ? '#fff' : '#eef1f4',
         border: `1px solid ${active ? '#1a1a1a' : '#ddd'}`,
         borderRadius: 6,
         opacity: done || active ? 1 : 0.55,
@@ -133,7 +133,7 @@ function BagAllocationStep({ items, turnVolumeL, turnQuantity, allocations, setA
             return (
               <tr key={item.id}>
                 <td>{item.ingredient_name}</td>
-                <td style={{ color: matches ? '#1a7a1a' : '#a66a00' }}>
+                <td style={{ color: matches ? '#1a7a1a' : '#d9561f' }}>
                   {allocated} / {bagsNeeded.toFixed(1)} bags
                 </td>
                 {row.map((count, i) => (

@@ -98,14 +98,14 @@ export default function IngredientsUsed({ batch, ingredients }) {
                       {r.name}
                       {!r.code && <span style={{ color: 'crimson', fontSize: '0.8rem' }}> · not in Unleashed</span>}
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: changed ? 700 : 400, color: changed ? '#a66a00' : undefined }} title={changed ? `Planned ${showQty(r.planned, r.sections, r.baseUnit)}` : undefined}>
+                    <td style={{ textAlign: 'right', fontWeight: changed ? 700 : 400, color: changed ? '#d9561f' : undefined }} title={changed ? `Planned ${showQty(r.planned, r.sections, r.baseUnit)}` : undefined}>
                       {showQty(r.actual, r.sections, r.baseUnit)}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {r.unleashed ? (
                         <strong>{fmt(r.unleashed.qty)} {r.unleashed.unit}</strong>
                       ) : (
-                        <span style={{ color: '#a66a00' }}>check unit ({r.baseUnit ?? 'none'})</span>
+                        <span style={{ color: '#d9561f' }}>check unit ({r.baseUnit ?? 'none'})</span>
                       )}
                     </td>
                   </tr>

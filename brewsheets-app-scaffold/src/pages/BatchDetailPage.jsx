@@ -362,7 +362,7 @@ function IngredientRow({ item, ingredients, onSaved }) {
           value={actual}
           onChange={(e) => setActual(e.target.value)}
           onBlur={saveActual}
-          style={{ width: 90, ...(changed ? { borderColor: '#a66a00' } : {}) }}
+          style={{ width: 90, ...(changed ? { borderColor: '#d9561f' } : {}) }}
           disabled={saving}
         />
         <span style={{ marginLeft: '0.25rem', fontSize: '0.75rem', color: '#888' }}>{kg ? 'kg' : 'g'}</span>
@@ -469,7 +469,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   const gristQty = (i) => Number(i.planned_qty ?? i.actual_qty ?? 0)
   const gristItems = ingredients.filter((i) => i.section === 'grist').sort((a, b) => gristQty(b) - gristQty(a))
   const mashWaterItems = ingredients.filter((i) => i.section === 'water' && i.addition_stage === 'mash')
-  const kettleItems = ingredients.filter((i) => i.section === 'kettle')
+  // In boil order: the longest boil (e.g. 60 min) first.
+  const kettleItems = ingredients.filter((i) => i.section === 'kettle').sort((a, b) => Number(b.time_min ?? -1) - Number(a.time_min ?? -1))
   const kettleWaterItems = ingredients.filter((i) => i.section === 'water' && i.addition_stage === 'kettle')
   const whirlpoolItems = ingredients.filter((i) => i.section === 'whirlpool')
   const fermenterItems = ingredients.filter((i) => i.section === 'fermenter')
@@ -526,7 +527,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                 padding: '0.3rem 0.6rem',
                 borderRadius: 4,
                 fontSize: '0.8rem',
-                background: confirmed ? '#e6f4e6' : isActive ? '#1a1a1a' : '#f0efec',
+                background: confirmed ? '#e6f4e6' : isActive ? '#1a1a1a' : '#eef1f4',
                 color: confirmed ? '#1a7a1a' : isActive ? '#fff' : '#999',
                 border: `1px solid ${confirmed ? '#1a7a1a' : isActive ? '#1a1a1a' : '#ddd'}`,
               }}
@@ -574,7 +575,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                       flexWrap: 'wrap',
                       marginBottom: '0.75rem',
                       padding: '0.6rem 0.75rem',
-                      background: '#f7f6f3',
+                      background: '#f4f6f8',
                       borderRadius: 4,
                     }}
                   >
@@ -634,7 +635,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                       alignItems: 'flex-end',
                       marginBottom: '0.75rem',
                       padding: '0.6rem 0.75rem',
-                      background: '#f7f6f3',
+                      background: '#f4f6f8',
                       borderRadius: 4,
                     }}
                   >

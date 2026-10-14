@@ -192,7 +192,7 @@ export default function RecipeEditPage() {
         setRecipe(r)
         setGrist([...(r.recipe_grist_items ?? [])].sort((a, b) => Number(b.qty_g_per_l ?? 0) - Number(a.qty_g_per_l ?? 0))) // base malt first
         setWater(r.recipe_water_additions ?? [])
-        setKettle(r.recipe_kettle_additions ?? [])
+        setKettle([...(r.recipe_kettle_additions ?? [])].sort((a, b) => Number(b.boil_time_min ?? -1) - Number(a.boil_time_min ?? -1))) // boil order
         setWhirlpool(r.recipe_whirlpool_additions ?? [])
         setFermenter(r.recipe_fermenter_additions ?? [])
       })
