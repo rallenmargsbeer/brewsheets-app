@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import BeerDot from './BeerDot.jsx'
 import { listStock, stockByBeer } from '../lib/stock'
 import { loadForecast, forecastIndex, loadBrews, brewPlan, levelBrewing, applyLevelling, saveSetting, LOOKAHEAD_MONTHS, LEAD_DAYS, YIELD, PRIORITY } from '../lib/forecast'
 import { todayIso, daysBetween, isScheduleEditor } from '../lib/schedule'
@@ -55,7 +56,7 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
         <tbody>
           {plan.map((r) => (
             <tr key={r.beer}>
-              <td className="stock-beer">{r.beer}</td>
+              <td className="stock-beer"><BeerDot name={r.beer} />{r.beer}</td>
               <td><span className={`stock-pill ${urgency(r)}`}>{r.brewL >= 50 ? litres(r.brewL) : 'covered'}</span></td>
               <td>{r.brewL >= 50 ? (r.brewBy <= todayIso() ? 'now' : shortDate(r.brewBy)) : ''}</td>
               <td className="stock-muted">{shortDate(r.belowMin)}</td>
@@ -85,7 +86,7 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
         <tbody>
           {plan.map((r) => (
             <tr key={r.beer}>
-              <td className="stock-beer">{r.beer}</td>
+              <td className="stock-beer"><BeerDot name={r.beer} />{r.beer}</td>
               <td><Pair c={r.stock.cubes} k={r.stock.kegs} /></td>
               <td><Pair c={r.demandC} k={r.demandK} /></td>
               <td><Pair c={r.minC} k={r.minK} /></td>

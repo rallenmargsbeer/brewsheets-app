@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { listBatchesInTanks, listPackagingTotals } from '../lib/api'
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import { sumSessions } from '../lib/packaging'
+import BeerDot from '../components/BeerDot.jsx'
 
 // Conditioning first, then anything else still sitting in a BBT.
 const ORDER = { conditioning: 0, fermenting: 1, brewing: 2, planned: 3 }
@@ -45,7 +46,7 @@ export default function PackagingPage() {
               <Link key={b.id} to={`/packaging/${b.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: '0.75rem', height: '100%', boxSizing: 'border-box' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <strong style={{ fontSize: '1.05rem' }}>{b.beer_style}</strong>
+                    <strong style={{ fontSize: '1.05rem' }}><BeerDot name={b.beer_style} />{b.beer_style}</strong>
                     <span style={{ color: 'var(--ink2)' }}>#{b.batch_number}</span>
                   </div>
                   <div style={{ color: 'var(--ink2)', margin: '4px 0' }}>{tankLabel(b.tanks?.name)}</div>

@@ -11,6 +11,7 @@ import {
 } from '../lib/api'
 import { tankLabel, statusLabel } from '../lib/tanks'
 import { KEG_SIZES, CANS_PER_CUBE, sumSessions } from '../lib/packaging'
+import BeerDot from '../components/BeerDot.jsx'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -245,7 +246,7 @@ export default function PackagingBatchPage() {
   return (
     <div style={{ maxWidth: 820 }}>
       <p style={{ margin: 0 }}><Link to="/packaging">← Packaging</Link></p>
-      <h1>{batch.beer_style} #{batch.batch_number}</h1>
+      <h1><BeerDot name={batch.beer_style} />{batch.beer_style} #{batch.batch_number}</h1>
       <p style={{ color: 'var(--ink2)', marginTop: '-0.5rem' }}>
         {tankLabel(batch.tanks?.name)} · <span className={'pill pill-' + batch.status}>{statusLabel(batch.status)}</span> ·{' '}
         <Link to={`/batches/${batch.id}`}>Batch sheet</Link>

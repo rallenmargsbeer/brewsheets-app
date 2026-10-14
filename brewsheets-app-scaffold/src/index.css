@@ -695,3 +695,6 @@ tr.ing-added td { background: #f3faf5; }
 .sc-split { display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; align-items: center; justify-content: space-between; margin-top: 6px; padding: 0.45rem 0.6rem; background: var(--hl); border: 1px solid #c3dbe7; border-radius: 6px; font-size: 0.85rem; }
 .sc-split-why { color: var(--ink2); }
 .sc-split button { padding: 0.25rem 0.7rem; font-size: 0.8rem; }
+
+/* Beer colour accents (from the schedule's colour key) */
+.beer-dot { display: inline-block; width: 0.62em; height: 0.62em; border-radius: 50%; margin-right: 0.4em; vertical-align: 0.05em; box-shadow: 0 0 0 1px rgba(20, 26, 36, 0.18); flex-shrink: 0; }
