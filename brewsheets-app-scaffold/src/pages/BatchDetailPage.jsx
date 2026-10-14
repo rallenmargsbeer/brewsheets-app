@@ -14,6 +14,8 @@ import {
   upsertBrewRun,
   snapshotBrewRunIngredients,
   rescaleFermenterLines,
+  consolidateFermenterLines,
+  saveTankAddition,
   updateBrewRunIngredient,
   listPackagingSessions,
 } from '../lib/api'
@@ -377,7 +379,50 @@ function IngredientRow({ item, ingredients, onSaved }) {
   )
 }
 
-function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, masterIngredients, onSaved, isLastTurn, otherRuns = [] }) {
+// KO and Dip Hop additions (from the recipe's fermenter additions, held on the tank for the
+// whole batch): shown with the yeast on Brew Day, and marked added here or on the Cellar.
+const AT_KNOCKOUT = /^(ko|knock ?out|dip ?hop)/i
+function KnockoutAdditions({ items, onSaved }) {
+  const [busy, setBusy] = useState(null)
+  const [actual, setActual] = useState({})
+  const today = new Date().toLocaleDateString('en-CA')
+  async function mark(a, added) {
+    setBusy(a.id)
+    try {
+      const qty = actual[a.id] !== undefined && actual[a.id] !== '' ? Number(actual[a.id]) * 1000 : a.actual_qty ?? a.planned_qty
+      await saveTankAddition({ id: a.id, added_on: added ? today : null, actual_qty: added ? qty : null })
+      onSaved()
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <table style={{ marginTop: '0.5rem' }}>
+      <thead><tr><th>Item</th><th>When</th><th>Planned</th><th>Actual</th><th></th></tr></thead>
+      <tbody>
+        {items.map((a) => (
+          <tr key={a.id}>
+            <td style={{ fontWeight: 600 }}>{a.item_name}</td>
+            <td style={{ color: '#666' }}>{a.timing_note}</td>
+            <td>{formatQty(a.planned_qty == null ? null : Number(a.planned_qty))}</td>
+            <td>
+              {a.added_on ? formatQty(Number(a.actual_qty ?? a.planned_qty)) : (
+                <><input type="number" step="0.001" placeholder={a.planned_qty != null ? String(Number(a.planned_qty) / 1000) : ''} value={actual[a.id] ?? ''} onChange={(e) => setActual({ ...actual, [a.id]: e.target.value })} style={{ width: 90 }} /> <span style={{ fontSize: '0.75rem', color: '#888' }}>kg</span></>
+              )}
+            </td>
+            <td>
+              {a.added_on
+                ? <button className="secondary" disabled={busy === a.id} onClick={() => mark(a, false)}>✓ Added {a.added_on.slice(5)}</button>
+                : <button disabled={busy === a.id} onClick={() => mark(a, true)}>Add</button>}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, masterIngredients, onSaved, isLastTurn, otherRuns = [], koAdditions = [] }) {
   const [buffer] = useBuffer()
   const [form, setForm] = useState(() => seedForm(batchId, runNumber, run))
   const [saving, setSaving] = useState(false)
@@ -799,13 +844,14 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
 
       {/* Not gated to a stage — fermentation isn't time-tracked on this sheet, but
           pitching/dry-hopping happens right around knockout so it's worth showing here. */}
-      {fermenterItems.length > 0 && (
+      {(fermenterItems.length > 0 || (runNumber === 1 && koAdditions.length > 0)) && (
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
           <strong>Fermenter Additions · whole batch{turnVolumeL && turnCount ? ` (${(turnVolumeL * turnCount).toLocaleString()} L)` : ''}</strong>
           <p style={{ color: '#666', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
             For the whole batch, not this turn. Not gated to a stage: visible any time so you can see what's coming, or confirm what got pitched.
           </p>
-          <IngredientList items={fermenterItems} ingredients={masterIngredients} onSaved={onSaved} />
+          {fermenterItems.length > 0 && <IngredientList items={fermenterItems} ingredients={masterIngredients} onSaved={onSaved} />}
+          {runNumber === 1 && koAdditions.length > 0 && <KnockoutAdditions items={koAdditions} onSaved={onSaved} />}
         </div>
       )}
 
@@ -834,7 +880,9 @@ export default function BatchDetailPage() {
 
   function refresh() {
     Promise.all([getBatch(id), listTanks(), listIngredients()])
-      .then(([b, t, i]) => {
+      .then(async ([b, t, i]) => {
+        // Yeast spread over every turn (older batches): fold it onto turn 1 as the whole batch.
+        if (await consolidateFermenterLines(b).catch(() => false)) b = await getBatch(id)
         setBatch(b)
         setTanks(t)
         setIngredients(i)
@@ -990,6 +1038,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
             isLastTurn={n === turnCount}
             turnCount={turnCount}
             otherRuns={(batch.brew_runs ?? []).filter((r) => r.run_number !== n)}
+            koAdditions={(batch.tank_additions ?? []).filter((t) => AT_KNOCKOUT.test(String(t.timing_note ?? '').trim()))}
           />
         </div>
       ))}

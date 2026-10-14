@@ -342,6 +342,42 @@ export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL,
 
 // Edits a single planned/actual ingredient row — item_name (substitution), actual_qty
 // (shortage/overage), or extra_notes. Plain .update(), never touches planned_qty.
+// Fermenter additions belong to the whole batch, on its first turn. A batch made the old
+// way (or by an out-of-date page) has a share on every turn: fold the shares not yet added
+// onto the first turn. Returns true if anything changed.
+export async function consolidateFermenterLines(batch) {
+  if (!['planned', 'brewing'].includes(batch.status)) return false
+  const runs = [...(batch.brew_runs ?? [])].sort((a, b) => a.run_number - b.run_number)
+  if (runs.length < 2) return false
+  const first = runs[0]
+  const strays = runs.slice(1).flatMap((r) => (r.brew_run_ingredients ?? []).filter((l) => l.section === 'fermenter' && !l.added_at))
+  if (!strays.length) return false
+  const qty = (v) => (v == null ? 0 : Number(v))
+  const byName = new Map()
+  for (const l of strays) byName.set(l.item_name, [...(byName.get(l.item_name) ?? []), l])
+  for (const [name, lines] of byName) {
+    const planned = lines.reduce((a, l) => a + qty(l.planned_qty), 0)
+    const actual = lines.reduce((a, l) => a + qty(l.actual_qty ?? l.planned_qty), 0)
+    const keep = (first.brew_run_ingredients ?? []).find((l) => l.section === 'fermenter' && l.item_name === name)
+    if (keep) {
+      const { error } = await supabase.from('brew_run_ingredients').update({ planned_qty: qty(keep.planned_qty) + planned, actual_qty: qty(keep.actual_qty ?? keep.planned_qty) + actual }).eq('id', keep.id)
+      if (error) throw error
+      const { error: e2 } = await supabase.from('brew_run_ingredients').delete().in('id', lines.map((l) => l.id))
+      if (e2) throw e2
+    } else {
+      // Move the first stray line to turn 1 with the total; drop the rest.
+      const [move, ...rest] = lines
+      const { error } = await supabase.from('brew_run_ingredients').update({ brew_run_id: first.id, planned_qty: planned, actual_qty: actual }).eq('id', move.id)
+      if (error) throw error
+      if (rest.length) {
+        const { error: e2 } = await supabase.from('brew_run_ingredients').delete().in('id', rest.map((l) => l.id))
+        if (e2) throw e2
+      }
+    }
+  }
+  return true
+}
+
 // After the batch grows by a turn, the whole-batch fermenter lines (on its first turn)
 // scale up to the new total. Lines the brewer has already changed keep their actual.
 export async function rescaleFermenterLines(runs, oldTotalL, newTotalL) {
