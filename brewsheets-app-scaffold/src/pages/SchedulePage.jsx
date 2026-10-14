@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { listTanks, listRecipes } from '../lib/api'
 import { tankLabel } from '../lib/tanks'
 import {
@@ -247,6 +247,13 @@ export default function SchedulePage() {
   const [tanks, setTanks] = useState([])
   const [recipes, setRecipes] = useState([])
   const [templates, setTemplates] = useState([])
+  // From the Forecast page's Book button: /schedule?book=1&beer=ITP&date=2026-10-20&litres=10000
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    if (params.get('book') !== '1' || !templates.length || !recipes.length) return
+    setBooking({ date: params.get('date') || todayIso(), tankId: '', beer: params.get('beer') || '', litres: Number(params.get('litres')) || null })
+    setParams({}, { replace: true })
+  }, [params, templates, recipes])
   const [entries, setEntries] = useState([])
   const [editor, setEditor] = useState(false)
   const [editing, setEditing] = useState(null) // { cell, column }

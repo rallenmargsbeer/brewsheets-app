@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
 import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, saveBeerColour, freePackLane, freePackSlots } from '../lib/schedule'
-import { beerStyle, savedBeerStyle } from '../lib/beerColours'
+import { beerStyle, savedBeerStyle, looseKey } from '../lib/beerColours'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 import { loadForecast, forecastIndex, suggestPackSplit, YIELD } from '../lib/forecast'
 import { listStock, stockByBeer } from '../lib/stock'
@@ -40,6 +40,22 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const tank = tanks.find((t) => t.id === tankId)
   const steps = template && tank ? stepsForTank(template, tank) : []
   const lastDay = steps.reduce((m, s) => Math.max(m, s.day), 1)
+
+  // Opened for a beer (the Forecast page's Book button): its template, recipe and batch size.
+  useEffect(() => {
+    if (!initial?.beer) return
+    const key = looseKey(initial.beer)
+    const t = templates.find((x) => looseKey(x.name) === key)
+    const r = realRecipes.find((x) => (t && x.cellar_template_id === t.id) || looseKey(x.name) === key)
+    if (r) pickRecipe(r.id)
+    else if (t) { setTemplateId(t.id); setBeerName(t.name) }
+    else setBeerName(initial.beer)
+    if (initial.litres) {
+      const size = [2500, 1500, 1000].find((v) => initial.litres % v === 0 && initial.litres / v <= 4) ?? 2500
+      setTurnVolume(size)
+      setTurns(Math.max(1, Math.min(4, Math.round(initial.litres / size))))
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Picking a recipe fills in its linked template and name; picking a template fills the name.
   function pickRecipe(id) {

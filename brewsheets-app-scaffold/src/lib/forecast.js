@@ -365,3 +365,104 @@ export function suggestPackSplit({ fc, stock, beer, packDate, packagedL, today =
   const cubeShare = byNeed ? c.needL / (c.needL + g.needL) : c.demandL + g.demandL > 0 ? c.demandL / (c.demandL + g.demandL) : 0.5
   return { cubeShare, byNeed, cube: c, keg: g, cubesL: packagedL * cubeShare, kegsL: packagedL * (1 - cubeShare) }
 }
+
+// ---- Brews to book ----
+// The plan as separate brews with a brew-by date each, instead of one total: each beer's
+// stock is run forward day by day (as in brewPlan) and a brew is added whenever stock would
+// drop under the goal, dated LEAD_DAYS before. Then the brewhouse limit is applied month by
+// month, working back from the furthest: brews that don't fit move to the month before
+// (brewed early), and what doesn't fit by this month is late (stock dips under the goal).
+
+// Usual batch: 10,000 L for the big sellers, 7,500 L or 5,000 L for the rest; Megsy mixes
+// in a 5,000 L bright tank.
+export function batchSizeFor(beer, monthlyL) {
+  if (!profileOf(beer).brewhouse) return 5000
+  return monthlyL >= 20000 ? 10000 : monthlyL >= 9000 ? 7500 : 5000
+}
+
+// Latest working day on or before a date (Friday for a weekend).
+function workdayOnOrBefore(iso) {
+  let d = iso
+  for (let i = 0; i < 3; i++) {
+    const g = new Date(`${d}T00:00:00`).getDay()
+    if (g !== 0 && g !== 6) return d
+    d = addDays(d, -1)
+  }
+  return d
+}
+
+export function brewsToBook({ stock, fc, brews, capacityL = DEFAULT_CAPACITY_L, months = LOOKAHEAD_MONTHS, today = todayIso() }) {
+  const days = Math.round(months * 30.44)
+  const coverDays = fc.coverWeeks * 7
+  const stockOf = new Map()
+  for (const [beer, s] of stock) {
+    const k = beerMatch(beer)
+    const cur = stockOf.get(k) ?? { cubes: 0, kegs: 0, smallKegL: 0 }
+    stockOf.set(k, { cubes: cur.cubes + s.cubes, kegs: cur.kegs + s.kegs, smallKegL: cur.smallKegL + s.smallKegL })
+  }
+  const list = []
+  for (const beer of fc.beers) {
+    const k = beerMatch(beer)
+    const { leadDays, yield: yld, brewhouse } = profileOf(beer)
+    const s = stockOf.get(k) ?? { cubes: 0, kegs: 0, smallKegL: 0 }
+    const daily = []
+    for (let i = 0; i < days + coverDays; i++) {
+      const d = addDays(today, i)
+      daily.push(fc.perDay(beer, 'cube', d) * CUBE_L + fc.perDay(beer, 'keg', d) * KEG_L)
+    }
+    // Batch size from the next three months' brewhouse litres a month.
+    const monthlyL = (daily.slice(0, 91).reduce((a, x) => a + x, 0) / 3) / yld
+    const size = batchSizeFor(beer, monthlyL)
+    const supply = new Map()
+    for (const b of brews.filter((x) => beerMatch(x.beer) === k)) {
+      const d = b.ready < today ? today : b.ready
+      supply.set(d, (supply.get(d) ?? 0) + b.packaged)
+    }
+    let level = Math.max(0, s.cubes) * CUBE_L + Math.max(0, s.kegs) * KEG_L + Math.max(0, s.smallKegL)
+    let window = daily.slice(0, coverDays).reduce((a, x) => a + x, 0)
+    for (let i = 0, d = today; i < days; i++, d = addDays(d, 1)) {
+      level += supply.get(d) ?? 0
+      // Brews so stock is back at the goal on this day.
+      while (window - level > 1) {
+        const by = addDays(d, -leadDays)
+        list.push({ beer, size, brewhouse, leadDays, priority: priorityOf(beer), neededFor: d, brewBy: by < today ? today : by, late: by < today, early: false })
+        level += size * yld
+      }
+      level -= daily[i]
+      window += daily[i + coverDays] - daily[i]
+    }
+  }
+
+  // Brewhouse limit, week by week (the monthly limit spread evenly, less brews already
+  // booked that week). Each brew goes in the latest week with room on or before its brew-by
+  // date (so not brewed earlier than needed); one that can't be brewed in time goes in the
+  // first week with room left.
+  const weekly = (capacityL * 12) / 52
+  const mondayOf = (iso) => { const g = (new Date(`${iso}T00:00:00`).getDay() + 6) % 7; return addDays(iso, -g) }
+  const first = mondayOf(today)
+  const weeks = []
+  for (let w = first, i = 0; i < Math.ceil((months * 30.44) / 7) + 2; i++, w = addDays(w, 7)) {
+    // This week only has the working days left in it.
+    const daysLeft = i === 0 ? Math.max(0, 5 - daysBetween(w, today)) : 5
+    const booked = brews.filter((x) => x.status === 'booked' && profileOf(x.beer).brewhouse && x.start >= today && mondayOf(x.start) === w).reduce((s2, x) => s2 + x.litres, 0)
+    weeks.push({ w, room: (weekly * daysLeft) / 5 - booked })
+  }
+  const bookIn = (b, wk, late) => {
+    wk.room -= b.size
+    const fri = addDays(wk.w, 4)
+    const day = b.brewBy >= wk.w && b.brewBy <= fri ? workdayOnOrBefore(b.brewBy) : late ? wk.w : fri
+    b.bookOn = day < today ? today : day
+    b.late = late
+    b.early = !late && daysBetween(b.bookOn, b.brewBy) > 6
+  }
+  // Highest priority beer first, its brews in date order, so ITP's catch-up comes before
+  // a lower priority beer's routine brew.
+  const bh = list.filter((x) => x.brewhouse).sort((p1, p2) => p1.priority - p2.priority || p1.neededFor.localeCompare(p2.neededFor))
+  for (const x of bh) {
+    const onTime = x.late ? null : [...weeks].reverse().find((k) => k.w <= x.brewBy && k.room >= x.size - 1)
+    if (onTime) bookIn(x, onTime, false)
+    else bookIn(x, weeks.find((k) => k.room >= x.size - 1) ?? weeks[weeks.length - 1], true)
+  }
+  for (const x of list) if (!x.brewhouse) x.bookOn = x.brewBy <= today ? today : workdayOnOrBefore(x.brewBy)
+  return list.sort((p1, p2) => p1.bookOn.localeCompare(p2.bookOn) || p1.priority - p2.priority)
+}
