@@ -13,6 +13,7 @@ import {
   listIngredients,
   upsertBrewRun,
   snapshotBrewRunIngredients,
+  rescaleFermenterLines,
   updateBrewRunIngredient,
   listPackagingSessions,
 } from '../lib/api'
@@ -800,9 +801,9 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
           pitching/dry-hopping happens right around knockout so it's worth showing here. */}
       {fermenterItems.length > 0 && (
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
-          <strong>Fermenter Additions</strong>
+          <strong>Fermenter Additions · whole batch{turnVolumeL && turnCount ? ` (${(turnVolumeL * turnCount).toLocaleString()} L)` : ''}</strong>
           <p style={{ color: '#666', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
-            Not gated to a stage — visible any time so you can see what's coming, or confirm what got pitched.
+            For the whole batch, not this turn. Not gated to a stage: visible any time so you can see what's coming, or confirm what got pitched.
           </p>
           <IngredientList items={fermenterItems} ingredients={masterIngredients} onSaved={onSaved} />
         </div>
@@ -890,7 +891,9 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
     // the Add Brew wizard does — otherwise a manually-added turn would show no
     // ingredient list at all.
     if (batch.recipes && batch.turn_volume_l) {
-      await snapshotBrewRunIngredients(newRun.id, batch.recipes, batch.turn_volume_l)
+      // No yeast on the new turn: the whole-batch fermenter lines (turn 1) grow instead.
+      await snapshotBrewRunIngredients(newRun.id, batch.recipes, batch.turn_volume_l, {}, 0)
+      await rescaleFermenterLines(batch.brew_runs ?? [], batch.turn_volume_l * turnCount, batch.turn_volume_l * nextNumber)
     }
     if (!batch.turn_quantity || batch.turn_quantity < nextNumber) {
       await upsertBatch({ id: batch.id, turn_quantity: nextNumber })

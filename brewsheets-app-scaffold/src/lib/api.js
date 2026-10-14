@@ -296,7 +296,9 @@ async function yeastNames() {
   return new Set(data.map((d) => d.name))
 }
 
-export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL, bagCounts = {}) {
+// Fermenter additions (yeast) are for the whole batch, so they go on one turn only:
+// `fermenterVolumeL` is the batch volume for that turn and 0 for the others.
+export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL, bagCounts = {}, fermenterVolumeL = turnVolumeL) {
   const yeast = (recipe.recipe_fermenter_additions ?? []).length ? await yeastNames() : new Set()
   const sections = [
     ['grist', recipe.recipe_grist_items ?? [], 'ingredient_name'],
@@ -308,8 +310,10 @@ export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL,
   const rows = []
   let sortOrder = 0
   for (const [section, items, nameKey] of sections) {
+    if (section === 'fermenter' && !(fermenterVolumeL > 0)) continue
     for (const item of items) {
-      let qty = item.qty_g_per_l != null ? item.qty_g_per_l * turnVolumeL : null
+      const volumeL = section === 'fermenter' ? fermenterVolumeL : turnVolumeL
+      let qty = item.qty_g_per_l != null ? item.qty_g_per_l * volumeL : null
       let bagCount = null
       if (section === 'grist' && item.pack_size_kg > 0 && bagCounts[item.id] != null) {
         bagCount = bagCounts[item.id]
@@ -338,6 +342,21 @@ export async function snapshotBrewRunIngredients(brewRunId, recipe, turnVolumeL,
 
 // Edits a single planned/actual ingredient row — item_name (substitution), actual_qty
 // (shortage/overage), or extra_notes. Plain .update(), never touches planned_qty.
+// After the batch grows by a turn, the whole-batch fermenter lines (on its first turn)
+// scale up to the new total. Lines the brewer has already changed keep their actual.
+export async function rescaleFermenterLines(runs, oldTotalL, newTotalL) {
+  if (!(oldTotalL > 0) || !(newTotalL > 0)) return
+  const f = newTotalL / oldTotalL
+  for (const run of runs) {
+    for (const l of (run.brew_run_ingredients ?? []).filter((x) => x.section === 'fermenter')) {
+      const planned = l.planned_qty == null ? null : Number(l.planned_qty) * f
+      const untouched = l.actual_qty == null || Number(l.actual_qty) === Number(l.planned_qty)
+      const { error } = await supabase.from('brew_run_ingredients').update({ planned_qty: planned, ...(untouched ? { actual_qty: planned } : {}) }).eq('id', l.id)
+      if (error) throw error
+    }
+  }
+}
+
 export async function updateBrewRunIngredient(id, fields) {
   const { data, error } = await supabase
     .from('brew_run_ingredients')
@@ -366,7 +385,8 @@ export async function initializeBrewRuns(batchId, turnQuantity, recipe, turnVolu
     const bagCounts = Object.fromEntries(
       Object.entries(bagAllocations).map(([itemId, counts]) => [itemId, counts[i] ?? 0])
     )
-    await snapshotBrewRunIngredients(run.id, recipe, turnVolumeL, bagCounts)
+    // Yeast for the whole batch goes on turn 1.
+    await snapshotBrewRunIngredients(run.id, recipe, turnVolumeL, bagCounts, i === 0 ? turnVolumeL * turnQuantity : 0)
   }
   await createTankAdditions(batchId, recipe, turnVolumeL * turnQuantity)
   return runs
