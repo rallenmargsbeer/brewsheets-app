@@ -5,6 +5,7 @@ import { beerStyle, savedBeerStyle } from '../lib/beerColours'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 import { loadForecast, forecastIndex, suggestPackSplit, YIELD } from '../lib/forecast'
 import { listStock, stockByBeer } from '../lib/stock'
+import { loadSkuEfficiency } from '../lib/efficiency'
 
 const TURN_SIZES = [1000, 1500, 2500]
 const fmt = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -30,8 +31,8 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   // Forecast and stock, for a suggested cubes / kegs split.
   const [demand, setDemand] = useState(null)
   useEffect(() => {
-    Promise.all([loadForecast(), listStock()])
-      .then(([f, st]) => setDemand({ fc: forecastIndex(f), stock: stockByBeer(st), weeks: f.coverWeeks }))
+    Promise.all([loadForecast(), listStock(), loadSkuEfficiency().catch(() => () => null)])
+      .then(([f, st, effFor]) => setDemand({ fc: forecastIndex(f), stock: stockByBeer(st), weeks: f.coverWeeks, effFor }))
       .catch(() => setDemand(null))
   }, [])
 
@@ -151,14 +152,17 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const split = useMemo(() => {
     if (!demand) return null
     const packDate = packWhen?.date ?? addDays(brewDate, 21)
-    const packagedL = turnVolume * turns * YIELD
+    // Packaged litres from this beer's average overall efficiency (last 12 months), else the usual yield.
+    const eff = demand.effFor(beerName) ?? (recipeName ? demand.effFor(recipeName) : null)
+    const useEff = eff && eff.n >= 2
+    const packagedL = turnVolume * turns * (useEff ? eff.overall : YIELD)
     const args = { fc: demand.fc, stock: demand.stock, packDate, packagedL }
     // The forecast may name the beer as the recipe does ("Pale Ale") or as the schedule ("Pale").
     const sp = suggestPackSplit({ ...args, beer: beerName }) ?? (recipeName ? suggestPackSplit({ ...args, beer: recipeName }) : null)
     if (!sp) return null
     const pallets = Math.floor(sp.cubesL / LITRES_PER_PALLET + 0.25) // whole pallets, rounding down unless nearly full
     const kegs = Math.max(0, Math.floor((packagedL - pallets * LITRES_PER_PALLET) / 50))
-    return { ...sp, pallets, kegs, packagedL, packDate }
+    return { ...sp, pallets, kegs, packagedL, packDate, eff: useEff ? eff : null }
   }, [demand, beerName, recipeName, brewDate, turnVolume, turns, packWhen?.date])
 
   return (
@@ -309,6 +313,9 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
                   <strong>Suggested from the forecast:</strong> {split.pallets} pallet{split.pallets === 1 ? '' : 's'} ({split.pallets * CUBES_PER_PALLET} cubes) and {split.kegs} × 50 L kegs
                   <span className="sc-split-why">
                     {' '}· {Math.round(split.cubeShare * 100)}% cubes / {100 - Math.round(split.cubeShare * 100)}% kegs of about {Math.round(split.packagedL).toLocaleString()} L packaged
+                    {split.eff
+                      ? ` (${Math.round(split.eff.overall * 100)}% overall efficiency, the average of ${split.eff.n} ${beerName.trim() || 'batches'} batches in the last 12 months)`
+                      : ` (${Math.round(YIELD * 100)}% yield: not enough finished batches of this beer to use its own efficiency)`}
                     {split.byNeed
                       ? `. On ${fmt(split.packDate)} you'd be short ${Math.round(Math.max(0, split.cube.goal - split.cube.atPack))} cubes and ${Math.round(Math.max(0, split.keg.goal - split.keg.atPack))} kegs of ${demand.weeks} weeks' stock.`
                       : `. Stock covers ${demand.weeks} weeks either way, so this follows the forecast mix.`}

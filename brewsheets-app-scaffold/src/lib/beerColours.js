@@ -20,7 +20,7 @@ let loose = new Map() // looseKey -> { bg, fg }, so "Pale Ale" finds "Pale"
 
 // Stock and recipes name some beers longer than the schedule does.
 const LOOSE_ALIASES = { paleale: 'pale', redipa: 'red', inthepines: 'itp', margsdraught: 'draught', driftxpa: 'drift' }
-const looseKey = (name) => {
+export const looseKey = (name) => {
   const k = beerKey(name).replace(/[^a-z0-9]/g, '')
   return LOOSE_ALIASES[k] ?? k
 }
