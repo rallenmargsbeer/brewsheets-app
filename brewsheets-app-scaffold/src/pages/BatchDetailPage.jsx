@@ -422,7 +422,7 @@ function KnockoutAdditions({ items, onSaved }) {
   )
 }
 
-function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, masterIngredients, onSaved, isLastTurn, otherRuns = [], koAdditions = [] }) {
+function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, masterIngredients, onSaved, isLastTurn, otherRuns = [], koAdditions = [], batchFermenterItems = null }) {
   const [buffer] = useBuffer()
   const [form, setForm] = useState(() => seedForm(batchId, runNumber, run))
   const [saving, setSaving] = useState(false)
@@ -527,7 +527,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   const kettleItems = ingredients.filter((i) => i.section === 'kettle').sort((a, b) => Number(b.time_min ?? -1) - Number(a.time_min ?? -1))
   const kettleWaterItems = ingredients.filter((i) => i.section === 'water' && i.addition_stage === 'kettle')
   const whirlpoolItems = ingredients.filter((i) => i.section === 'whirlpool')
-  const fermenterItems = ingredients.filter((i) => i.section === 'fermenter')
+  // Whole-batch fermenter lines live on the first turn but show on every turn.
+  const fermenterItems = batchFermenterItems ?? ingredients.filter((i) => i.section === 'fermenter')
 
   // Target Strike Volume isn't a stored number — it's the grist bill for
   // this turn (already snapshotted at turn volume) times the recipe's own
@@ -858,14 +859,14 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
 
       {/* Not gated to a stage — fermentation isn't time-tracked on this sheet, but
           pitching/dry-hopping happens right around knockout so it's worth showing here. */}
-      {(fermenterItems.length > 0 || (runNumber === 1 && koAdditions.length > 0)) && (
+      {(fermenterItems.length > 0 || koAdditions.length > 0) && (
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
           <strong>Fermenter Additions · whole batch{turnVolumeL && turnCount ? ` (${(turnVolumeL * turnCount).toLocaleString()} L)` : ''}</strong>
           <p style={{ color: '#666', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
             For the whole batch, not this turn. Not gated to a stage: visible any time so you can see what's coming, or confirm what got pitched.
           </p>
           {fermenterItems.length > 0 && <IngredientList items={fermenterItems} ingredients={masterIngredients} onSaved={onSaved} />}
-          {runNumber === 1 && koAdditions.length > 0 && <KnockoutAdditions items={koAdditions} onSaved={onSaved} />}
+          {koAdditions.length > 0 && <KnockoutAdditions items={koAdditions} onSaved={onSaved} />}
         </div>
       )}
 
@@ -1053,6 +1054,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
             turnCount={turnCount}
             otherRuns={(batch.brew_runs ?? []).filter((r) => r.run_number !== n)}
             koAdditions={(batch.tank_additions ?? []).filter((t) => AT_KNOCKOUT.test(String(t.timing_note ?? '').trim()))}
+            batchFermenterItems={(batch.brew_runs ?? []).flatMap((r) => (r.brew_run_ingredients ?? []).filter((i) => i.section === 'fermenter'))}
           />
         </div>
       ))}
