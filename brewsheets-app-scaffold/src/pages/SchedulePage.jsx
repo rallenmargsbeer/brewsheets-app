@@ -21,6 +21,7 @@ import {
   suggestBrightTank,
   addWorkdays,
   nextWorkday,
+  freePackLane,
   addDays as plusDays,
   isWeekend,
   moveToBrightTank,
@@ -450,7 +451,15 @@ export default function SchedulePage() {
         const isArrival = brightTankIds.includes(x.tank_id) && x.entry_date === e.entry_date && x.slot === e.slot
         let d = isArrival ? u.entry_date : nextWorkday(plusDays(x.entry_date, delta))
         if (d < u.entry_date) d = u.entry_date
-        extra.push({ id: x.id, entry_date: d, slot: isArrival ? u.slot : x.slot })
+        const slot = isArrival ? u.slot : x.slot
+        // Canning / Kegging: into whichever of the two columns is free there.
+        let lane = x.lane
+        if (PACK_LANES.includes(x.lane)) {
+          const landed = [...upd, ...extra].map((m) => ({ ...entries.find((y) => y.id === m.id), ...m }))
+          const there = [...entries.filter((y) => !moving.has(y.id)), ...landed]
+          lane = freePackLane(x.lane.split('_')[0], d, slot, there) ?? x.lane
+        }
+        extra.push({ id: x.id, entry_date: d, slot, lane })
       }
     }
     return extra

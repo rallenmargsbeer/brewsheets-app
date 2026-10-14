@@ -298,6 +298,12 @@ export async function moveToBrightTank({ bt, beerName, filterDate, filterSlot, b
   return insertEntries(rows)
 }
 
+// Canning and kegging each have two columns: the first that's empty at that time, else
+// null (both taken). `ignore`: ids of entries that are moving away.
+export function freePackLane(kind, date, slot, entries, ignore = new Set()) {
+  return [`${kind}_1`, `${kind}_2`].find((l) => !entries.some((e) => e.lane === l && e.entry_date === date && e.slot === slot && !ignore.has(e.id) && (e.text ?? '').trim())) ?? null
+}
+
 // Text for the Canning / Kegging cells from a packaging plan.
 export function packTexts(pack) {
   const pallets = Number(pack?.pallets) || 0
@@ -358,8 +364,10 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
   // Planned packaging goes straight into the Canning / Kegging columns on pack day.
   const when = plan.pack
   const { canning, kegging } = packTexts(pack)
-  if (when && canning) entries.push({ entry_date: when.date, slot: when.slot, lane: 'canning_1', text: canning, beer_name: beerName, booking_id: booking.id })
-  if (when && kegging) entries.push({ entry_date: when.date, slot: when.slot, lane: 'kegging_1', text: kegging, beer_name: beerName, booking_id: booking.id })
+  // In whichever Canning / Kegging column is free then.
+  const there = when && (canning || kegging) ? await listScheduleEntries(when.date, when.date) : []
+  if (when && canning) entries.push({ entry_date: when.date, slot: when.slot, lane: freePackLane('canning', when.date, when.slot, there) ?? 'canning_1', text: canning, beer_name: beerName, booking_id: booking.id })
+  if (when && kegging) entries.push({ entry_date: when.date, slot: when.slot, lane: freePackLane('kegging', when.date, when.slot, there) ?? 'kegging_1', text: kegging, beer_name: beerName, booking_id: booking.id })
   if (entries.length) {
     const { error: e2 } = await supabase.from('schedule_entries').insert(entries)
     if (e2) throw e2
