@@ -109,8 +109,9 @@ export function assignBeers(entries, { knownBeers = [], bookingBeer = {} } = {})
         if (last && last.beer === current && last.open) last.end = k
         else tankRuns.push({ beer: current, start: k, end: k, open: true })
       }
-      // Filtering moves the beer out to a BT, so the FV's run ends after that cell.
-      if (/filter/i.test(e.text) && !/\?$/.test(e.text.trim())) {
+      // Filtering moves the beer out to a BT, and packaging (Can & Keg) empties the tank, so
+      // the run ends after that cell; the same beer coming back later is a new stay.
+      if ((/filter/i.test(e.text) || /^\s*(can\b|keg\b|can\s*&|packag)/i.test(e.text)) && !/\?$/.test(e.text.trim())) {
         current = null
         if (tankRuns.length) tankRuns[tankRuns.length - 1].open = false
       }
