@@ -72,8 +72,10 @@ export async function loadDay(date) {
   return { date, brewhouse, packaging, other, tanks: tankDays }
 }
 
+// Through an RPC so every signed-in user (not only schedule editors) can tick tasks off.
 export async function setTaskDone(id, done) {
-  await saveScheduleEntry({ id, done })
+  const { error } = await supabase.rpc('set_task_done', { p_id: id, p_done: done })
+  if (error) throw error
 }
 
 // Suggestions from the gravity readings of a fermenting batch (°P). Target FG from the recipe.

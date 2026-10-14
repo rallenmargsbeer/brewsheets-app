@@ -53,7 +53,7 @@ export default function TodayPage() {
           {date !== todayIso() && <button className="secondary" onClick={() => setDate(todayIso())}>Today</button>}
         </div>
       </div>
-      <p style={{ color: 'var(--ink2)', marginTop: 4 }}>{fmtDay(date)} · from the <Link to="/schedule">schedule</Link>{editor ? ' · tick tasks off as they’re done' : ''}</p>
+      <p style={{ color: 'var(--ink2)', marginTop: 4 }}>{fmtDay(date)} · from the <Link to="/schedule">schedule</Link>{' · tick tasks off as they’re done'}</p>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {!day && !error && <p>Loading…</p>}
       {empty && <p className="stock-muted">Nothing on the schedule for this day.</p>}
