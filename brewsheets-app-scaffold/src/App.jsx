@@ -23,6 +23,7 @@ import DilutionPage from './pages/DilutionPage.jsx'
 import SignupPage from './pages/SignupPage.jsx'
 import SetPinPage from './pages/SetPinPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
+import PackagingMaterialsPage from './pages/PackagingMaterialsPage.jsx'
 import { AuthProvider, RequireAuth, RequireAdmin, useAuth, signOut } from './auth.jsx'
 import { BeerColoursProvider } from './components/BeerDot.jsx'
 
@@ -95,6 +96,7 @@ function Shell() {
           <Route path="/today" element={user(<TodayPage />)} />
           <Route path="/schedule" element={user(<SchedulePage />)} />
           <Route path="/schedule/templates" element={admin(<CellarTemplatesPage />)} />
+          <Route path="/schedule/materials" element={user(<PackagingMaterialsPage />)} />
           <Route path="/cellar" element={user(<CellarPage />)} />
           <Route path="/packaging" element={user(<PackagingPage />)} />
           <Route path="/packaging/:id" element={user(<PackagingBatchPage />)} />
