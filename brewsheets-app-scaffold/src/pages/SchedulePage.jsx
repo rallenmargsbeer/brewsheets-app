@@ -19,6 +19,8 @@ import {
   listBookings,
   cancelBooking,
   suggestBrightTank,
+  addWorkdays,
+  isWeekend,
   moveToBrightTank,
   getEntriesByIds,
   updateEntries,
@@ -84,9 +86,9 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
 
   // A Filter in an FV: offer to move the beer into a free bright tank (unless it's already there).
   const filterEntry = column.group === 'fv' ? entries.find((e) => /^filter\b/i.test(e.text.trim()) && !/\?$/.test(e.text)) : null
-  const btEnd = addDays(cell.date, 1)
+  const packDate = addWorkdays(cell.date, 1)
   const alreadyInBt = filterEntry && beer && allEntries.some((e) => brightTanks.some((t) => t.id === e.tank_id) && e.entry_date === cell.date && e.text === beer)
-  const suggestedBt = filterEntry && beer && !alreadyInBt ? suggestBrightTank(brightTanks, allEntries, cell.date, btEnd, fvLitres) : null
+  const suggestedBt = filterEntry && beer && !alreadyInBt ? suggestBrightTank(brightTanks, allEntries, cell.date, packDate, fvLitres) : null
   const [btId, setBtId] = useState('')
   const chosenBt = btId ? brightTanks.find((t) => t.id === btId) : suggestedBt
 
@@ -413,6 +415,16 @@ export default function SchedulePage() {
     const list = byCell.get(`${date}|${slot}|${c.key}`) ?? []
     setEditing({ cell: { date, slot }, column: c, list, beer: cellBeer(c, list, date, slot) })
   }
+  // Double-click: an empty tank or brewhouse cell books a brew there (date, and tank or
+  // first turn, filled in); anything else opens the cell editor.
+  function dblClickCell(r, ci) {
+    const c = columns[ci]
+    const { date, slot } = cellAt(r)
+    const list = byCell.get(`${date}|${slot}|${c.key}`) ?? []
+    if (!list.length && (c.group === 'fv' || c.group === 'brew')) {
+      setBooking({ date, tankId: c.group === 'fv' ? c.tankId : '', firstTurn: c.group === 'brew' ? { date, slot, lane: c.lane } : null })
+    } else editCell(r, ci)
+  }
 
   // All of a booked brew's cells, even ones beyond the loaded weeks, move together.
   async function moveBookingTo(booking, newDate) {
@@ -516,7 +528,7 @@ export default function SchedulePage() {
           {pastMonths().map((ym) => <option key={ym} value={ym}>{fmtMonth(ym)}</option>)}
         </select>
         {archive && <strong>Archive: {fmtMonth(archive)} (view only)</strong>}
-        {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit</span>}
+        {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit (an empty tank or brew cell books a brew there)</span>}
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {showPlan && editor && <SchedulePlanPanel />}
@@ -553,7 +565,7 @@ export default function SchedulePage() {
                 <tr
                   key={d + slot}
                   data-day={slot === 'AM' ? d : undefined}
-                  className={(d === today && slot === 'AM' ? 'sc-today ' : '') + (d === today ? 'sc-todayrow ' : '') + (slot === 'PM' ? 'sc-pm ' : '') + (new Date(`${d}T00:00:00`).getDay() === 0 && slot === 'PM' ? 'sc-weekend' : '')}
+                  className={(d === today && slot === 'AM' ? 'sc-today ' : '') + (d === today ? 'sc-todayrow ' : '') + (slot === 'PM' ? 'sc-pm ' : '') + (new Date(`${d}T00:00:00`).getDay() === 0 && slot === 'PM' ? 'sc-weekend ' : '') + (isWeekend(d) ? 'sc-wkend' : '')}
                 >
                   <td className="sc-day">
                     {slot === 'AM' ? <strong>{fmtDay(d)}</strong> : null} <span className="sc-slot">{slot}</span>
@@ -599,7 +611,7 @@ export default function SchedulePage() {
                           selecting.current = true
                         }}
                         onMouseEnter={() => { if (selecting.current) setSel((s) => s && { a: s.a, f: { r, c: ci } }) }}
-                        onDoubleClick={editor && !archive ? () => editCell(r, ci) : undefined}
+                        onDoubleClick={editor && !archive ? () => dblClickCell(r, ci) : undefined}
                         onContextMenu={editor && !archive ? (e) => {
                           e.preventDefault()
                           if (!inSel) setSel({ a: { r, c: ci }, f: { r, c: ci } })
@@ -700,6 +712,7 @@ export default function SchedulePage() {
           brightTanks={tanks.filter((t) => t.tank_type === 'BBT')}
           recipes={recipes}
           templates={templates}
+          initial={booking === true ? null : booking}
           onClose={() => setBooking(false)}
           onBooked={(b) => {
             setBooking(false)

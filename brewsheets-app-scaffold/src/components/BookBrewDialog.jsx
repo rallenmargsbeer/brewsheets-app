@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
-import { addDays, todayIso, stepsForTank, splitAtFilter, suggestBrightTank, listScheduleEntries, createBooking, packDay, packTexts } from '../lib/schedule'
+import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday } from '../lib/schedule'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 import { loadForecast, forecastIndex, suggestPackSplit, YIELD } from '../lib/forecast'
 import { listStock, stockByBeer } from '../lib/stock'
@@ -8,19 +8,19 @@ import { listStock, stockByBeer } from '../lib/stock'
 const TURN_SIZES = [1000, 1500, 2500]
 const fmt = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
 
-export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templates, onClose, onBooked }) {
+export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templates, initial, onClose, onBooked }) {
   const realRecipes = recipes.filter((r) => !r.name.startsWith('Historical import'))
   const [recipeId, setRecipeId] = useState('')
   const [templateId, setTemplateId] = useState('')
   const [beerName, setBeerName] = useState('')
-  const [brewDate, setBrewDate] = useState(todayIso())
-  const [tankId, setTankId] = useState('')
+  const [brewDate, setBrewDate] = useState(initial?.date ?? todayIso())
+  const [tankId, setTankId] = useState(initial?.tankId ?? '')
   const [turnVolume, setTurnVolume] = useState(2500)
   const [turns, setTurns] = useState(4)
   const [notes, setNotes] = useState('')
   const [pack, setPack] = useState({ pallets: '', kegs_50: '', kegs_30: '', kegs_20: '' })
-  const [clashes, setClashes] = useState([])
   const [windowEntries, setWindowEntries] = useState([])
+  const [picked, setPicked] = useState(null) // brewhouse turn slots picked by hand; null = suggested
   const [btChoice, setBtChoice] = useState('auto') // 'auto' = use the suggestion, '' = none, or a tank id
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -51,42 +51,75 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     if (t && !beerName) setBeerName(t.name)
   }
 
-  // Warn if the tank already has anything on the schedule for the days this brew needs it.
+  // The schedule around this brew: tank clashes, brewhouse slots already taken, and bright
+  // tanks (a week either side, for emptying and weekend moves).
   useEffect(() => {
-    if (!tankId || !brewDate) return setClashes([])
+    if (!brewDate) return
+    const until = addDays(brewDate, lastDay + 10)
+    listScheduleEntries(addDays(brewDate, -7), until)
+      .then(setWindowEntries)
+      .catch(() => setWindowEntries([]))
+  }, [brewDate, lastDay])
+  const clashes = useMemo(() => {
     const until = addDays(brewDate, lastDay - 1)
-    listScheduleEntries(brewDate, until)
-      .then((rows) => {
-        setWindowEntries(rows)
-        setClashes(rows.filter((r) => r.tank_id === tankId).sort((a, b) => a.entry_date.localeCompare(b.entry_date)))
-      })
-      .catch(() => setClashes([]))
-  }, [tankId, brewDate, lastDay])
+    return windowEntries.filter((r) => r.tank_id === tankId && r.entry_date >= brewDate && r.entry_date <= until).sort((a, b) => a.entry_date.localeCompare(b.entry_date))
+  }, [windowEntries, tankId, brewDate, lastDay])
 
-  // Filter day moves the beer to a bright tank; suggest one that's empty for its stay there.
-  const { filterStep, btSteps } = splitAtFilter(steps)
-  const filterDate = filterStep ? addDays(brewDate, filterStep.day - 1) : null
-  const btEnd = filterStep ? addDays(brewDate, Math.max(filterStep.day, ...btSteps.map((s) => s.day)) - 1) : null
-  const suggestedBt = filterStep ? suggestBrightTank(brightTanks, windowEntries, filterDate, btEnd, turnVolume * turns) : null
+  // Brewhouse turns: which slots each goes in. Suggested = the first free ones from the brew
+  // day (or from the cell double-clicked); the brewer can pick others.
+  const takenTurns = useMemo(() => {
+    const m = new Map()
+    for (const e of windowEntries) if (BREW_LANES.includes(e.lane) && e.text?.trim()) m.set(`${e.entry_date}|${e.slot}|${e.lane}`, e.text)
+    return m
+  }, [windowEntries])
+  const suggestedTurns = useMemo(() => {
+    const free = defaultTurnSlots(brewDate, 40, new Set(takenTurns.keys()))
+    const first = initial?.firstTurn && initial.firstTurn.date === brewDate ? free.findIndex((t) => t.date === initial.firstTurn.date && t.slot === initial.firstTurn.slot && t.lane === initial.firstTurn.lane) : -1
+    return free.slice(Math.max(0, first), Math.max(0, first) + turns)
+  }, [brewDate, turns, takenTurns, initial])
+  useEffect(() => setPicked(null), [brewDate, turns])
+  const turnSlots = picked ?? suggestedTurns
+  const turnKey = (t) => `${t.date}|${t.slot}|${t.lane}`
+  const slotDays = useMemo(() => {
+    const days = [brewDate]
+    while (days.length < 3) days.push(nextWorkday(addDays(days[days.length - 1], 1)))
+    for (const t of turnSlots) if (!days.includes(t.date)) days.push(t.date)
+    return days.sort()
+  }, [brewDate, turnSlots])
+  function toggleTurn(t) {
+    const cur = turnSlots
+    const k = turnKey(t)
+    if (cur.some((x) => turnKey(x) === k)) setPicked(cur.filter((x) => turnKey(x) !== k))
+    else if (cur.length < turns) setPicked([...cur, t].sort((a, b) => turnKey(a).localeCompare(turnKey(b))))
+  }
+
+  // Filter day (never a weekend) moves the beer to a bright tank; suggest one that's free
+  // from then until it's packaged and the tank is emptied.
+  const plan = planSteps(brewDate, steps)
+  const filterStep = plan.filter
+  const filterDate = plan.filter?.date ?? null
+  const rawFilterDate = plan.filter ? addDays(brewDate, plan.filter.day - 1) : null
+  const packDate = plan.pack?.date ?? null
+  const suggestedBt = filterStep ? suggestBrightTank(brightTanks, windowEntries, filterDate, packDate, turnVolume * turns) : null
   const brightTank = btChoice === 'auto' ? suggestedBt : brightTanks.find((t) => t.id === btChoice) ?? null
 
   // What goes where: FV jobs up to Filter, then (if a bright tank is set) the beer's arrival and BT jobs.
   const preview = useMemo(() => {
     const name = (s) => (s.task === template?.name ? beerName || s.task : s.task)
-    const inFv = brightTank && filterStep ? splitAtFilter(steps).fvSteps : steps
-    const rows = inFv.map((s, i) => ({ key: 'f' + i, date: addDays(brewDate, s.day - 1), slot: s.slot, text: name(s), where: tank ? tankLabel(tank.name) : '' }))
-    if (brightTank && filterStep) {
-      rows.push({ key: 'arr', date: filterDate, slot: filterStep.slot, text: `${beerName || 'beer'} in`, where: tankLabel(brightTank.name) })
-      btSteps.forEach((s, i) => rows.push({ key: 'b' + i, date: addDays(brewDate, s.day - 1), slot: s.slot, text: s.task, where: tankLabel(brightTank.name) }))
+    const inFv = brightTank && plan.filter ? plan.fv : [...plan.fv, ...plan.afterFilter]
+    const rows = inFv.map((s, i) => ({ key: 'f' + i, date: s.date, slot: s.slot, text: name(s), where: tank ? tankLabel(tank.name) : '' }))
+    if (brightTank && plan.filter) {
+      rows.push({ key: 'arr', date: plan.filter.date, slot: plan.filter.slot, text: `${beerName || 'beer'} in`, where: tankLabel(brightTank.name) })
+      plan.bt.forEach((s, i) => rows.push({ key: 'b' + i, date: s.date, slot: s.slot, text: s.task, where: tankLabel(brightTank.name) }))
     }
     return rows
-  }, [steps, brewDate, beerName, template, brightTank, filterStep, filterDate, btSteps, tank])
+  }, [plan, beerName, template, brightTank, tank])
 
   async function book() {
     setSaving(true)
     setError(null)
     try {
-      const b = await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, notes, pack })
+      const b = await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, turnSlots, notes, pack })
       onBooked(b)
     } catch (e) {
       setError(e.message)
@@ -95,10 +128,10 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   }
 
   const tooBig = tank?.capacity_l != null && turnVolume * turns > Number(tank.capacity_l)
-  const ready = beerName.trim() && brewDate && tank && template && !tooBig
+  const ready = beerName.trim() && brewDate && tank && template && !tooBig && turnSlots.length === turns
   const packLitres = Math.round((Number(pack.pallets) || 0) * LITRES_PER_PALLET + [50, 30, 20].reduce((t, l) => t + (Number(pack[`kegs_${l}`]) || 0) * l, 0))
   const overPacked = packLitres > turnVolume * turns
-  const packWhen = filterStep ? packDay(brewDate, filterStep, btSteps) : null
+  const packWhen = plan.pack
   const recipeName = realRecipes.find((r) => r.id === recipeId)?.name
   const split = useMemo(() => {
     if (!demand) return null
@@ -165,10 +198,44 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
               {(turnVolume * turns).toLocaleString()} L{tooBig ? ` is more than ${tankLabel(tank.name)} holds` : ''}
             </div>
           </div>
+          <div>
+            <div>Brewhouse slots <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>· {turnSlots.length} of {turns} picked{picked ? '' : ' (suggested: the first free ones)'}</span></div>
+            <table className="turn-picker">
+              <thead>
+                <tr><th></th>{TURN_SLOTS.map(([slot, lane]) => <th key={slot + lane}>{slot} {LANE_LABEL[lane]}</th>)}</tr>
+              </thead>
+              <tbody>
+                {slotDays.map((d) => (
+                  <tr key={d} className={isWeekend(d) ? 'turn-wkend' : ''}>
+                    <th>{fmt(d)}</th>
+                    {TURN_SLOTS.map(([slot, lane]) => {
+                      const t = { date: d, slot, lane }
+                      const k = turnKey(t)
+                      const taken = takenTurns.get(k)
+                      const n = turnSlots.findIndex((x) => turnKey(x) === k)
+                      return (
+                        <td key={k}>
+                          {taken ? (
+                            <span className="turn-taken" title="Already booked">{taken}</span>
+                          ) : (
+                            <button type="button" className={n >= 0 ? 'turn-on' : 'secondary'} onClick={() => toggleTurn(t)} disabled={n < 0 && turnSlots.length >= turns}>
+                              {n >= 0 ? `Turn ${n + 1}` : '+'}
+                            </button>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {turnSlots.length < turns && <div className="sc-warn" style={{ margin: '4px 0 0' }}>Pick {turns - turnSlots.length} more slot{turns - turnSlots.length === 1 ? '' : 's'}.</div>}
+            {isWeekend(brewDate) && <div className="sc-warn" style={{ margin: '4px 0 0' }}>{fmt(brewDate)} is a weekend.</div>}
+          </div>
           {filterStep && (
-            <label>Bright tank on filter day ({fmt(filterDate)})
+            <label>Bright tank on filter day ({fmt(filterDate)}{rawFilterDate !== filterDate ? `, moved from ${fmt(rawFilterDate)} as we don't work weekends` : ''})
               <select value={btChoice} onChange={(e) => setBtChoice(e.target.value)}>
-                <option value="auto">{suggestedBt ? `${tankLabel(suggestedBt.name)} (suggested, free ${fmt(filterDate)} to ${fmt(btEnd)})` : 'No free bright tank found'}</option>
+                <option value="auto">{suggestedBt ? `${tankLabel(suggestedBt.name)} (suggested, free ${fmt(filterDate)} to ${fmt(btFreeAfter(suggestedBt, packDate))}, ${emptyingDays(suggestedBt)} day${emptyingDays(suggestedBt) > 1 ? 's' : ''} to empty)` : 'No free bright tank found'}</option>
                 {brightTanks.map((t) => (
                   <option key={t.id} value={t.id}>
                     {tankLabel(t.name)}{t.capacity_l != null ? ` (${Number(t.capacity_l).toLocaleString()} L)` : ''}
@@ -179,7 +246,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
             </label>
           )}
           {filterStep && btChoice === 'auto' && !suggestedBt && (
-            <p className="sc-warn" style={{ margin: 0 }}>No bright tank is empty and big enough from {fmt(filterDate)} to {fmt(btEnd)}. Pick one anyway, or leave it in the FV and move it later.</p>
+            <p className="sc-warn" style={{ margin: 0 }}>No bright tank is empty and big enough from {fmt(filterDate)} until it's packaged ({fmt(packDate)}) and emptied. Pick one anyway, or leave it in the FV and move it later.</p>
           )}
           <div>
             <div>Packaging plan</div>

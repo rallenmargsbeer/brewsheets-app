@@ -719,3 +719,13 @@ tr.ing-added td { background: #f3faf5; }
 .users-table th, .users-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid #e3e8ec; text-align: left; }
 .users-pending td { background: #fff6f1; }
 .users-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+/* Weekends: empty cells pale red (beer-coloured cells keep their colour). */
+.sc-grid tbody tr.sc-wkend td.sc-cell { background: #fbe3e3; }
+/* Book a brew: brewhouse slot picker */
+.turn-picker { border-collapse: collapse; margin-top: 4px; font-size: 0.85rem; width: 100%; }
+.turn-picker th, .turn-picker td { padding: 3px 4px; text-align: center; border-bottom: 1px solid #e3e8ec; }
+.turn-picker tbody th { text-align: left; white-space: nowrap; font-weight: 500; }
+.turn-picker button { width: 100%; padding: 4px 6px; font-size: 0.8rem; }
+.turn-picker button.turn-on { font-weight: 600; }
+.turn-taken { display: block; color: var(--ink2); font-size: 0.75rem; background: #eef1f4; border-radius: 6px; padding: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 90px; }
+.turn-picker tr.turn-wkend td, .turn-picker tr.turn-wkend th { background: #fbe3e3; }
