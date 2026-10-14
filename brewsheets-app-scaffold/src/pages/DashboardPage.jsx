@@ -3,46 +3,9 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../auth'
 import template from '../dashboardTemplate.html?raw'
+import { appFermenterLitres } from '../lib/efficiency'
 
 const KEYS = ['products', 'assemblies', 'fbBatches', 'beerRange', 'parked', 'eff', 'meta', 'sheetInfo']
-
-// Same key the dashboard uses for a batch: batch number + beer code.
-const bkey = (b) => (b.bn + '__' + b.beer[0]).replace(/[^A-Za-z0-9_-]+/g, '-')
-
-// Unleashed entries filed under the wrong batch number (can't be changed there): Unleashed key -> real batch number.
-const ALIAS = { '396__FB-Drift-XPA': '395', '397__FB-ITP': '398' }
-
-// Match an Unleashed beer code (e.g. FB-ITP, FB-Draught) to a brewsheets-app beer name (e.g. In The Pines, Draught).
-const nbn = (x) => String(x).trim().replace(/^0+(?=\d)/, '')
-const norm = (s) => String(s || '').toLowerCase().replace(/^fb-/, '').replace(/[^a-z0-9]/g, '')
-const initials = (s) => String(s || '').toLowerCase().replace(/^fb-/, '').split(/[^a-z0-9]+/).filter(Boolean).map((w) => w[0]).join('')
-const sameBeer = (style, beer) => {
-  const a = norm(style), b = norm(beer)
-  if (!a || !b) return false
-  return a === b || a.includes(b) || b.includes(a) || initials(style) === b
-}
-
-// Turn the brewsheets-app litres (per batch number) into per-batch figures.
-// If Unleashed has several different beers under one batch number, only the beer that matches the app's beer gets the litres.
-function appFermenterLitres(eff, rows, styles) {
-  const byBn = {}
-  for (const r of rows || []) byBn[nbn(r.batch_number)] = Number(r.fv_litres)
-  const style = {}
-  for (const r of styles || []) style[nbn(r.batch_number)] = r.beer_style
-  const out = {}
-  const groups = {}
-  for (const b of eff) { const k = ALIAS[bkey(b)] || nbn(b.bn); (groups[k] = groups[k] || []).push(b) }
-  for (const [bn, all] of Object.entries(groups)) {
-    const fv = byBn[bn]
-    if (!(fv > 0)) continue
-    let list = all
-    if (new Set(all.map((b) => b.beer[0])).size > 1) list = all.filter((b) => sameBeer(style[bn], b.beer[0]))
-    const tot = list.reduce((s, b) => s + b.L, 0)
-    if (!(tot > 0)) continue
-    for (const b of list) out[bkey(b)] = Math.round(fv * (b.L / tot))
-  }
-  return out
-}
 
 export default function DashboardPage() {
   const { session } = useAuth()
