@@ -9,10 +9,10 @@ import { CUBES_PER_PALLET } from './packaging'
 
 // Product names that differ from the schedule's ("Lager" products are the Draught).
 const ALIASES = { lager: 'draught' }
-const nameKey = (s) => { const k = looseKey(s); return ALIASES[k] ?? k }
+export const nameKey = (s) => { const k = looseKey(s); return ALIASES[k] ?? k }
 
 // "Cube-ITP" -> { fmt: 'cube', size: null, beer: 'itp' }; "30l Keg-Megsy" -> keg 30.
-function parseProduct(code) {
+export function parseProduct(code) {
   const m = String(code).match(/^\s*(?:(\d+)\s*l\s+)?(cube|keg)\s*-\s*(.+)$/i)
   if (!m) return null
   const fmt = m[2].toLowerCase()

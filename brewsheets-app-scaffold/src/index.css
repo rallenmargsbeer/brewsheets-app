@@ -757,3 +757,5 @@ tr.ing-added td { background: #f3faf5; }
 .app-nav .nav-save { background: var(--accent); color: #fff; border: none; opacity: 1; font-weight: 600; }
 .nav-who:disabled { opacity: 0.7; cursor: default; }
 .nav-error { color: #ffb4a8; font-size: 0.85rem; }
+.unl-table tr.unl-done td { color: var(--ink2); }
+.unl-table td button { padding: 2px 10px; font-size: 0.8rem; }

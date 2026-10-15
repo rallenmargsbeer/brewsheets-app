@@ -19,6 +19,7 @@ export const TABS = [
   { path: '/stock', label: 'Stock' },
   { path: '/forecast', label: 'Forecast' },
   { path: '/reports', label: 'Reports', admin: true },
+  { path: '/unleashed', label: 'Unleashed', admin: true },
   { path: '/users', label: 'Users', admin: true, locked: true },
 ]
 
@@ -29,7 +30,8 @@ function normalise(cfg) {
   const order = (cfg?.order ?? DEFAULT.order).filter((p) => TABS.some((t) => t.path === p))
   for (const t of TABS) if (!order.includes(t.path)) order.push(t.path)
   const adminOnly = new Set(cfg?.adminOnly ?? DEFAULT.adminOnly)
-  for (const t of TABS) if (t.locked) adminOnly.add(t.path)
+  // Tabs added since the layout was saved start with their default (so a new admin tab stays admin only).
+  for (const t of TABS) if (t.locked || (t.admin && cfg?.order && !cfg.order.includes(t.path))) adminOnly.add(t.path)
   return { order, adminOnly: [...adminOnly] }
 }
 
