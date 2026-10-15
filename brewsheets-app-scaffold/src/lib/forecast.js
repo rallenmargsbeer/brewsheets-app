@@ -171,7 +171,13 @@ export async function loadPlanning({ days = 400, today = todayIso() } = {}) {
     for (const r of runs.get(t.id) ?? []) {
       const start = dateOf(r.start)
       const end = dateOf(r.end)
-      if (start > today || end < today) continue
+      if (end < today) continue
+      // A beer mixed straight into the BT (Megsy) and booked ahead: counts from its Can & Keg.
+      if (start > today) {
+        const mix = bookings.find((b) => b.tank_id === t.id && b.brew_date === start)
+        if (mix) out.push({ beer: r.beer, tank: t.name, status: 'booked', start, ready: end, litres: Number(mix.turn_volume_l) || Number(t.capacity_l) })
+        continue
+      }
       const from = filtered.filter((f) => f.beer === r.beer && f.end <= start && f.end >= addDays(start, -3)).sort((a, b) => b.end.localeCompare(a.end))[0]
       // Filtered today or later: still counted with its FV.
       if (from && from.end >= today) continue

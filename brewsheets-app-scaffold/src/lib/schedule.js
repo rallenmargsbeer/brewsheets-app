@@ -429,6 +429,49 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
   return booking
 }
 
+// Books a beer mixed straight into a bright tank (Megsy): no brewhouse, no FV. The beer goes
+// in on the mix day, Can & Keg the next working day, and planned packaging on that day in a
+// free Canning / Kegging column. Nothing lands in a cell that's already taken.
+export async function createMixBooking({ date, beerName, brightTank, litres, pack, packSlots, notes }) {
+  const { data: booking, error } = await supabase
+    .from('brew_bookings')
+    .insert({
+      brew_date: date,
+      beer_name: beerName,
+      recipe_id: null,
+      cellar_template_id: null,
+      tank_id: brightTank.id,
+      turn_volume_l: litres || null,
+      turn_quantity: 1,
+      notes: notes || null,
+      pack_cubes: (Number(pack?.pallets) || 0) * CUBES_PER_PALLET || null,
+      pack_kegs_50: Number(pack?.kegs_50) || null,
+      pack_kegs_30: Number(pack?.kegs_30) || null,
+      pack_kegs_20: Number(pack?.kegs_20) || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  const around = await listScheduleEntries(date, addDays(date, 21))
+  const bt = { lane: 'tank', tankId: brightTank.id }
+  const inAt = nextFreeCell(around, bt, date, 'AM')
+  const placed = [...around, { lane: 'tank', tank_id: brightTank.id, entry_date: inAt.date, slot: inAt.slot, text: beerName }]
+  const ck = nextFreeCell(placed, bt, addWorkdays(inAt.date, 1), 'AM')
+  const entries = [
+    { entry_date: inAt.date, slot: inAt.slot, lane: 'tank', tank_id: brightTank.id, text: beerName, booking_id: booking.id },
+    { entry_date: ck.date, slot: ck.slot, lane: 'tank', tank_id: brightTank.id, text: 'Can & Keg', booking_id: booking.id },
+  ]
+  const { canning, kegging } = packTexts(pack)
+  for (const [kind, text] of [['canning', canning], ['kegging', kegging]]) {
+    if (!text) continue
+    const at = packSlots?.[kind] ?? { date: ck.date, slot: 'AM', lane: freePackLane(kind, ck.date, 'AM', around) ?? `${kind}_1` }
+    entries.push({ entry_date: at.date, slot: 'AM', lane: at.lane, text, beer_name: beerName, booking_id: booking.id })
+  }
+  const { error: e2 } = await supabase.from('schedule_entries').insert(entries.map(packSlot))
+  if (e2) throw e2
+  return booking
+}
+
 // Moves a booking and every schedule cell it created by the same number of days.
 export async function moveBooking(booking, newDate) {
   const delta = daysBetween(booking.brew_date, newDate)

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
-import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, MAX_TURNS_PER_DAY, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, saveBeerColour, freePackLane, freePackSlots } from '../lib/schedule'
+import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, MAX_TURNS_PER_DAY, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, addWorkdays, saveBeerColour, freePackLane, freePackSlots, createMixBooking } from '../lib/schedule'
 import { beerStyle, savedBeerStyle, looseKey } from '../lib/beerColours'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
-import { loadForecast, forecastIndex, suggestPackSplit, YIELD } from '../lib/forecast'
+import { loadForecast, forecastIndex, suggestPackSplit, profileOf, YIELD } from '../lib/forecast'
 import { listStock, stockByBeer } from '../lib/stock'
 import { loadSkuEfficiency } from '../lib/efficiency'
 
@@ -14,11 +14,16 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const realRecipes = recipes.filter((r) => !r.name.startsWith('Historical import'))
   const [recipeId, setRecipeId] = useState('')
   const [templateId, setTemplateId] = useState('')
-  const [beerName, setBeerName] = useState('')
+  const [beerName, setBeerName] = useState(initial?.mix && !initial?.beer ? 'Megsy' : '')
   const [brewDate, setBrewDate] = useState(initial?.date ?? todayIso())
   const [tankId, setTankId] = useState(initial?.tankId ?? '')
   const [turnVolume, setTurnVolume] = useState(2500)
   const [turns, setTurns] = useState(4)
+  // Brewed (brewhouse, then an FV) or mixed straight into a bright tank (Megsy).
+  const [mode, setMode] = useState(initial?.mix || (initial?.beer && !profileOf(initial.beer).brewhouse) ? 'mix' : 'brew')
+  const isMix = mode === 'mix'
+  const [mixBtId, setMixBtId] = useState(initial?.btId ?? '')
+  const [mixL, setMixL] = useState(String(initial?.litres ?? 5000))
   const [notes, setNotes] = useState('')
   const [pack, setPack] = useState({ pallets: '', kegs_50: '', kegs_30: '', kegs_20: '' })
   const [windowEntries, setWindowEntries] = useState([])
@@ -118,6 +123,11 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   // Filter day (never a weekend) moves the beer to a bright tank; suggest one that's free
   // from then until it's packaged and the tank is emptied.
   const plan = planSteps(brewDate, steps)
+  // A mix: in on the mix day, Can & Keg the next working day.
+  const batchL = isMix ? Number(mixL) || 0 : turnVolume * turns
+  const mixPack = { date: addWorkdays(brewDate, 1), slot: 'AM' }
+  const mixSuggested = isMix ? suggestBrightTank(brightTanks, windowEntries, brewDate, mixPack.date, batchL) : null
+  const mixTank = mixBtId ? brightTanks.find((t) => t.id === mixBtId) : mixSuggested
   const filterStep = plan.filter
   const filterDate = plan.filter?.date ?? null
   const rawFilterDate = plan.filter ? addDays(brewDate, plan.filter.day - 1) : null
@@ -142,7 +152,8 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const shown = colours ?? beerStyle(beerName.trim()) ?? { bg: '#ffffff', fg: '#1d2421' }
 
   // Both Canning (or Kegging) columns taken on pack day: pick another slot.
-  const packClash = plan.pack ? Object.entries(packTexts(pack)).filter(([kind, t]) => t && !freePackLane(kind, plan.pack.date, plan.pack.slot, windowEntries)).map(([kind]) => kind) : []
+  const packAt = isMix ? mixPack : plan.pack
+  const packClash = packAt ? Object.entries(packTexts(pack)).filter(([kind, t]) => t && !freePackLane(kind, packAt.date, packAt.slot, windowEntries)).map(([kind]) => kind) : []
   const packSlots = Object.fromEntries(packClash.filter((k) => packPick[k]).map((k) => {
     const [date, slot, lane] = packPick[k].split('|')
     return [k, { date, slot, lane }]
@@ -153,7 +164,9 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     setError(null)
     try {
       if (newBeer) await saveBeerColour(beerName.trim(), shown.bg, shown.fg)
-      const b = await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, turnSlots, packSlots, notes, pack })
+      const b = isMix
+        ? await createMixBooking({ date: brewDate, beerName: beerName.trim(), brightTank: mixTank, litres: batchL, pack, packSlots, notes })
+        : await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, turnSlots, packSlots, notes, pack })
       onBooked(b)
     } catch (e) {
       setError(e.message)
@@ -162,10 +175,13 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   }
 
   const tooBig = tank?.capacity_l != null && turnVolume * turns > Number(tank.capacity_l)
-  const ready = beerName.trim() && brewDate && tank && template && !tooBig && turnSlots.length === turns && packClash.every((k) => packPick[k])
+  const mixTooBig = isMix && mixTank?.capacity_l != null && batchL > Number(mixTank.capacity_l)
+  const ready = isMix
+    ? beerName.trim() && brewDate && mixTank && batchL > 0 && !mixTooBig && packClash.every((k) => packPick[k])
+    : beerName.trim() && brewDate && tank && template && !tooBig && turnSlots.length === turns && packClash.every((k) => packPick[k])
   const packLitres = Math.round((Number(pack.pallets) || 0) * LITRES_PER_PALLET + [50, 30, 20].reduce((t, l) => t + (Number(pack[`kegs_${l}`]) || 0) * l, 0))
-  const overPacked = packLitres > turnVolume * turns
-  const packWhen = plan.pack
+  const overPacked = packLitres > batchL
+  const packWhen = packAt
   const recipeName = realRecipes.find((r) => r.id === recipeId)?.name
   const split = useMemo(() => {
     if (!demand) return null
@@ -173,7 +189,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     // Packaged litres from this beer's average overall efficiency (last 12 months), else the usual yield.
     const eff = demand.effFor(beerName) ?? (recipeName ? demand.effFor(recipeName) : null)
     const useEff = eff && eff.n >= 2
-    const packagedL = turnVolume * turns * (useEff ? eff.overall : YIELD)
+    const packagedL = batchL * (useEff ? eff.overall : YIELD)
     const args = { fc: demand.fc, stock: demand.stock, packDate, packagedL }
     // The forecast may name the beer as the recipe does ("Pale Ale") or as the schedule ("Pale").
     const sp = suggestPackSplit({ ...args, beer: beerName }) ?? (recipeName ? suggestPackSplit({ ...args, beer: recipeName }) : null)
@@ -187,11 +203,16 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     <div className="sc-overlay" onClick={onClose}>
       <div className="sc-dialog" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>Book a brew</h3>
+          <h3 style={{ margin: 0 }}>{isMix ? 'Book a mix' : 'Book a brew'}</h3>
           <button className="secondary" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="calc-tabs" style={{ margin: '0.5rem 0 0' }}>
+          <button type="button" className={isMix ? 'secondary' : ''} onClick={() => setMode('brew')}>Brew (brewhouse, then an FV)</button>
+          <button type="button" className={isMix ? '' : 'secondary'} onClick={() => { setMode('mix'); if (!beerName.trim()) setBeerName('Megsy') }}>Mix in a bright tank</button>
         </div>
 
         <div className="sc-form">
+          {!isMix && (<>
           <label>Recipe (optional)
             <select value={recipeId} onChange={(e) => pickRecipe(e.target.value)}>
               <option value="">No recipe yet</option>
@@ -204,6 +225,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
               {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </label>
+          </>)}
           <label>Beer name on the schedule
             <input value={beerName} onChange={(e) => setBeerName(e.target.value)} placeholder="e.g. Drift XPA" />
           </label>
@@ -217,9 +239,26 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
               </div>
             </div>
           )}
-          <label>Brew day
+          <label>{isMix ? 'Mix day' : 'Brew day'}
             <input type="date" value={brewDate} onChange={(e) => setBrewDate(e.target.value)} />
           </label>
+          {isMix && (<>
+            <label>Bright tank
+              <select value={mixBtId} onChange={(e) => setMixBtId(e.target.value)}>
+                <option value="">{mixSuggested ? `${tankLabel(mixSuggested.name)} (suggested, free ${fmt(brewDate)} to ${fmt(mixPack.date)})` : 'No free bright tank found, pick one'}</option>
+                {brightTanks.map((t) => <option key={t.id} value={t.id}>{tankLabel(t.name)}{t.capacity_l != null ? ` (${Number(t.capacity_l).toLocaleString()} L)` : ''}</option>)}
+              </select>
+            </label>
+            <label>Litres
+              <input type="number" inputMode="numeric" min="0" step="500" value={mixL} onChange={(e) => setMixL(e.target.value)} />
+            </label>
+            {mixTooBig && <p className="sc-warn" style={{ margin: 0 }}>{batchL.toLocaleString()} L is more than {tankLabel(mixTank.name)} holds.</p>}
+            {isWeekend(brewDate) && <p className="sc-warn" style={{ margin: 0 }}>{fmt(brewDate)} is a weekend.</p>}
+            <p className="stock-muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+              {beerName.trim() || 'The beer'} goes into {mixTank ? tankLabel(mixTank.name) : 'the bright tank'} on {fmt(brewDate)}, Can &amp; Keg {fmt(mixPack.date)}. No brewhouse or FV.
+            </p>
+          </>)}
+          {!isMix && (<>
           <label>Tank
             <select value={tankId} onChange={(e) => setTankId(e.target.value)}>
               <option value="">Pick a tank…</option>
@@ -295,6 +334,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
           {filterStep && btChoice === 'auto' && !suggestedBt && (
             <p className="sc-warn" style={{ margin: 0 }}>No bright tank is empty and big enough from {fmt(filterDate)} until it's packaged ({fmt(packDate)}) and emptied. Pick one anyway, or leave it in the FV and move it later.</p>
           )}
+          </>)}
           <div>
             <div>Packaging plan</div>
             <div className="sc-pack-grid">
@@ -304,7 +344,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
               ))}
             </div>
             <div style={{ color: overPacked ? 'crimson' : 'var(--ink2)', fontSize: '0.85rem', marginTop: 4 }}>
-              {packLitres.toLocaleString()} L packaged of {(turnVolume * turns).toLocaleString()} L brewed
+              {packLitres.toLocaleString()} L packaged of {batchL.toLocaleString()} L {isMix ? 'mixed' : 'brewed'}
               {overPacked ? ' (more than the batch)' : ''}
               {packWhen ? ` · ${fmt(packWhen.date)} ${packWhen.slot}` : ''}
             </div>
@@ -350,14 +390,14 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
           </label>
         </div>
 
-        {clashes.length > 0 && (
+        {!isMix && clashes.length > 0 && (
           <p className="sc-warn">
             ⚠ {tankLabel(tank?.name)} already has {clashes.length} job{clashes.length === 1 ? '' : 's'} on the schedule between {fmt(brewDate)} and {fmt(addDays(brewDate, lastDay - 1))}
             {' '}(first: {fmt(clashes[0].entry_date)} “{clashes[0].text}”). You can still book it.
           </p>
         )}
 
-        {preview.length > 0 && (
+        {!isMix && preview.length > 0 && (
           <details style={{ marginTop: '0.5rem' }}>
             <summary style={{ cursor: 'pointer' }}>Cellar plan ({preview.length} jobs, to {fmt(preview[preview.length - 1].date)})</summary>
             <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
