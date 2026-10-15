@@ -371,7 +371,12 @@ export default function SchedulePage() {
   const cellAt = (r) => ({ date: new Date(Math.floor(r / 2) * 86400000).toISOString().slice(0, 10), slot: r % 2 ? 'PM' : 'AM' })
   const rectOf = (s) => s && { r0: Math.min(s.a.r, s.f.r), r1: Math.max(s.a.r, s.f.r), c0: Math.min(s.a.c, s.f.c), c1: Math.max(s.a.c, s.f.c) }
   const colOf = (e) => colIndex.get(e.lane === 'tank' ? e.tank_id : e.lane) ?? -1
-  const entriesIn = (q) => entries.filter((e) => { const r = rowOf(e.entry_date, e.slot), c = colOf(e); return r >= q.r0 && r <= q.r1 && c >= q.c0 && c <= q.c1 })
+  // A canning / kegging cell spans AM and PM, so either row of a selection reaches it.
+  const entriesIn = (q) => entries.filter((e) => {
+    const r = rowOf(e.entry_date, e.slot), c = colOf(e)
+    const hit = PACK_LANES.includes(e.lane) ? r + 1 >= q.r0 && r <= q.r1 : r >= q.r0 && r <= q.r1
+    return hit && c >= q.c0 && c <= q.c1
+  })
   const cellTarget = (c, r) => ({ entry_date: cellAt(r).date, slot: cellAt(r).slot, lane: c.lane, tank_id: c.tankId ?? null })
   const rectLabel = (q) => {
     const from = cellAt(q.r0), to = cellAt(q.r1)
@@ -575,7 +580,8 @@ export default function SchedulePage() {
   const byCell = useMemo(() => {
     const m = new Map()
     for (const e of entries) {
-      const k = `${e.entry_date}|${e.slot}|${e.lane === 'tank' ? e.tank_id : e.lane}`
+      // Canning / kegging: one cell a day (kept under AM).
+      const k = `${e.entry_date}|${PACK_LANES.includes(e.lane) ? 'AM' : e.slot}|${e.lane === 'tank' ? e.tank_id : e.lane}`
       m.set(k, [...(m.get(k) ?? []), e])
     }
     return m
@@ -672,6 +678,8 @@ export default function SchedulePage() {
                     {slot === 'AM' ? <strong>{fmtDay(d)}</strong> : null} <span className="sc-slot">{slot}</span>
                   </td>
                   {columns.map((c, ci) => {
+                    // Canning / kegging: one cell spanning AM and PM.
+                    if (c.group === 'pack' && slot === 'PM') return null
                     const r = rowOf(d, slot)
                     const inSel = selRect && r >= selRect.r0 && r <= selRect.r1 && ci >= selRect.c0 && ci <= selRect.c1
                     const inClip = clip && r >= clip.r0 && r < clip.r0 + clip.h && ci >= clip.c0 && ci < clip.c0 + clip.w
@@ -689,6 +697,7 @@ export default function SchedulePage() {
                     return (
                       <td
                         key={c.key}
+                        rowSpan={c.group === 'pack' ? 2 : undefined}
                         className={'sc-cell' + (list.some((e) => isBrew(e.text)) ? ' sc-brewday' : '') + (editor ? ' sc-editable' : '') + (inSel ? ' sc-sel' : '') + (inClip ? ' sc-clip' : '') + (inDrop ? ' sc-drop' : '')}
                         data-cell={`${r}|${ci}`}
                         style={(() => {
