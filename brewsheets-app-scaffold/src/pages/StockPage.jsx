@@ -33,6 +33,17 @@ function useSetting(name, initial) {
   return [v, set]
 }
 
+// A weeks-of-cover bar.
+function CoverBar({ weeks, target }) {
+  const w = weeks ?? 0
+  return (
+    <div className={`stock-bar ${coverClass(w, target)}`}>
+      <div style={{ width: `${Math.min(100, (w / (target * 3)) * 100)}%` }} />
+      <span>{w >= 26 ? '26+' : w < 10 ? w.toFixed(1) : Math.round(w)}</span>
+    </div>
+  )
+}
+
 function coverClass(weeks, target) {
   if (weeks == null) return 'none'
   if (weeks < target) return 'low'
@@ -161,7 +172,9 @@ export default function StockPage() {
         coming,
         lmEstimated: r.lmDep == null && r.toLm > 0,
         useForecast,
+        // Weeks of cover counting what's scheduled but not packed yet (in tank, booked), and on hand only.
         cover: useForecast ? weeksOfCover(r.total, perDay, coming) : weeksOfCover(r.total, weekly, coming),
+        coverNow: useForecast ? weeksOfCover(r.total, perDay, []) : weeksOfCover(r.total, weekly, []),
       }
     }).filter((r) => r.total || r.weekly || r.coming.length)
 
@@ -242,15 +255,15 @@ export default function StockPage() {
                         <th>Sold / wk</th>
                         <th>Forecast / wk</th>
                         <th>Packaging</th>
-                        <th className="stock-cover-h">Weeks of cover</th>
+                        <th className="stock-cover-h">Weeks of cover<br /><span className="stock-muted" style={{ fontWeight: 400, fontSize: '0.75rem' }}>on hand</span></th>
+                        <th className="stock-cover-h">Weeks of cover<br /><span className="stock-muted" style={{ fontWeight: 400, fontSize: '0.75rem' }}>incl. scheduled</span></th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((r) => {
-                        const c = coverClass(r.cover, target)
                         return [
                           r === other[0] && (
-                            <tr key="other" className="stock-divider"><td colSpan={locs.length + 6}>Seasonal &amp; other</td></tr>
+                            <tr key="other" className="stock-divider"><td colSpan={locs.length + 7}>Seasonal &amp; other</td></tr>
                           ),
                           <tr key={r.key} className={r.core ? '' : 'stock-other'}>
                             <td className="stock-beer"><BeerDot name={r.beer} />{r.beer}{f.sizes && <span className={`stock-size s${r.size}`}>{r.size} L</span>}</td>
@@ -267,17 +280,15 @@ export default function StockPage() {
                               {r.coming.length > 2 && <div className="stock-muted">+{r.coming.length - 2} more</div>}
                             </td>
                             <td className="stock-cover">
-                              {!r.core ? null : r.cover == null ? <span className="stock-muted">no sales</span> : (
-                                <div className={`stock-bar ${c}`}>
-                                  <div style={{ width: `${Math.min(100, (r.cover / (target * 3)) * 100)}%` }} />
-                                  <span>{r.cover >= 26 ? '26+' : r.cover < 10 ? r.cover.toFixed(1) : Math.round(r.cover)}</span>
-                                </div>
-                              )}
+                              {!r.core ? null : r.coverNow == null ? <span className="stock-muted">no sales</span> : <CoverBar weeks={r.coverNow} target={target} />}
+                            </td>
+                            <td className="stock-cover">
+                              {!r.core ? null : r.cover == null ? <span className="stock-muted">no sales</span> : <CoverBar weeks={r.cover} target={target} />}
                             </td>
                           </tr>,
                         ]
                       })}
-                      {!rows.length && <tr><td colSpan={locs.length + 6} className="stock-muted">No {f.title.toLowerCase()} in stock.</td></tr>}
+                      {!rows.length && <tr><td colSpan={locs.length + 7} className="stock-muted">No {f.title.toLowerCase()} in stock.</td></tr>}
                     </tbody>
                   </table>
                 </div>
