@@ -1,4 +1,4 @@
-import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import RecipesPage from './pages/RecipesPage.jsx'
 import RecipeEditPage from './pages/RecipeEditPage.jsx'
 import BrewDayPage from './pages/BrewDayPage.jsx'
@@ -20,6 +20,7 @@ import ForecastPage from './pages/ForecastPage.jsx'
 import TodayPage from './pages/TodayPage.jsx'
 import IngredientReviewBanner from './components/IngredientReviewBanner.jsx'
 import PendingUsersBanner, { usePendingUsers } from './components/PendingUsersBanner.jsx'
+import NavTabs, { useNavConfig } from './components/NavTabs.jsx'
 import DilutionPage from './pages/DilutionPage.jsx'
 import SignupPage from './pages/SignupPage.jsx'
 import SetPinPage from './pages/SetPinPage.jsx'
@@ -28,7 +29,6 @@ import PackagingMaterialsPage from './pages/PackagingMaterialsPage.jsx'
 import { AuthProvider, RequireAuth, RequireAdmin, useAuth, signOut } from './auth.jsx'
 import { BeerColoursProvider } from './components/BeerDot.jsx'
 
-const navClass = ({ isActive }) => 'nav-link' + (isActive ? ' active' : '')
 
 export default function App() {
   return (
@@ -44,14 +44,15 @@ function Shell() {
   const { appUser, isAdmin } = useAuth()
   const signedIn = appUser?.status === 'active'
   const pendingUsers = usePendingUsers(isAdmin)
-  // Adding a brew (/batches/new) belongs to the Brew Day tab, not Batches
+  const nav = useNavConfig()
   const { pathname } = useLocation()
-  const addingBrew = pathname === '/batches/new'
   // The schedule grid (every tank is a column) and the stock and forecast tables (every location is a column)
   // get the full screen width.
   const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast' || pathname === '/ingredients'
   const user = (el) => <RequireAuth>{el}</RequireAuth>
   const admin = (el) => <RequireAdmin>{el}</RequireAdmin>
+  // A tab's pages follow its setting: admins only, or everyone signed in.
+  const gate = (path, el) => (nav.isAdminOnly(path) ? admin(el) : user(el))
   return (
     <div>
       <header className="app-header">
@@ -62,23 +63,12 @@ function Shell() {
           <span className="brand-name">Production App</span>
         </div>
         {signedIn && (
-        <nav className="app-nav">
-          {isAdmin && <NavLink to="/recipes" className={navClass}>Recipes</NavLink>}
-          <NavLink to="/today" className={navClass}>Today</NavLink>
-          <NavLink to="/schedule" className={navClass}>Schedule</NavLink>
-          <NavLink to="/brew-day" className={(p) => navClass({ isActive: p.isActive || addingBrew })}>Brew Day</NavLink>
-          <NavLink to="/batches" className={(p) => navClass({ isActive: p.isActive && !addingBrew })}>Batches</NavLink>
-          <NavLink to="/cellar" className={navClass}>Cellar</NavLink>
-          <NavLink to="/packaging" className={navClass}>Packaging</NavLink>
-          <NavLink to="/tanks" className={navClass}>Tanks</NavLink>
-          {isAdmin && <NavLink to="/ingredients" className={navClass}>Ingredients</NavLink>}
-          <NavLink to="/calculators" className={navClass}>Calculators</NavLink>
-          <NavLink to="/stock" className={navClass}>Stock</NavLink>
-          <NavLink to="/forecast" className={navClass}>Forecast</NavLink>
-          {isAdmin && <NavLink to="/reports" className={navClass}>Reports</NavLink>}
-          {isAdmin && <NavLink to="/users" className={navClass}>Users{pendingUsers.length > 0 && <span className="nav-badge">{pendingUsers.length}</span>}</NavLink>}
-          <button type="button" className="nav-link nav-signout" onClick={signOut} title={appUser.email}>{appUser.name.split(' ')[0]} · Sign out</button>
-        </nav>
+          <NavTabs
+            nav={nav}
+            isAdmin={isAdmin}
+            badges={{ '/users': pendingUsers.length }}
+            extra={<button type="button" className="nav-link nav-signout" onClick={signOut} title={appUser.email}>{appUser.name.split(' ')[0]} · Sign out</button>}
+          />
         )}
       </header>
       <main style={{ padding: '1.5rem', maxWidth: wide ? 'none' : 1100, margin: '0 auto' }}>
@@ -89,28 +79,28 @@ function Shell() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/set-pin" element={<SetPinPage />} />
-          <Route path="/recipes" element={admin(<RecipesPage />)} />
-          <Route path="/recipes/new" element={admin(<RecipeEditPage />)} />
-          <Route path="/recipes/:id" element={admin(<RecipeEditPage />)} />
-          <Route path="/brew-day" element={user(<BrewDayPage />)} />
-          <Route path="/batches" element={user(<BatchesPage />)} />
-          <Route path="/batches/new" element={user(<AddBrewPage />)} />
-          <Route path="/batches/:id" element={user(<BatchDetailPage />)} />
-          <Route path="/today" element={user(<TodayPage />)} />
-          <Route path="/schedule" element={user(<SchedulePage />)} />
+          <Route path="/recipes" element={gate('/recipes', <RecipesPage />)} />
+          <Route path="/recipes/new" element={gate('/recipes', <RecipeEditPage />)} />
+          <Route path="/recipes/:id" element={gate('/recipes', <RecipeEditPage />)} />
+          <Route path="/brew-day" element={gate('/brew-day', <BrewDayPage />)} />
+          <Route path="/batches" element={gate('/batches', <BatchesPage />)} />
+          <Route path="/batches/new" element={gate('/batches', <AddBrewPage />)} />
+          <Route path="/batches/:id" element={gate('/batches', <BatchDetailPage />)} />
+          <Route path="/today" element={gate('/today', <TodayPage />)} />
+          <Route path="/schedule" element={gate('/schedule', <SchedulePage />)} />
           <Route path="/schedule/templates" element={admin(<CellarTemplatesPage />)} />
-          <Route path="/schedule/materials" element={user(<PackagingMaterialsPage />)} />
-          <Route path="/cellar" element={user(<CellarPage />)} />
-          <Route path="/packaging" element={user(<PackagingPage />)} />
-          <Route path="/packaging/:id" element={user(<PackagingBatchPage />)} />
-          <Route path="/tanks" element={user(<TanksPage />)} />
-          <Route path="/ingredients" element={admin(<IngredientsPage />)} />
-          <Route path="/calculators" element={user(<DilutionPage />)} />
+          <Route path="/schedule/materials" element={gate('/schedule/materials', <PackagingMaterialsPage />)} />
+          <Route path="/cellar" element={gate('/cellar', <CellarPage />)} />
+          <Route path="/packaging" element={gate('/packaging', <PackagingPage />)} />
+          <Route path="/packaging/:id" element={gate('/packaging', <PackagingBatchPage />)} />
+          <Route path="/tanks" element={gate('/tanks', <TanksPage />)} />
+          <Route path="/ingredients" element={gate('/ingredients', <IngredientsPage />)} />
+          <Route path="/calculators" element={gate('/calculators', <DilutionPage />)} />
           <Route path="/dilution" element={<Navigate to="/calculators" replace />} />
-          <Route path="/stock" element={user(<StockPage />)} />
-          <Route path="/forecast" element={user(<ForecastPage />)} />
-          <Route path="/reports" element={admin(<ReportsPage />)} />
-          <Route path="/reports/dashboard" element={admin(<DashboardPage />)} />
+          <Route path="/stock" element={gate('/stock', <StockPage />)} />
+          <Route path="/forecast" element={gate('/forecast', <ForecastPage />)} />
+          <Route path="/reports" element={gate('/reports', <ReportsPage />)} />
+          <Route path="/reports/dashboard" element={gate('/reports/dashboard', <DashboardPage />)} />
           <Route path="/users" element={admin(<UsersPage />)} />
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Routes>
