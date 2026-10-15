@@ -384,9 +384,26 @@ export default function SchedulePage() {
     return `${fmtDay(from.date)} ${from.slot}${q.r1 > q.r0 ? ` to ${fmtDay(to.date)} ${to.slot}` : ''}`
   }
 
+  // What a block holds: its jobs, plus the empty cells shaded by a tank stay, as blank cells in
+  // that beer's colour, so a stay can be copied into a bright tank.
+  function blockItems(q) {
+    const items = entriesIn(q).map((e) => ({ dr: rowOf(e.entry_date, e.slot) - q.r0, dc: colOf(e) - q.c0, e }))
+    for (let ci = q.c0; ci <= q.c1; ci++) {
+      const c = columns[ci]
+      if (c?.lane !== 'tank') continue
+      for (let r = q.r0; r <= q.r1; r++) {
+        const { date, slot } = cellAt(r)
+        if ((byCell.get(`${date}|${slot}|${c.key}`) ?? []).length) continue
+        const stay = stayAt(runs, c.tankId, date, slot)
+        const style = stay && beerStyle(stay.beer)
+        if (style) items.push({ dr: r - q.r0, dc: ci - q.c0, e: { text: '', beer_name: null, cell_bg: style.bg, cell_fg: style.fg }, shade: true })
+      }
+    }
+    return items
+  }
   function copySel(mode) {
     const q = rectOf(sel)
-    const items = entriesIn(q).map((e) => ({ dr: rowOf(e.entry_date, e.slot) - q.r0, dc: colOf(e) - q.c0, e }))
+    const items = blockItems(q)
     setClip({ mode, r0: q.r0, c0: q.c0, h: q.r1 - q.r0 + 1, w: q.c1 - q.c0 + 1, items })
   }
   // Pastes the copied / cut block with its top-left on the selected cell, overwriting what's there.
@@ -406,7 +423,7 @@ export default function SchedulePage() {
     const dr = dropAt.r - d.start.r, dc = dropAt.c - d.start.c
     if (!dr && !dc) return
     const q = d.q
-    const items = entriesIn(q).map((e) => ({ dr: rowOf(e.entry_date, e.slot) - q.r0, dc: colOf(e) - q.c0, e }))
+    const items = blockItems(q)
     const c0 = Math.max(0, Math.min(columns.length - 1, q.c0 + dc))
     placeBlock({ mode: 'cut', r0: q.r0, c0: q.c0, h: q.r1 - q.r0 + 1, w: q.c1 - q.c0 + 1, items }, { r0: q.r0 + dr, c0 })
   }
@@ -414,20 +431,23 @@ export default function SchedulePage() {
     const target = { r0: q.r0, c0: q.c0, r1: q.r0 + clip.h - 1, c1: Math.min(columns.length - 1, q.c0 + clip.w - 1) }
     if (clip.mode === 'cut' && target.r0 === clip.r0 && target.c0 === clip.c0) return setClip(null)
     const fits = clip.items.filter((it) => q.c0 + it.dc < columns.length)
-    const movingIds = new Set(clip.mode === 'cut' ? fits.map((it) => it.e.id) : [])
-    const del = entriesIn(target).filter((e) => !movingIds.has(e.id))
     const where = (it) => cellTarget(columns[q.c0 + it.dc], q.r0 + it.dr)
+    // Shaded stay cells have no job to move: they're added as blank coloured cells.
+    const shadeIns = fits.filter((it) => it.shade).map((it) => ({ ...where(it), text: '', done: false, cell_bg: it.e.cell_bg, cell_fg: it.e.cell_fg }))
+    const real = fits.filter((it) => !it.shade)
+    const movingIds = new Set(clip.mode === 'cut' ? real.map((it) => it.e.id) : [])
+    const del = entriesIn(target).filter((e) => !movingIds.has(e.id))
     const label = `${clip.mode === 'cut' ? 'Move' : 'Copy'} ${clip.items.length} job${clip.items.length === 1 ? '' : 's'} to ${rectLabel(target)}`
     if (clip.mode === 'cut') {
-      const upd = fits.map((it) => ({ id: it.e.id, ...where(it) }))
+      const upd = real.map((it) => ({ id: it.e.id, ...where(it) }))
       const { extra: followers, clashes } = filterFollowers(upd)
       const bt = packFollowers(upd, new Set([...upd, ...followers].map((m) => m.id)))
       const note = followers.length ? ' (packaging follows)' : bt.extra.length || bt.ins.length ? ' (bright tank stay extended)' : ''
-      applyCells(label + note, { del, upd: [...upd, ...followers, ...bt.extra], ins: bt.ins })
+      applyCells(label + note, { del, upd: [...upd, ...followers, ...bt.extra], ins: [...bt.ins, ...shadeIns] })
       if (clashes.length) setPackClash(clashes)
       setClip(null)
     } else {
-      applyCells(label, { del, ins: fits.map((it) => ({ ...where(it), text: it.e.text, done: false, beer_name: it.e.beer_name ?? null, cell_bg: it.e.cell_bg ?? null, cell_fg: it.e.cell_fg ?? null })) })
+      applyCells(label, { del, ins: [...real.map((it) => ({ ...where(it), text: it.e.text, done: false, beer_name: it.e.beer_name ?? null, cell_bg: it.e.cell_bg ?? null, cell_fg: it.e.cell_fg ?? null })), ...shadeIns] })
     }
     setSel({ a: { r: target.r0, c: target.c0 }, f: { r: target.r1, c: target.c1 } })
   }
