@@ -19,7 +19,9 @@ import {
   updateBrewRunIngredient,
   listPackagingSessions,
 } from '../lib/api'
-import { batchFigures, actualOg, batchIbuSrm } from '../lib/batchFigures'
+import { batchFigures, actualOg, batchIbuSrm, abvCheck } from '../lib/batchFigures'
+import { useAuth } from '../auth.jsx'
+import AbvFlag from '../components/AbvFlag.jsx'
 import { blendGravity, waterForGravity, gravityAfter } from '../lib/dilution'
 import { useBuffer, lacticMl, remainingTurnsPh } from '../lib/acid'
 import { tinsethIbu, toSg } from '../lib/beerCalcs'
@@ -1009,7 +1011,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
         ))}
       </div>
 
-      {view === 'fermentation' && <FermentationSection batch={batch} og={actualOg(batch)} onChanged={refresh} />}
+      {view === 'fermentation' && <FermentationSection batch={batch} og={actualOg(batch)} check={abvCheck(batch)} onChanged={refresh} />}
 
       {brewDay && (
       <>
@@ -1080,7 +1082,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
       </>
       )}
 
-      {view === 'details' && <BatchDetails batch={batch} tanks={tanks} ingredients={ingredients} remove={remove} />}
+      {view === 'details' && <BatchDetails batch={batch} tanks={tanks} ingredients={ingredients} remove={remove} onChanged={refresh} />}
 
     </div>
   )
@@ -1091,17 +1093,49 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
 const fmtDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : null)
 const fx = (v, dp, unit = '') => (v == null || Number.isNaN(Number(v)) ? null : `${Number(v).toFixed(dp)}${unit}`)
 
-function Fact({ label, value, from }) {
+function Fact({ label, value, from, children }) {
   return (
     <div className="bd-fact">
       <div className="bd-label">{label}</div>
       <div className={'bd-value' + (value == null ? ' bd-empty' : '')}>{value ?? 'Not yet'}</div>
       {from && <div className="bd-from">{from}</div>}
+      {children}
     </div>
   )
 }
 
-function BatchDetails({ batch, tanks, ingredients, remove }) {
+// Admins can override the Actual OG (e.g. a lab reading); clearing it goes back to the KO gravities.
+function OgOverride({ batch, onChanged }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState('')
+  const [error, setError] = useState(null)
+  async function save(v) {
+    setError(null)
+    try {
+      await upsertBatch({ id: batch.id, og_override: v === '' || v == null ? null : Number(v) })
+      setEditing(false)
+      onChanged()
+    } catch (e) { setError(e.message) }
+  }
+  if (!editing) return (
+    <div className="bd-override">
+      <button className="secondary" onClick={() => { setVal(batch.og_override ?? ''); setEditing(true) }}>{batch.og_override != null ? 'Change override' : 'Override'}</button>
+      {batch.og_override != null && <button className="secondary" onClick={() => save(null)}>Clear</button>}
+    </div>
+  )
+  return (
+    <div className="bd-override">
+      <input type="number" step="0.1" inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value)} aria-label="Actual OG override (°P)" autoFocus />
+      <span>°P</span>
+      <button onClick={() => save(val)} disabled={val === ''}>Save</button>
+      <button className="secondary" onClick={() => setEditing(false)}>Cancel</button>
+      {error && <span style={{ color: 'crimson' }}>{error}</span>}
+    </div>
+  )
+}
+
+function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
+  const { isAdmin } = useAuth()
   const [sessions, setSessions] = useState([])
   useEffect(() => { listPackagingSessions(batch.id).then(setSessions).catch(() => setSessions([])) }, [batch.id])
   const f = batchFigures(batch, sessions)
@@ -1130,13 +1164,16 @@ function BatchDetails({ batch, tanks, ingredients, remove }) {
       <section className="bd-card">
         <h3>Gravity, ABV, IBU &amp; colour</h3>
         <div className="bd-grid">
-          <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={(turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day') + (f.dilutionL ? ', after dilution' : '')} />
+          <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={batch.og_override != null ? 'Overridden by an admin' : (turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day') + (f.dilutionL ? ', after dilution' : '')}>
+            {isAdmin && <OgOverride batch={batch} onChanged={onChanged} />}
+          </Fact>
           <Fact label="Actual FG" value={fx(f.fg?.plato, 1, ' °P')} from={f.fg ? `Latest fermentation reading, ${fmtDate(f.fg.date)}` : 'Fermentation readings'} />
           <Fact label="ABV" value={fx(f.abv, 2, '%')} from="From actual OG and FG" />
           <Fact label="IBU (est.)" value={fx(est.ibu, 0)} from={target(batch.recipes?.target_ibu)} />
           <Fact label="SRM (est.)" value={fx(est.srm, 1)} from={target(batch.recipes?.target_srm)} />
           <Fact label="Target ABV" value={fx(f.targetAbv, 1, '%')} from={f.targetAbv != null ? `Recipe${f.targetOg != null ? `: OG ${f.targetOg} °P, FG ${f.targetFg ?? '?'} °P` : ''}` : 'Set on the recipe'} />
         </div>
+        <div style={{ marginTop: '0.75rem' }}><AbvFlag check={abvCheck(batch)} compact /></div>
       </section>
 
       <section className="bd-card">

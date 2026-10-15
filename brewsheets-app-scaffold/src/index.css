@@ -759,3 +759,13 @@ tr.ing-added td { background: #f3faf5; }
 .nav-error { color: #ffb4a8; font-size: 0.85rem; }
 .unl-table tr.unl-done td { color: var(--ink2); }
 .unl-table td button { padding: 2px 10px; font-size: 0.8rem; }
+
+.batch-search { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; margin-bottom: 0.75rem; }
+.batch-search label { display: flex; flex-direction: column; gap: 2px; font-size: 0.8rem; color: var(--ink2); flex: 1 1 140px; min-width: 0; max-width: 220px; }
+.batch-search-count { font-size: 0.85rem; color: var(--ink2); margin: 0 0 0.5rem; }
+.abv-flag { border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.9rem; }
+.abv-flag.ok { background: #e3f1e8; color: #14512a; }
+.abv-flag.bad { background: #fde1d3; color: #8a3a12; border: 1px solid #e9a27f; font-weight: 600; }
+.bd-override { display: flex; gap: 0.3rem; align-items: center; margin-top: 0.3rem; }
+.bd-override input { width: 80px; padding: 2px 6px; }
+.bd-override button { padding: 2px 8px; font-size: 0.8rem; }
