@@ -26,6 +26,7 @@ import SignupPage from './pages/SignupPage.jsx'
 import SetPinPage from './pages/SetPinPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
 import PackagingMaterialsPage from './pages/PackagingMaterialsPage.jsx'
+import UnleashedPage from './pages/UnleashedPage.jsx'
 import { AuthProvider, RequireAuth, RequireAdmin, useAuth, signOut } from './auth.jsx'
 import { BeerColoursProvider } from './components/BeerDot.jsx'
 
@@ -99,6 +100,7 @@ function Shell() {
           <Route path="/dilution" element={<Navigate to="/calculators" replace />} />
           <Route path="/stock" element={gate('/stock', <StockPage />)} />
           <Route path="/forecast" element={gate('/forecast', <ForecastPage />)} />
+          <Route path="/unleashed" element={gate('/unleashed', <UnleashedPage />)} />
           <Route path="/reports" element={gate('/reports', <ReportsPage />)} />
           <Route path="/reports/dashboard" element={gate('/reports/dashboard', <DashboardPage />)} />
           <Route path="/users" element={admin(<UsersPage />)} />
