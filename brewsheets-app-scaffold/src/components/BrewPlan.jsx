@@ -84,9 +84,11 @@ const brewList = (list) => list.map((b) => `${b.tank} · ${b.beer} · ${b.litres
 function brewNote(r) {
   if (!r.brews?.length) return null
   const n = r.brews.length
+  const day = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
   return (
     <div className={r.lateBrews ? 'plan-short' : 'plan-early'}>
-      {n} brew{n === 1 ? '' : 's'}{r.lateBrews ? `, ${r.lateBrews} catching up` : ''}
+      {n} brew{n === 1 ? '' : 's'} of {(r.brews[0].size).toLocaleString()} L{r.lateBrews ? `, ${r.lateBrews} catching up` : ''}:
+      <div className="plan-brews">{r.brews.map((b) => `${day(b.bookOn)}${b.tank ? ` FV${b.tank.name}` : ''}`).join(' · ')}</div>
     </div>
   )
 }
@@ -96,7 +98,7 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
   if (compact) {
     return (
       <table className="stock-table plan-table">
-        <thead><tr><th className="stock-beer">Beer</th><th>Brew more</th><th>Brew by</th><th>Below {weeks} wks</th></tr></thead>
+        <thead><tr><th className="stock-beer">Beer</th><th>Brew more</th><th>First brew</th><th>Below {weeks} wks</th></tr></thead>
         <tbody>
           {plan.map((r) => (
             <tr key={r.beer}>
@@ -124,7 +126,7 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
             <th>Left at end</th>
             <th className="plan-need">Brew more</th>
             <th>Drops below {weeks} wks</th>
-            <th>Brew by</th>
+            <th>First brew</th>
           </tr>
         </thead>
         <tbody>

@@ -743,3 +743,4 @@ tr.ing-added td { background: #f3faf5; }
   .pm-page input { border: none; }
 }
 .plan-swap { margin-top: 3px; font-size: 0.8rem; color: var(--accent); }
+.plan-brews { font-size: 0.75rem; color: var(--ink2); white-space: normal; max-width: 260px; margin: 2px auto 0; }
