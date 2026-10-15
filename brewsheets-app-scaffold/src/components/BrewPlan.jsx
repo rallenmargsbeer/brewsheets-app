@@ -47,19 +47,49 @@ export function useBrewPlan(months, stockData = null, refreshKey = 0) {
     const belowMin = new Map(long.map((r) => [beerMatch(r.beer), r.belowMin]))
     const { fvs, busy, turns, fvDaysOf } = src.planning
     const toBook = brewsToBook({ stock: byBeer, fc, brews: src.brews, fvs, busy, turns, fvDaysOf, belowMin })
-    return { rows, levelled, toBook }
+    // Brew more / brew by from the brews to book: real batches on real free FV and brewhouse
+    // slots in the period, not a litres total. Megsy (mixed as needed) keeps the plain figure.
+    const end = addDaysIso(todayIso(), Math.round(months * 30.44))
+    const real = rows.map((r) => {
+      if (!r.brewhouse) return r
+      const mine = toBook.filter((b) => b.brewhouse && beerMatch(b.beer) === beerMatch(r.beer) && b.bookOn < end)
+      return {
+        ...r,
+        brews: mine,
+        brewL: mine.reduce((a, b) => a + b.size, 0),
+        brewBy: mine[0]?.bookOn ?? null,
+        lateBrews: mine.filter((b) => b.late).length,
+        earlyL: 0,
+        shortL: 0,
+      }
+    })
+    return { rows: real, levelled, toBook }
   }, [src, fc, stockData, months])
   return { plan: plan?.rows ?? null, capacity: plan?.levelled ?? null, toBook: plan?.toBook ?? null, fc, forecast: src?.forecast, error, reload: load }
 }
 
 function urgency(r) {
   if (r.brewL < 50) return 'ok'
+  // From the brews to book: red = some can't be ready before stock drops under the goal,
+  // amber = the first brew is within a week, green = on track.
+  if (r.brews) return r.lateBrews ? 'low' : daysBetween(todayIso(), r.brewBy) <= 7 ? 'mid' : 'ok'
   const days = daysBetween(todayIso(), r.brewBy)
   if (!r.brewhouse) return days <= 2 ? 'low' : days <= 7 ? 'mid' : 'ok'
   return days <= 7 ? 'low' : days <= LEAD_DAYS ? 'mid' : 'ok'
 }
 
 const brewList = (list) => list.map((b) => `${b.tank} · ${b.beer} · ${b.litres.toLocaleString()} L · ready ${shortDate(b.ready)}`).join('\n')
+
+// Under Brew more: how many brews, and how many of them are catching up.
+function brewNote(r) {
+  if (!r.brews?.length) return null
+  const n = r.brews.length
+  return (
+    <div className={r.lateBrews ? 'plan-short' : 'plan-early'}>
+      {n} brew{n === 1 ? '' : 's'}{r.lateBrews ? `, ${r.lateBrews} catching up` : ''}
+    </div>
+  )
+}
 
 export function BrewPlanTable({ plan, months, weeks, compact = false }) {
   if (!plan.length) return <p className="stock-muted">No forecast entered yet.</p>
@@ -71,7 +101,7 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
           {plan.map((r) => (
             <tr key={r.beer}>
               <td className="stock-beer"><BeerDot name={r.beer} />{r.beer}</td>
-              <td><span className={`stock-pill ${urgency(r)}`}>{r.brewL >= 50 ? litres(r.brewL) : 'covered'}</span></td>
+              <td><span className={`stock-pill ${urgency(r)}`}>{r.brewL >= 50 ? litres(r.brewL) : 'covered'}</span>{brewNote(r)}</td>
               <td>{r.brewL >= 50 ? (r.brewBy <= todayIso() ? 'now' : shortDate(r.brewBy)) : ''}</td>
               <td className="stock-muted">{shortDate(r.belowMin)}</td>
             </tr>
@@ -109,6 +139,7 @@ export function BrewPlanTable({ plan, months, weeks, compact = false }) {
               <td className={r.endL < r.minL ? 'stock-neg' : ''}>{litres(Math.max(0, r.endL))}</td>
               <td className="plan-need">
                 <span className={`stock-pill ${urgency(r)}`}>{r.brewL >= 50 ? litres(r.brewL) : 'covered'}</span>
+                {brewNote(r)}
                 {r.earlyL >= 50 && <div className="plan-early">incl. {litres(r.earlyL)} for later months</div>}
                 {r.shortL >= 50 && <div className="plan-short">{litres(r.shortL)} late: dips under the goal</div>}
                 {!r.brewhouse && r.brewL >= 50 && <div className="plan-early">mixed in a BT, not brewhouse</div>}
