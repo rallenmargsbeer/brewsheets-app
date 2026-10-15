@@ -32,6 +32,9 @@ import {
   insertEntries,
   deleteEntries,
   restoreEntries,
+  findBooking,
+  moveBookingToTank,
+  restoreBooking,
   listBeerColours,
   syncBookingDates,
   listBookingEntries,
@@ -250,6 +253,23 @@ export default function SchedulePage() {
   const [templates, setTemplates] = useState([])
   // From the Forecast page's Book button: /schedule?book=1&beer=ITP&date=2026-10-20&litres=10000
   const [params, setParams] = useSearchParams()
+  // From a suggested swap's Book swap button: move the booked brew to the later slot, then
+  // book the more urgent beer in the slot that frees up.
+  useEffect(() => {
+    if (params.get('swap') !== '1' || !templates.length || !recipes.length || !tanks.length) return
+    const p = Object.fromEntries(params)
+    setParams({}, { replace: true })
+    const name = (id) => tankLabel(tanks.find((t) => t.id === id)?.name ?? '')
+    if (!window.confirm(`Move ${p.swapBeer} (${name(p.swapTank)}, ${fmtDay(p.swapStart)}) to ${name(p.swapToTank)} on ${fmtDay(p.swapTo)}, then book ${p.beer} in ${name(p.swapTank)} on ${fmtDay(p.swapStart)}?`)) return
+    perform(async () => {
+      const bk = await findBooking(p.swapTank, p.swapStart)
+      if (!bk) throw new Error(`Couldn't find the ${p.swapBeer} booking in ${name(p.swapTank)} on ${fmtDay(p.swapStart)}. Move it by hand.`)
+      const before = await listBookingEntries(bk.id)
+      await moveBookingToTank(bk, p.swapTo, p.swapToTank || null)
+      pushUndo(`Swap: move ${p.swapBeer}`, async () => { await restoreEntries(before, []); await restoreBooking(bk) })
+      setBooking({ date: bk.brew_date, tankId: bk.tank_id, beer: p.beer, litres: Number(p.litres) || null })
+    })
+  }, [params, templates, recipes, tanks])
   useEffect(() => {
     if (params.get('book') !== '1' || !templates.length || !recipes.length) return
     setBooking({ date: params.get('date') || todayIso(), tankId: params.get('tank') || '', beer: params.get('beer') || '', litres: Number(params.get('litres')) || null })

@@ -174,6 +174,13 @@ export function BrewsToBookTable({ list, months, weeks }) {
             <div className="plan-swap">
               Or swap: brew this instead of {b.swap.beer} ({b.swap.tank}, {shortDate(b.swap.start)}) and move {b.swap.beer} to {shortDate(b.bookOn)}.
               {b.swap.until ? ` ${b.swap.beer} stays above its goal until ${shortDate(b.swap.until)}.` : ` ${b.swap.beer} stays above its goal.`}
+              {isAdmin && b.swap.tankId && (
+                <div>
+                  <Link to={`/schedule?${new URLSearchParams({ swap: '1', beer: b.beer, litres: String(b.size), swapBeer: b.swap.beer, swapTank: b.swap.tankId, swapStart: b.swap.start, swapTo: b.bookOn, swapToTank: b.tank?.id ?? '' })}`}>
+                    <button className="secondary plan-swap-btn">Book swap</button>
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </>
