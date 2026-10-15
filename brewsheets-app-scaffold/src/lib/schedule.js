@@ -331,12 +331,16 @@ export function packTexts(pack) {
 
 // Brewhouse slots in order: AM Brew 1, AM Brew 2, PM Brew 1, PM Brew 2, then the next working day.
 export const TURN_SLOTS = [['AM', 'brew_1'], ['AM', 'brew_2'], ['PM', 'brew_1'], ['PM', 'brew_2']]
+// The brewhouse does at most this many turns a day.
+export const MAX_TURNS_PER_DAY = 3
+export const turnsOn = (date, keys) => [...keys].filter((k) => k.startsWith(`${date}|`)).length
 export function defaultTurnSlots(brewDate, n, taken = new Set()) {
   const out = []
   let d = brewDate
   for (let guard = 0; out.length < n && guard < 60; guard++) {
+    let today = turnsOn(d, taken)
     for (const [slot, lane] of TURN_SLOTS) {
-      if (out.length < n && !taken.has(`${d}|${slot}|${lane}`)) out.push({ date: d, slot, lane })
+      if (out.length < n && today < MAX_TURNS_PER_DAY && !taken.has(`${d}|${slot}|${lane}`)) { out.push({ date: d, slot, lane }); today++ }
     }
     d = nextWorkday(addDays(d, 1))
   }

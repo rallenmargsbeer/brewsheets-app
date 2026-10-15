@@ -251,7 +251,7 @@ export default function SchedulePage() {
   const [params, setParams] = useSearchParams()
   useEffect(() => {
     if (params.get('book') !== '1' || !templates.length || !recipes.length) return
-    setBooking({ date: params.get('date') || todayIso(), tankId: '', beer: params.get('beer') || '', litres: Number(params.get('litres')) || null })
+    setBooking({ date: params.get('date') || todayIso(), tankId: params.get('tank') || '', beer: params.get('beer') || '', litres: Number(params.get('litres')) || null })
     setParams({}, { replace: true })
   }, [params, templates, recipes])
   const [entries, setEntries] = useState([])

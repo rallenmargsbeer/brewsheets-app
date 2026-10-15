@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
-import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, saveBeerColour, freePackLane, freePackSlots } from '../lib/schedule'
+import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, MAX_TURNS_PER_DAY, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, saveBeerColour, freePackLane, freePackSlots } from '../lib/schedule'
 import { beerStyle, savedBeerStyle, looseKey } from '../lib/beerColours'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 import { loadForecast, forecastIndex, suggestPackSplit, YIELD } from '../lib/forecast'
@@ -106,11 +106,13 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     for (const t of turnSlots) if (!days.includes(t.date)) days.push(t.date)
     return days.sort()
   }, [brewDate, turnSlots])
+  // At most MAX_TURNS_PER_DAY turns a day, this brew's and ones already booked together.
+  const dayFull = (date) => [...takenTurns.keys()].filter((k) => k.startsWith(`${date}|`)).length + turnSlots.filter((x) => x.date === date).length >= MAX_TURNS_PER_DAY
   function toggleTurn(t) {
     const cur = turnSlots
     const k = turnKey(t)
     if (cur.some((x) => turnKey(x) === k)) setPicked(cur.filter((x) => turnKey(x) !== k))
-    else if (cur.length < turns) setPicked([...cur, t].sort((a, b) => turnKey(a).localeCompare(turnKey(b))))
+    else if (cur.length < turns && !dayFull(t.date)) setPicked([...cur, t].sort((a, b) => turnKey(a).localeCompare(turnKey(b))))
   }
 
   // Filter day (never a weekend) moves the beer to a bright tank; suggest one that's free
@@ -263,7 +265,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
                           {taken ? (
                             <span className="turn-taken" title="Already booked">{taken}</span>
                           ) : (
-                            <button type="button" className={n >= 0 ? 'turn-on' : 'secondary'} onClick={() => toggleTurn(t)} disabled={n < 0 && turnSlots.length >= turns}>
+                            <button type="button" className={n >= 0 ? 'turn-on' : 'secondary'} onClick={() => toggleTurn(t)} disabled={n < 0 && (turnSlots.length >= turns || dayFull(d))}>
                               {n >= 0 ? `Turn ${n + 1}` : '+'}
                             </button>
                           )}

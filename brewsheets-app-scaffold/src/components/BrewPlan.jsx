@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BeerDot from './BeerDot.jsx'
 import { listStock, stockByBeer } from '../lib/stock'
-import { loadForecast, forecastIndex, loadBrews, brewPlan, levelBrewing, applyLevelling, brewsToBook, saveSetting, LOOKAHEAD_MONTHS, LEAD_DAYS, YIELD, PRIORITY } from '../lib/forecast'
+import { loadForecast, forecastIndex, loadPlanning, brewPlan, levelBrewing, applyLevelling, brewsToBook, setBeerProfiles, profileOf, saveSetting, LOOKAHEAD_MONTHS, LEAD_DAYS, YIELD, PRIORITY, TURNS_PER_DAY } from '../lib/forecast'
+import { loadSkuEfficiency } from '../lib/efficiency'
+import { beerMatch } from '../lib/incoming'
 import { useAuth } from '../auth'
 import { todayIso, daysBetween, isScheduleEditor, addDays as addDaysIso } from '../lib/schedule'
 
@@ -20,8 +22,16 @@ export function useBrewPlan(months, stockData = null) {
   const [error, setError] = useState(null)
   const load = () => {
     setError(null)
-    Promise.all([stockData ? null : listStock(), loadForecast(), loadBrews()])
-      .then(([stock, forecast, brews]) => setSrc({ stock, forecast, brews }))
+    Promise.all([stockData ? null : listStock(), loadForecast(), loadPlanning(), loadSkuEfficiency().catch(() => () => null)])
+      .then(([stock, forecast, planning, effFor]) => {
+        // Each beer's real efficiency (2+ finished batches) and FV days from its cellar template.
+        setBeerProfiles({
+          yieldOf: (beer) => { const e = effFor(beer); return e && e.n >= 2 ? e.overall : null },
+          fvDaysOf: (beer) => planning.fvDaysOf(beer),
+        })
+        const brews = planning.brews.map((b) => ({ ...b, packaged: b.litres * profileOf(b.beer).yield }))
+        setSrc({ stock, forecast, brews, planning })
+      })
       .catch((e) => setError(e.message))
   }
   useEffect(load, [])
@@ -34,7 +44,9 @@ export function useBrewPlan(months, stockData = null) {
     const long = brewPlan({ stock: byBeer, fc, brews: src.brews, months: LOOKAHEAD_MONTHS })
     const levelled = levelBrewing({ plan: long, brews: src.brews, capacityL: src.forecast.capacityL })
     const rows = applyLevelling(brewPlan({ stock: byBeer, fc, brews: src.brews, months }), levelled, { months })
-    const toBook = brewsToBook({ stock: byBeer, fc, brews: src.brews, capacityL: src.forecast.capacityL })
+    const belowMin = new Map(long.map((r) => [beerMatch(r.beer), r.belowMin]))
+    const { fvs, busy, turns, fvDaysOf } = src.planning
+    const toBook = brewsToBook({ stock: byBeer, fc, brews: src.brews, fvs, busy, turns, fvDaysOf, belowMin })
     return { rows, levelled, toBook }
   }, [src, fc, stockData, months])
   return { plan: plan?.rows ?? null, capacity: plan?.levelled ?? null, toBook: plan?.toBook ?? null, fc, forecast: src?.forecast, error, reload: load }
@@ -120,26 +132,42 @@ export function BrewsToBookTable({ list, months, weeks }) {
   const total = rows.filter((b) => b.brewhouse).reduce((a, b) => a + b.size, 0)
   const today = todayIso()
   const note = (b) => {
-    if (b.late) return <span className="plan-short">catching up: stock is under the {weeks}-week goal until this is ready, about {shortDate(addDaysIso(b.bookOn, b.leadDays))}</span>
-    if (b.early) return <span className="plan-early">early: the brewhouse is full nearer {shortDate(b.brewBy)}</span>
+    if (b.noRoom) return <span className="plan-short">no FV free for this in the plan window</span>
+    if (b.late) {
+      return (
+        <>
+          <span className="plan-short">catching up: first free {b.tank ? `FV${b.tank.name}` : 'FV'} slot; stock is under the {weeks}-week goal until it's ready, about {shortDate(b.ready ?? addDaysIso(b.bookOn, b.leadDays))}</span>
+          {b.swap && (
+            <div className="plan-swap">
+              Or swap: brew this instead of {b.swap.beer} ({b.swap.tank}, {shortDate(b.swap.start)}) and move {b.swap.beer} to {shortDate(b.bookOn)}.
+              {b.swap.until ? ` ${b.swap.beer} stays above its goal until ${shortDate(b.swap.until)}.` : ` ${b.swap.beer} stays above its goal.`}
+            </div>
+          )}
+        </>
+      )
+    }
+    if (b.early) return <span className="plan-early">early: no FV or brewhouse slot nearer {shortDate(b.brewBy)}</span>
     return <span className="stock-muted">for stock from {shortDate(b.neededFor)}</span>
   }
   return (
     <div className="stock-scroll">
       <table className="stock-table plan-table book-table">
-        <thead><tr><th>Brew by</th><th className="stock-beer">Beer</th><th>Batch</th><th></th>{isAdmin && <th></th>}</tr></thead>
+        <thead><tr><th>Brew day</th><th className="stock-beer">Beer</th><th>Batch</th><th>FV</th><th></th>{isAdmin && <th></th>}</tr></thead>
         <tbody>
           {rows.map((b, i) => (
             <tr key={i}>
-              <td><strong>{b.bookOn <= today ? 'Now' : shortDate(b.bookOn)}</strong></td>
+              <td><strong>{shortDate(b.bookOn < today ? today : b.bookOn)}</strong></td>
               <td className="stock-beer"><BeerDot name={b.beer} />{b.beer}</td>
               <td>{b.size.toLocaleString()} L{b.brewhouse ? '' : ' (mixed in a BT)'}</td>
+              <td>{b.tank ? `FV${b.tank.name}` : ''}</td>
               <td>{note(b)}</td>
               {isAdmin && (
                 <td>
-                  <Link to={`/schedule?${new URLSearchParams({ book: '1', beer: b.beer, date: b.bookOn, litres: String(b.size) })}`}>
-                    <button className="secondary">Book</button>
-                  </Link>
+                  {!b.noRoom && (
+                    <Link to={`/schedule?${new URLSearchParams({ book: '1', beer: b.beer, date: b.bookOn < today ? today : b.bookOn, litres: String(b.size), ...(b.tank ? { tank: b.tank.id } : {}) })}`}>
+                      <button className="secondary">Book</button>
+                    </Link>
+                  )}
                 </td>
               )}
             </tr>
@@ -147,13 +175,13 @@ export function BrewsToBookTable({ list, months, weeks }) {
         </tbody>
       </table>
       <p className="stock-muted" style={{ fontSize: '0.8rem', padding: '0 0.9rem' }}>
-        {rows.length} brew{rows.length === 1 ? '' : 's'}, {total.toLocaleString()} L through the brewhouse, on top of what's booked. Each is dated {LEAD_DAYS} days before stock would drop under the goal (Megsy 2 days), within the brewhouse limit spread week by week: earlier when the brewhouse is full nearer the time, later (late) when it can't be fitted in sooner. Book it on or before that day.
+        {rows.length} brew{rows.length === 1 ? '' : 's'}, {total.toLocaleString()} L through the brewhouse, on top of what's booked. Each brew is placed on the schedule as it stands: a weekday with brewhouse turns free (at most {TURNS_PER_DAY} a day, so a 10,000 L batch takes two days) and an FV big enough that's empty from brew day until its Filter day (from the cellar template). It goes on the latest such day before stock would drop under the goal, highest priority beers first; when there's no room in time it takes the first free slot, with a suggested swap where a lower priority booked brew can wait. Packaged litres use each beer's own overall efficiency from Unleashed (80% where there are fewer than 2 finished batches).
       </p>
     </div>
   )
 }
 
-export const planNote = (weeks) => `Litres are packaged litres (a cube is 6 L, a keg 50 L). Hold ${weeks} wks = the next ${weeks} weeks of forecast sales, the stock to keep on hand; it rolls forward day by day, so it rises ahead of busy months. In tank and booked brews count from the day after they're filtered, at ${Math.round(YIELD * 100)}% of the batch (batch size from the brew cell, e.g. "8 Ball 1500L", or the FV's size). Brew more is brewhouse litres to brew in the period to keep ${weeks} weeks of stock, including beer that has to be brewed early because a later month needs more than the brewhouse limit (the plan looks ${LOOKAHEAD_MONTHS} months ahead); brew by is ${LEAD_DAYS} days before stock would drop below the goal, or sooner when brewing early. When the brewhouse can't keep up, ${PRIORITY.join(', ')} get brewed first, in that order. Megsy is mixed in a bright tank in a day, so it doesn't count against the brewhouse limit or get brewed early.`
+export const planNote = (weeks) => `Litres are packaged litres (a cube is 6 L, a keg 50 L). Hold ${weeks} wks = the next ${weeks} weeks of forecast sales, the stock to keep on hand; it rolls forward day by day, so it rises ahead of busy months. In tank and booked brews count from the day after they're filtered, at each beer's own overall efficiency from Unleashed (${Math.round(YIELD * 100)}% where there are fewer than 2 finished batches) (batch size from the brew cell, e.g. "8 Ball 1500L", or the FV's size). Brew more is brewhouse litres to brew in the period to keep ${weeks} weeks of stock, including beer that has to be brewed early because a later month needs more than the brewhouse limit (the plan looks ${LOOKAHEAD_MONTHS} months ahead); brew by is the beer's FV days (from its cellar template) plus a day before stock would drop below the goal, or sooner when brewing early. When the brewhouse can't keep up, ${PRIORITY.join(', ')} get brewed first, in that order. Megsy is mixed in a bright tank in a day, so it doesn't count against the brewhouse limit or get brewed early.`
 
 // Compact brew plan for the schedule page: what needs brewing and by when.
 export function SchedulePlanPanel() {
