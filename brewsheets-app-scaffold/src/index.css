@@ -567,7 +567,7 @@ tr.ing-added td { background: #f3faf5; }
 .stock-plan h2 { background: var(--teal-dark); }
 .stock-plan thead th { background: var(--teal-soft); color: var(--teal-dark); }
 .plan-table td.plan-need, .plan-table th.plan-need { text-align: center; }
-.plan-sched { margin: 0 0 1rem; max-width: 980px; }
+.plan-sched { margin: 0 0 1rem; max-width: none; width: 100%; }
 .plan-sched .plan-sub { font-size: 0.95rem; margin: 0.8rem 0.9rem 0.3rem; }
 .plan-sched .plan-sub span { font-weight: 400; color: var(--ink2); font-size: 0.8rem; margin-left: 0.4rem; }
 .plan-sched .stock-table { font-size: 0.85rem; }
