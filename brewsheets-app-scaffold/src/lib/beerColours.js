@@ -86,6 +86,8 @@ export function assignBeers(entries, { knownBeers = [], bookingBeer = {} } = {})
     const tankRuns = []
     let current = null
     list.forEach((e, i) => {
+      // A blank cell (just painted a colour) isn't part of any stay.
+      if (!(e.text ?? '').trim() && !beerOf.has(e.id)) return
       if (beerOf.has(e.id)) current = beerOf.get(e.id)
       else {
         const named = names.get(beerKey(e.text))

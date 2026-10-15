@@ -562,10 +562,37 @@ export default function SchedulePage() {
     }
     return { extra, clashes }
   }
+  // Delete clears the selected cells. In a bright tank, a stay that started before the
+  // selection ends just before it: its packaging job (Can & Keg) after the selection moves up
+  // to the half-day before (or goes, when that's the beer's arrival), so the cleared cells
+  // really are empty.
   function clearSel() {
     const q = rectOf(sel)
     const del = entriesIn(q)
-    if (del.length) applyCells(`Clear ${rectLabel(q)}`, { del })
+    const delIds = new Set(del.map((e) => e.id))
+    const upd = []
+    for (let ci = q.c0; ci <= q.c1; ci++) {
+      const c = columns[ci]
+      if (c?.group !== 'bbt') continue
+      for (const st of runs.get(c.tankId) ?? []) {
+        const [sd, ss] = st.start.split('|')
+        const [ed, es] = st.end.split('|')
+        const startR = rowOf(sd, ss === '0' ? 'AM' : 'PM')
+        const endR = rowOf(ed, es === '0' ? 'AM' : 'PM')
+        if (!(startR < q.r0 && endR > q.r1)) continue
+        const closing = (byCell.get(`${ed}|${es === '0' ? 'AM' : 'PM'}|${c.key}`) ?? []).find((e) => !delIds.has(e.id) && /can|keg|packag/i.test(e.text ?? ''))
+        if (!closing) continue
+        if (q.r0 - 1 === startR) { del.push(closing); delIds.add(closing.id); continue }
+        // The half-day before: a painted (blank) cell there gives way; a job there means the
+        // stay can't end sooner, so it's left as it is.
+        const before = cellAt(q.r0 - 1)
+        const there = (byCell.get(`${before.date}|${before.slot}|${c.key}`) ?? []).filter((e) => !delIds.has(e.id))
+        if (there.some((e) => (e.text ?? '').trim())) continue
+        for (const e of there) { del.push(e); delIds.add(e.id) }
+        upd.push({ id: closing.id, entry_date: before.date, slot: before.slot })
+      }
+    }
+    if (del.length || upd.length) applyCells(`Clear ${rectLabel(q)}`, { del, upd })
   }
   // One undo step for deletes, moves and inserts; booked brews' dates follow their brew cells.
   function applyCells(label, { del = [], upd = [], ins = [] }) {
