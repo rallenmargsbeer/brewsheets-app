@@ -643,6 +643,9 @@ export default function SchedulePage() {
     const list = byCell.get(`${date}|${slot}|${c.key}`) ?? []
     if (!list.length && (c.group === 'fv' || c.group === 'brew')) {
       setBooking({ date, tankId: c.group === 'fv' ? c.tankId : '', firstTurn: c.group === 'brew' ? { date, slot, lane: c.lane } : null })
+    } else if (!list.length && c.group === 'bbt' && !stayAt(runs, c.tankId, date, slot)) {
+      // An empty bright tank: book a mix (Megsy) there.
+      setBooking({ date, mix: true, btId: c.tankId })
     } else editCell(r, ci)
   }
 
