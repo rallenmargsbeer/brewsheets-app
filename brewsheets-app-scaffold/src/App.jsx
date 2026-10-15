@@ -19,6 +19,7 @@ import StockPage from './pages/StockPage.jsx'
 import ForecastPage from './pages/ForecastPage.jsx'
 import TodayPage from './pages/TodayPage.jsx'
 import IngredientReviewBanner from './components/IngredientReviewBanner.jsx'
+import PendingUsersBanner, { usePendingUsers } from './components/PendingUsersBanner.jsx'
 import DilutionPage from './pages/DilutionPage.jsx'
 import SignupPage from './pages/SignupPage.jsx'
 import SetPinPage from './pages/SetPinPage.jsx'
@@ -42,6 +43,7 @@ export default function App() {
 function Shell() {
   const { appUser, isAdmin } = useAuth()
   const signedIn = appUser?.status === 'active'
+  const pendingUsers = usePendingUsers(isAdmin)
   // Adding a brew (/batches/new) belongs to the Brew Day tab, not Batches
   const { pathname } = useLocation()
   const addingBrew = pathname === '/batches/new'
@@ -74,12 +76,13 @@ function Shell() {
           <NavLink to="/stock" className={navClass}>Stock</NavLink>
           <NavLink to="/forecast" className={navClass}>Forecast</NavLink>
           {isAdmin && <NavLink to="/reports" className={navClass}>Reports</NavLink>}
-          {isAdmin && <NavLink to="/users" className={navClass}>Users</NavLink>}
+          {isAdmin && <NavLink to="/users" className={navClass}>Users{pendingUsers.length > 0 && <span className="nav-badge">{pendingUsers.length}</span>}</NavLink>}
           <button type="button" className="nav-link nav-signout" onClick={signOut} title={appUser.email}>{appUser.name.split(' ')[0]} · Sign out</button>
         </nav>
         )}
       </header>
       <main style={{ padding: '1.5rem', maxWidth: wide ? 'none' : 1100, margin: '0 auto' }}>
+        {isAdmin && <PendingUsersBanner users={pendingUsers} />}
         {isAdmin && <IngredientReviewBanner />}
         <Routes>
           <Route path="/" element={<Navigate to="/today" replace />} />

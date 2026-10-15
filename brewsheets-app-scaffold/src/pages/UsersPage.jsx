@@ -27,6 +27,7 @@ export default function UsersPage() {
     const { error: err } = await supabase.from('app_users').update(patch).eq('id', u.id)
     if (err) setError(err.message)
     load()
+    window.dispatchEvent(new Event('users-changed'))
   }
   const approve = (u) => update(u, { status: 'active', approved_at: new Date().toISOString(), approved_by: appUser?.email })
 
