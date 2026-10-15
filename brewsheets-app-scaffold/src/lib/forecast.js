@@ -447,6 +447,8 @@ export function brewsToBook({ stock, fc, brews, fvs = [], busy = [], turns = new
   for (const beer of fc.beers) {
     const k = beerMatch(beer)
     const { leadDays, yield: yld, brewhouse } = profileOf(beer)
+    // Mixed beers (Megsy) are made ad hoc, not booked ahead.
+    if (!brewhouse) continue
     const s = stockOf.get(k) ?? { cubes: 0, kegs: 0, smallKegL: 0 }
     const daily = []
     for (let i = 0; i < days + coverDays; i++) {
