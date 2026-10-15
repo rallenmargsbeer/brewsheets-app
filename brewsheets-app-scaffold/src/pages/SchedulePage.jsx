@@ -420,7 +420,9 @@ export default function SchedulePage() {
     if (clip.mode === 'cut') {
       const upd = fits.map((it) => ({ id: it.e.id, ...where(it) }))
       const { extra: followers, clashes } = filterFollowers(upd)
-      applyCells(followers.length ? `${label} (packaging follows)` : label, { del, upd: [...upd, ...followers] })
+      const bt = packFollowers(upd, new Set([...upd, ...followers].map((m) => m.id)))
+      const note = followers.length ? ' (packaging follows)' : bt.extra.length || bt.ins.length ? ' (bright tank stay extended)' : ''
+      applyCells(label + note, { del, upd: [...upd, ...followers, ...bt.extra], ins: bt.ins })
       if (clashes.length) setPackClash(clashes)
       setClip(null)
     } else {
@@ -428,6 +430,48 @@ export default function SchedulePage() {
     }
     setSel({ a: { r: target.r0, c: target.c0 }, f: { r: target.r1, c: target.c1 } })
   }
+  // The bright tank follows packaging: moving a Canning / Kegging cell to a later day moves
+  // that beer's packaging job in its bright tank (Can & Keg) to that day too, or adds one, so
+  // its stay in the BT stretches to cover it. Only ever later. A booked brew's BT is found by
+  // its booking; otherwise by the beer's stay in a BT that began in the 10 days before.
+  function packFollowers(upd, moving) {
+    const extra = []
+    const ins = []
+    const isPackJob = (x) => /can|keg|packag/i.test(x.text ?? '')
+    const dateOf = (k) => k.split('|')[0]
+    const want = new Map() // job id or tank|stay -> { job, tankId, bookingId, date }
+    for (const u of upd) {
+      const e = entries.find((x) => x.id === u.id)
+      if (!e || !PACK_LANES.includes(e.lane) || !(u.entry_date > e.entry_date)) continue
+      const beer = e.beer_name || bookingBeer[e.booking_id] || cellBeer({ group: 'pack', lane: e.lane }, [e], e.entry_date, e.slot)
+      let jobs = []
+      let key = null
+      if (e.booking_id) jobs = entries.filter((x) => x.booking_id === e.booking_id && brightTankIds.includes(x.tank_id))
+      if (!jobs.length && beer) {
+        let best = null
+        for (const t of brightTankIds) {
+          for (const st of runs.get(t) ?? []) {
+            const start = dateOf(st.start)
+            if (st.beer === beer && start <= e.entry_date && start >= plusDays(e.entry_date, -10) && (!best || start > best.start)) best = { tankId: t, start, end: dateOf(st.end) }
+          }
+        }
+        if (best) jobs = entries.filter((x) => x.tank_id === best.tankId && x.entry_date >= best.start && x.entry_date <= best.end)
+      }
+      if (!jobs.length) continue
+      const job = jobs.filter(isPackJob).sort((a, b) => b.entry_date.localeCompare(a.entry_date))[0] ?? null
+      key = job ? job.id : `${jobs[0].tank_id}|${jobs[0].entry_date}`
+      const cur = want.get(key)
+      if (!cur || u.entry_date > cur.date) want.set(key, { job, tankId: jobs[0].tank_id, bookingId: e.booking_id ?? null, date: u.entry_date })
+    }
+    for (const w of want.values()) {
+      if (w.job && (moving.has(w.job.id) || w.date <= w.job.entry_date)) continue
+      const at = nextFreeCell(entries.filter((y) => !moving.has(y.id)), { lane: 'tank', tankId: w.tankId }, w.date, 'AM', new Set(w.job ? [w.job.id] : []))
+      if (w.job) extra.push({ id: w.job.id, entry_date: at.date, slot: at.slot })
+      else ins.push({ entry_date: at.date, slot: at.slot, lane: 'tank', tank_id: w.tankId, text: 'Can & Keg', booking_id: w.bookingId })
+    }
+    return { extra, ins }
+  }
+
   // Packaging follows Filter: when a Filter is moved, its beer's bright tank arrival, BT jobs
   // and Canning / Kegging cells move the same number of days (kept off weekends). A booked
   // brew's cells are found by its booking; otherwise by the beer, within a week of the Filter.
