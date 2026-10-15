@@ -17,7 +17,7 @@ export const shortDate = (iso) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDat
 
 // Stock, forecast and the schedule's brews, loaded together; the plan is worked out for `months`.
 // Pass `stockData` (from listStock) when the page already has it.
-export function useBrewPlan(months, stockData = null) {
+export function useBrewPlan(months, stockData = null, refreshKey = 0) {
   const [src, setSrc] = useState(null)
   const [error, setError] = useState(null)
   const load = () => {
@@ -34,7 +34,7 @@ export function useBrewPlan(months, stockData = null) {
       })
       .catch((e) => setError(e.message))
   }
-  useEffect(load, [])
+  useEffect(load, [refreshKey])
   const fc = useMemo(() => (src ? forecastIndex(src.forecast) : null), [src])
   const plan = useMemo(() => {
     const stock = stockData ?? src?.stock
@@ -184,9 +184,10 @@ export function BrewsToBookTable({ list, months, weeks }) {
 export const planNote = (weeks) => `Litres are packaged litres (a cube is 6 L, a keg 50 L). Hold ${weeks} wks = the next ${weeks} weeks of forecast sales, the stock to keep on hand; it rolls forward day by day, so it rises ahead of busy months. In tank and booked brews count from the day after they're filtered, at each beer's own overall efficiency from Unleashed (${Math.round(YIELD * 100)}% where there are fewer than 2 finished batches) (batch size from the brew cell, e.g. "8 Ball 1500L", or the FV's size). Brew more is brewhouse litres to brew in the period to keep ${weeks} weeks of stock, including beer that has to be brewed early because a later month needs more than the brewhouse limit (the plan looks ${LOOKAHEAD_MONTHS} months ahead); brew by is the beer's FV days (from its cellar template) plus a day before stock would drop below the goal, or sooner when brewing early. When the brewhouse can't keep up, ${PRIORITY.join(', ')} get brewed first, in that order. Megsy is mixed in a bright tank in a day, so it doesn't count against the brewhouse limit or get brewed early.`
 
 // Compact brew plan for the schedule page: what needs brewing and by when.
-export function SchedulePlanPanel() {
+// `refreshKey`: bump it after booking a brew so the plan (and brews to book) reload.
+export function SchedulePlanPanel({ refreshKey = 0 }) {
   const [months, setMonths] = useState(3)
-  const { plan, capacity, fc, error } = useBrewPlan(months)
+  const { plan, capacity, toBook, fc, error } = useBrewPlan(months, null, refreshKey)
   return (
     <section className="stock-card stock-plan plan-sched">
       <h2>
@@ -201,6 +202,13 @@ export function SchedulePlanPanel() {
       </h2>
       {error && <p style={{ color: '#b00020', padding: '0 0.9rem' }}>{error}</p>}
       {!plan && !error && <p className="stock-muted" style={{ padding: '0.5rem 0.9rem' }}>Loading…</p>}
+      {toBook && (
+        <>
+          <h3 className="plan-sub">Brews to book <span>one line per brew, in a free FV with brewhouse turns free</span></h3>
+          <BrewsToBookTable list={toBook} months={months} weeks={fc.coverWeeks} />
+        </>
+      )}
+      {plan && <h3 className="plan-sub">What to brew</h3>}
       {plan && <BrewPlanTable plan={plan} months={months} weeks={fc.coverWeeks} compact />}
       {capacity && <CapacityTable plan={capacity} compact />}
     </section>
