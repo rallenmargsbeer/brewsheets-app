@@ -746,3 +746,14 @@ tr.ing-added td { background: #f3faf5; }
 .plan-brews { font-size: 0.75rem; color: var(--ink2); white-space: normal; max-width: 260px; margin: 2px auto 0; }
 .nav-badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 5px; border-radius: 9px; background: var(--orange); color: #fff; font-size: 0.72rem; line-height: 18px; text-align: center; font-weight: 700; }
 .plan-swap-btn { margin-top: 4px; padding: 3px 10px; font-size: 0.8rem; }
+/* Tab bar editing (admins) */
+.nav-edit-btn { background: none; border: 1px dashed rgba(255,255,255,0.35); cursor: pointer; font: inherit; opacity: 0.85; }
+.nav-editing { gap: 0.4rem; flex-wrap: wrap; }
+.nav-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.5rem; border-radius: 8px; background: rgba(255,255,255,0.1); color: #fff; cursor: grab; user-select: none; font-size: 0.9rem; }
+.nav-chip.dragging { opacity: 0.4; }
+.nav-grip { opacity: 0.6; font-size: 0.75rem; letter-spacing: -2px; }
+.app-nav .nav-who, .app-nav .nav-who:hover, .app-nav .nav-who:focus { font-size: 0.7rem; padding: 1px 6px; border-radius: 6px; border: none; background: #d9efe4; color: #14512a; cursor: pointer; box-shadow: none; }
+.app-nav .nav-who.admin, .app-nav .nav-who.admin:hover, .app-nav .nav-who.admin:focus { background: #fde1d3; color: #8a3a12; }
+.app-nav .nav-save { background: var(--accent); color: #fff; border: none; opacity: 1; font-weight: 600; }
+.nav-who:disabled { opacity: 0.7; cursor: default; }
+.nav-error { color: #ffb4a8; font-size: 0.85rem; }
