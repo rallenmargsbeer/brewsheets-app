@@ -744,3 +744,4 @@ tr.ing-added td { background: #f3faf5; }
 }
 .plan-swap { margin-top: 3px; font-size: 0.8rem; color: var(--accent); }
 .plan-brews { font-size: 0.75rem; color: var(--ink2); white-space: normal; max-width: 260px; margin: 2px auto 0; }
+.nav-badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 5px; border-radius: 9px; background: var(--orange); color: #fff; font-size: 0.72rem; line-height: 18px; text-align: center; font-weight: 700; }
