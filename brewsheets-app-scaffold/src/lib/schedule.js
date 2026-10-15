@@ -298,6 +298,20 @@ export async function moveToBrightTank({ bt, beerName, filterDate, filterSlot, b
   return insertEntries(rows)
 }
 
+// The first free half-day in a column (a lane, or a tank) from (date, slot) on, working days
+// only, so two jobs never end up in one cell. `ignore`: ids of entries moving away.
+export function nextFreeCell(entries, { lane, tankId = null }, date, slot, ignore = new Set()) {
+  let d = nextWorkday(date)
+  let s = d === date ? slot : 'AM'
+  for (let i = 0; i < 40; i++) {
+    const taken = entries.some((e) => e.lane === lane && (e.tank_id ?? null) === tankId && e.entry_date === d && e.slot === s && !ignore.has(e.id) && (e.text ?? '').trim())
+    if (!taken) return { date: d, slot: s }
+    if (s === 'AM') s = 'PM'
+    else { d = nextWorkday(addDays(d, 1)); s = 'AM' }
+  }
+  return { date, slot }
+}
+
 // Canning and kegging each have two columns: the first that's empty at that time, else
 // null (both taken). `ignore`: ids of entries that are moving away.
 export function freePackLane(kind, date, slot, entries, ignore = new Set()) {
@@ -392,6 +406,17 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
     if (!when || !text) continue
     const at = place(kind)
     entries.push({ entry_date: at.date, slot: at.slot, lane: at.lane, text, beer_name: beerName, booking_id: booking.id })
+  }
+  // Bright tank jobs after the beer arrives never go into a cell that's already taken.
+  if (brightTank && plan.filter) {
+    const dates = entries.map((e) => e.entry_date).sort()
+    const around = await listScheduleEntries(dates[0], addDays(dates[dates.length - 1], 14))
+    const placed = [...around]
+    for (const e of entries) {
+      const isJob = e.tank_id === brightTank.id && !(e.entry_date === plan.filter.date && e.slot === plan.filter.slot)
+      if (isJob) Object.assign(e, nextFreeCell(placed, { lane: 'tank', tankId: brightTank.id }, e.entry_date, e.slot))
+      placed.push(e)
+    }
   }
   if (entries.length) {
     const { error: e2 } = await supabase.from('schedule_entries').insert(entries)
