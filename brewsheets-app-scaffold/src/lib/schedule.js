@@ -443,6 +443,44 @@ export async function moveBooking(booking, newDate) {
   if (bErr) throw bErr
 }
 
+// The booking brewing in an FV on a day (its brew day, or its first cell in that FV).
+export async function findBooking(tankId, date) {
+  const { data } = await supabase.from('brew_bookings').select('*').eq('tank_id', tankId).eq('brew_date', date).limit(1)
+  if (data?.length) return data[0]
+  const { data: cells } = await supabase.from('schedule_entries').select('booking_id').eq('tank_id', tankId).eq('entry_date', date).not('booking_id', 'is', null).limit(1)
+  if (!cells?.length) return null
+  const { data: b } = await supabase.from('brew_bookings').select('*').eq('id', cells[0].booking_id).maybeSingle()
+  return b ?? null
+}
+
+// Moves a booking to another day and FV: every cell it made shifts by the same number of
+// days, and its jobs in the old FV go to the new one.
+export async function moveBookingToTank(booking, newDate, newTankId) {
+  const delta = daysBetween(booking.brew_date, newDate)
+  const { data: entries, error } = await supabase.from('schedule_entries').select('id, entry_date, tank_id').eq('booking_id', booking.id)
+  if (error) throw error
+  // Filter never on a weekend: if the shift puts it there, it and everything after it go to
+  // the Monday (and later jobs off weekends too).
+  const { data: full } = await supabase.from('schedule_entries').select('id, text').eq('booking_id', booking.id)
+  const filterId = (full ?? []).find((x) => /^filter\b/i.test((x.text ?? '').trim()))?.id
+  const filterAt = filterId ? addDays(entries.find((x) => x.id === filterId).entry_date, delta) : null
+  const extra = filterAt ? daysBetween(filterAt, nextWorkday(filterAt)) : 0
+  for (const e of entries) {
+    let d = addDays(e.entry_date, delta)
+    if (filterAt && d >= filterAt) d = extra ? nextWorkday(addDays(d, extra)) : nextWorkday(d)
+    const fields = { entry_date: d, ...(newTankId && e.tank_id === booking.tank_id ? { tank_id: newTankId } : {}) }
+    const { error: uErr } = await supabase.from('schedule_entries').update(fields).eq('id', e.id)
+    if (uErr) throw uErr
+  }
+  const { error: bErr } = await supabase.from('brew_bookings').update({ brew_date: newDate, ...(newTankId ? { tank_id: newTankId } : {}) }).eq('id', booking.id)
+  if (bErr) throw bErr
+}
+
+export async function restoreBooking(booking) {
+  const { error } = await supabase.from('brew_bookings').update({ brew_date: booking.brew_date, tank_id: booking.tank_id }).eq('id', booking.id)
+  if (error) throw error
+}
+
 // Removes the booking; its schedule cells go with it (on delete cascade).
 export async function cancelBooking(id) {
   const { error } = await supabase.from('brew_bookings').delete().eq('id', id)

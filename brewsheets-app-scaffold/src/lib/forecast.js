@@ -543,7 +543,7 @@ export function brewsToBook({ stock, fc, brews, fvs = [], busy = [], turns = new
         return !until || addDays(x.bookOn, profileOf(b.beer).leadDays) <= until
       })
       .sort((p, q) => p.start.localeCompare(q.start))[0]
-    if (cand) { swapped.add(cand); x.swap = { beer: cand.beer, tank: cand.tank, start: cand.start, until: belowMin.get(beerMatch(cand.beer)) ?? null } }
+    if (cand) { swapped.add(cand); x.swap = { beer: cand.beer, tank: cand.tank, tankId: fvByName.get(cand.tank)?.id ?? null, start: cand.start, until: belowMin.get(beerMatch(cand.beer)) ?? null } }
   }
 
   for (const x of list) if (!x.brewhouse) x.bookOn = x.brewBy <= today ? today : workdayOnOrBefore(x.brewBy)
