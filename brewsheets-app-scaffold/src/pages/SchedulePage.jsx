@@ -409,7 +409,15 @@ export default function SchedulePage() {
   // Pastes the copied / cut block with its top-left on the selected cell, overwriting what's there.
   function pasteAt() {
     if (!clip || !sel) return
-    placeBlock(clip, rectOf(sel))
+    const q = rectOf(sel)
+    // Like a spreadsheet: a copy pasted into a bigger selection repeats to fill it (one cell
+    // copied fills every selected cell).
+    const nR = clip.mode === 'copy' ? Math.max(1, Math.floor((q.r1 - q.r0 + 1) / clip.h)) : 1
+    const nC = clip.mode === 'copy' ? Math.max(1, Math.floor((q.c1 - q.c0 + 1) / clip.w)) : 1
+    if (nR === 1 && nC === 1) return placeBlock(clip, q)
+    const items = []
+    for (let i = 0; i < nR; i++) for (let j = 0; j < nC; j++) for (const it of clip.items) items.push({ ...it, dr: it.dr + i * clip.h, dc: it.dc + j * clip.w })
+    placeBlock({ ...clip, h: clip.h * nR, w: clip.w * nC, items }, q)
   }
   // Drag: press on a selected block that has jobs in it and drag it somewhere else (a move,
   // same as cut and paste).
