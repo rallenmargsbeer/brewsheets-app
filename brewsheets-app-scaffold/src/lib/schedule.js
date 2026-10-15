@@ -414,7 +414,11 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
     const placed = [...around]
     for (const e of entries) {
       const isJob = e.tank_id === brightTank.id && !(e.entry_date === plan.filter.date && e.slot === plan.filter.slot)
-      if (isJob) Object.assign(e, nextFreeCell(placed, { lane: 'tank', tankId: brightTank.id }, e.entry_date, e.slot))
+      if (isJob) {
+        const at = nextFreeCell(placed, { lane: 'tank', tankId: brightTank.id }, e.entry_date, e.slot)
+        e.entry_date = at.date
+        e.slot = at.slot
+      }
       placed.push(e)
     }
   }
