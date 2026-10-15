@@ -6,9 +6,10 @@ import { tinsethIbu, moreySrm, byName } from './beerCalcs'
 
 const n = (v) => (v == null || v === '' ? null : Number(v))
 
-// Actual OG: the turns' KO gravities blended by knockout volume, then diluted by any water
-// added on the last turn.
+// Actual OG: an admin's override if set, else the turns' KO gravities blended by knockout
+// volume, then diluted by any water added on the last turn.
 export function actualOg(batch) {
+  if (n(batch.og_override) != null) return n(batch.og_override)
   const turns = (batch.brew_runs ?? []).filter((r) => n(r.whirlpool_gravity) != null)
   if (!turns.length) return null
   const weighted = turns.every((r) => n(r.ko_flowmeter_l) > 0)
@@ -26,6 +27,18 @@ export function actualFg(batch) {
     .sort((a, b) => (a.reading_date ?? '').localeCompare(b.reading_date ?? '') || (a.created_at ?? '').localeCompare(b.created_at ?? ''))
     .pop()
   return r ? { plato: n(r.gravity_plato), date: r.reading_date } : null
+}
+
+// Excise: the beer's ABV has to be within 0.2% of its target ABV.
+export const ABV_TOLERANCE = 0.2
+export function abvCheck(batch) {
+  const og = actualOg(batch)
+  const fg = actualFg(batch)
+  const target = n(batch.recipes?.target_abv) ?? n(batch.target_abv)
+  const abv = og != null && fg ? abvTracker(og, fg.plato) : null
+  if (abv == null || target == null) return { abv, target, ok: null }
+  const diff = abv - target
+  return { abv, target, diff, ok: Math.abs(diff) <= ABV_TOLERANCE + 1e-9 }
 }
 
 export function batchFigures(batch, sessions = []) {

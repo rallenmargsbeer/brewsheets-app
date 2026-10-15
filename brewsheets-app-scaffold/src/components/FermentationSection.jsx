@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { deleteFermentationReading } from '../lib/api'
+import AbvFlag from './AbvFlag.jsx'
 
 // °Plato -> specific gravity (standard approximation).
 const sg = (p) => 1 + p / (258.6 - (p / 258.2) * 227.1)
@@ -77,7 +78,7 @@ function GravityChart({ points, events = [] }) {
   )
 }
 
-export default function FermentationSection({ batch, og = batch.actual_og, onChanged }) {
+export default function FermentationSection({ batch, og = batch.actual_og, check, onChanged }) {
   const readings = [...(batch.fermentation_readings ?? [])].sort(
     (a, b) => (a.reading_date ?? '').localeCompare(b.reading_date ?? '') || (a.created_at ?? '').localeCompare(b.created_at ?? '')
   )
@@ -103,6 +104,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, onCha
   const box = { marginBottom: '2rem', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: '1rem' }
   return (
     <>
+      <AbvFlag check={check} />
       <div style={box}>
         {readings.length === 0 ? (
           <p style={{ color: 'var(--ink2)', margin: 0 }}>No readings yet. Log them from the Cellar tab: tap this batch's tank.</p>

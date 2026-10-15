@@ -7,6 +7,8 @@ import TankDay from '../components/TankDay.jsx'
 import { loadDay } from '../lib/dayTasks'
 import { isScheduleEditor } from '../lib/schedule'
 import BeerDot, { useBeerColour } from '../components/BeerDot.jsx'
+import AbvFlag from '../components/AbvFlag.jsx'
+import { abvCheck } from '../lib/batchFigures'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -108,7 +110,9 @@ function TransferForm({ batch, bbts, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
+  const check = abvCheck(batch)
   async function save() {
+    if (check.ok === false && !window.confirm(`ABV ${check.abv.toFixed(2)}% is outside the excise range (${check.target}% ± 0.2%). Transfer to filter anyway?`)) return
     setSaving(true)
     setError(null)
     try {
@@ -126,9 +130,10 @@ function TransferForm({ batch, bbts, onSaved }) {
     }
   }
 
-  if (bbts.length === 0) return <p style={{ color: 'var(--ink2)', margin: 0 }}>No empty BBT right now.</p>
+  if (bbts.length === 0) return <><AbvFlag check={check} compact /><p style={{ color: 'var(--ink2)', margin: 0 }}>No empty BBT right now.</p></>
   return (
     <div>
+      <AbvFlag check={check} compact />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
         {bbts.map((t) => (
           <button key={t.id} className={bbtId === t.id ? '' : 'secondary'} onClick={() => setBbtId(t.id)}>
