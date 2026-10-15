@@ -22,6 +22,7 @@ import {
   addWorkdays,
   nextWorkday,
   freePackLane,
+  nextFreeCell,
   freePackSlots,
   addDays as plusDays,
   isWeekend,
@@ -472,7 +473,13 @@ export default function SchedulePage() {
           if (!free) clashes.push({ id: x.id, kind: x.lane.split('_')[0], text: x.text, beer: x.beer_name ?? beerOf.get(x.id), date: d, slot })
           lane = free ?? x.lane
         }
-        extra.push({ id: x.id, entry_date: d, slot, lane })
+        // A bright tank job never lands on a cell that's already taken: next free half-day.
+        let at = { date: d, slot }
+        if (!isArrival && brightTankIds.includes(x.tank_id)) {
+          const landed = [...upd, ...extra].map((m) => ({ ...entries.find((y) => y.id === m.id), ...m }))
+          at = nextFreeCell([...entries.filter((y) => !moving.has(y.id)), ...landed], { lane: 'tank', tankId: x.tank_id }, d, slot)
+        }
+        extra.push({ id: x.id, entry_date: at.date, slot: at.slot, lane })
       }
     }
     return { extra, clashes }
