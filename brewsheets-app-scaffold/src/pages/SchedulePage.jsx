@@ -277,6 +277,7 @@ export default function SchedulePage() {
   const [clip, setClip] = useState(null) // { mode: 'cut' | 'copy', r0, c0, h, w, items: [{ dr, dc, e }] }
   const [busy, setBusy] = useState(false)
   const [showPlan, setShowPlan] = useState(false)
+  const [planKey, setPlanKey] = useState(0) // bumped after a booking so the brew plan reloads
 
   useEffect(() => {
     listCellarTemplates().then(setTemplates).catch(() => {})
@@ -682,7 +683,7 @@ export default function SchedulePage() {
         {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · drag a selection to move it · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit (an empty tank or brew cell books a brew there)</span>}
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      {showPlan && editor && <SchedulePlanPanel />}
+      {showPlan && editor && <SchedulePlanPanel refreshKey={planKey} />}
 
       {weekBeers.length > 0 && (
         <div className="sc-legend">
@@ -904,6 +905,7 @@ export default function SchedulePage() {
           onBooked={(b) => {
             setBooking(false)
             loadColours()
+            setPlanKey((k) => k + 1)
             pushUndo(`Book ${b.beer_name}`, () => cancelBooking(b.id))
             // Make sure the whole booked brew is loaded, then show it.
             setRange((r) => ({ from: b.brew_date < r.from ? mondayOf(b.brew_date) : r.from, to: addDays(b.brew_date, 35) > r.to ? addDays(b.brew_date, 35) : r.to }))
