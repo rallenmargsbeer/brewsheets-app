@@ -78,8 +78,11 @@ export async function listScheduleEntries(fromIso, toIso) {
 }
 
 // Returns the new row's id when it inserts (so the change can be undone).
+// Canning and kegging are one cell a day (no AM / PM): stored as AM.
+export const packSlot = (row) => (row.lane && PACK_LANES.includes(row.lane) && row.slot ? { ...row, slot: 'AM' } : row)
+
 export async function saveScheduleEntry(entry) {
-  const { id, ...fields } = entry
+  const { id, ...fields } = packSlot(entry)
   if (id) {
     const { error } = await supabase.from('schedule_entries').update(fields).eq('id', id)
     if (error) throw error
@@ -103,7 +106,7 @@ export async function getEntriesByIds(ids) {
 
 // rows: [{ id, ...fieldsToChange }]
 export async function updateEntries(rows) {
-  for (const { id, ...fields } of rows) {
+  for (const { id, ...fields } of rows.map(packSlot)) {
     const { error } = await supabase.from('schedule_entries').update(fields).eq('id', id)
     if (error) throw error
   }
@@ -111,7 +114,7 @@ export async function updateEntries(rows) {
 
 export async function insertEntries(rows) {
   if (!rows.length) return []
-  const { data, error } = await supabase.from('schedule_entries').insert(rows).select('id')
+  const { data, error } = await supabase.from('schedule_entries').insert(rows.map(packSlot)).select('id')
   if (error) throw error
   return data.map((r) => r.id)
 }
@@ -315,22 +318,19 @@ export function nextFreeCell(entries, { lane, tankId = null }, date, slot, ignor
 // Canning and kegging each have two columns: the first that's empty at that time, else
 // null (both taken). `ignore`: ids of entries that are moving away.
 export function freePackLane(kind, date, slot, entries, ignore = new Set()) {
-  return [`${kind}_1`, `${kind}_2`].find((l) => !entries.some((e) => e.lane === l && e.entry_date === date && e.slot === slot && !ignore.has(e.id) && (e.text ?? '').trim())) ?? null
+  return [`${kind}_1`, `${kind}_2`].find((l) => !entries.some((e) => e.lane === l && e.entry_date === date && !ignore.has(e.id) && (e.text ?? '').trim())) ?? null
 }
 
 // The next free Canning / Kegging slots from a time on (working days only), for when both
 // columns are taken then: [{ date, slot, lane }].
 export function freePackSlots(kind, fromDate, fromSlot, entries, n = 8, ignore = new Set()) {
   const out = []
+  // One cell a day: the next working days with a column free.
   let d = nextWorkday(fromDate)
-  let slots = d === fromDate && fromSlot === 'PM' ? ['PM'] : ['AM', 'PM']
   for (let guard = 0; guard < 30 && out.length < n; guard++) {
-    for (const slot of slots) {
-      const lane = freePackLane(kind, d, slot, entries, ignore)
-      if (lane && out.length < n) out.push({ date: d, slot, lane })
-    }
+    const lane = freePackLane(kind, d, 'AM', entries, ignore)
+    if (lane) out.push({ date: d, slot: 'AM', lane })
     d = nextWorkday(addDays(d, 1))
-    slots = ['AM', 'PM']
   }
   return out
 }
@@ -419,7 +419,7 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
     }
   }
   if (entries.length) {
-    const { error: e2 } = await supabase.from('schedule_entries').insert(entries)
+    const { error: e2 } = await supabase.from('schedule_entries').insert(entries.map(packSlot))
     if (e2) throw e2
   }
   return booking
