@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listTankAdditions, saveTankAddition, deleteTankAddition, moveFermenterAdditionsToTank } from '../lib/api'
+import { listTankAdditions, saveTankAddition, deleteTankAddition, moveFermenterAdditionsToTank, loadTankAdditionsFromRecipe } from '../lib/api'
 import IngredientPicker from './IngredientPicker.jsx'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
@@ -102,6 +102,12 @@ export default function AddToTank({ batch, ingredients, onAdded }) {
     }
   }
 
+  const [loaded, setLoaded] = useState(false)
+  async function loadFromRecipe() {
+    setError(null)
+    try { await loadTankAdditionsFromRecipe(batch); setLoaded(true); changed() } catch (e) { setError(e.message) }
+  }
+
   const planned = additions.filter((a) => !a.added_on)
   const done = additions.filter((a) => a.added_on)
   const extraUnit = extraName ? unitFor(extraName, ingredients) : 'kg'
@@ -111,6 +117,13 @@ export default function AddToTank({ batch, ingredients, onAdded }) {
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '0.5rem' }}>
         Your initials <input value={initials} onChange={(e) => setInitials(e.target.value)} style={{ width: 80 }} />
       </label>
+
+      {additions.length === 0 && batch.recipe_id && !loaded && (
+        <p style={{ margin: '0 0 0.5rem' }}>
+          No planned additions for this batch yet.{' '}
+          <button className="secondary" onClick={loadFromRecipe}>Load from recipe</button>
+        </p>
+      )}
 
       {planned.length > 0 && (
         <div className="ta-list">

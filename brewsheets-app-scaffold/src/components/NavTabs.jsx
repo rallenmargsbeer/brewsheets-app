@@ -10,6 +10,7 @@ export const TABS = [
   { path: '/today', label: 'Today' },
   { path: '/schedule', label: 'Schedule' },
   { path: '/brew-day', label: 'Brew Day' },
+  { path: '/mill-in', label: 'Mill In' },
   { path: '/batches', label: 'Batches' },
   { path: '/cellar', label: 'Cellar' },
   { path: '/packaging', label: 'Packaging' },

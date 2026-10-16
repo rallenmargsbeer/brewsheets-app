@@ -232,7 +232,7 @@ export async function listBatches() {
 export async function listBatchesInTanks(statuses) {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipe_id, target_volume_l, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
     .not('tank_id', 'is', null)
     .in('status', statuses)
     .order('date_brewed', { ascending: false })
@@ -571,6 +571,20 @@ async function createTankAdditions(batchId, recipe, batchVolumeL) {
   if (rows.length === 0) return
   const { error } = await supabase.from('tank_additions').insert(rows)
   if (error) throw error
+}
+
+// For a batch with no tank checklist (e.g. imported from the brew sheets): seed it from the
+// recipe's fermenter additions, sized for the batch's knockout volume. KO-timed lines are left
+// out (they went in at knockout).
+export async function loadTankAdditionsFromRecipe(batch) {
+  if (!batch.recipe_id) return 0
+  const recipe = await getRecipe(batch.recipe_id)
+  const { data: runs } = await supabase.from('brew_runs').select('ko_flowmeter_l').eq('batch_id', batch.id)
+  const ko = (runs ?? []).reduce((a, r) => a + (Number(r.ko_flowmeter_l) || 0), 0)
+  const vol = ko || Number(batch.brewhouse_yield_l) || Number(batch.target_volume_l) || 0
+  const notKo = { ...recipe, recipe_fermenter_additions: (recipe.recipe_fermenter_additions ?? []).filter((f) => !/^(ko|knock ?out)/i.test(f.timing_notes ?? '')) }
+  await createTankAdditions(batch.id, notKo, vol)
+  return notKo.recipe_fermenter_additions.length
 }
 
 export async function listTankAdditions(batchId) {
