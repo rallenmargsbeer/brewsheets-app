@@ -8,6 +8,11 @@ import { assignBeers, packBeer } from './beerColours'
 import { IN_TANK_STATUSES } from './tanks'
 import { packCount } from './incoming'
 
+// Jobs (tank and notes cells) not ticked off roll into the following days until done.
+// Only from when the app started tracking jobs: older schedule cells were never ticked.
+export const CARRY_FROM = '2026-10-16'
+const CARRY_DAYS = 14
+
 const slotRank = (s) => (s === 'AM' ? 0 : 1)
 const bySlot = (a, b) => slotRank(a.slot) - slotRank(b.slot)
 
@@ -33,7 +38,14 @@ export async function loadDay(date) {
   const { beerOf, runs } = assignBeers(entries, { knownBeers: templates.map((t) => t.name), bookingBeer })
   const brightTankIds = tanks.filter((t) => t.tank_type === 'BBT').map((t) => t.id)
   const today = entries.filter((e) => e.entry_date === date)
-  const task = (e) => ({ id: e.id, slot: e.slot, text: e.text, done: !!e.done, beer: beerOf.get(e.id) ?? e.beer_name ?? null })
+  const task = (e) => ({ id: e.id, slot: e.slot, text: e.text, done: !!e.done, beer: beerOf.get(e.id) ?? e.beer_name ?? null, carriedFrom: e.entry_date === date ? null : e.entry_date })
+  // Unfinished jobs from the days before (tank and notes lanes, with text).
+  const carryStart = [CARRY_FROM, addDays(date, -CARRY_DAYS)].sort()[1]
+  // Not the cells that just name the beer in a tank (or "Brew"): those aren't jobs.
+  const beerNames = new Set([...templates.map((t) => t.name), ...bookings.map((b) => b.beer_name), ...batches.map((b) => b.beer_style), ...batches.map((b) => b.recipes?.name)].filter(Boolean).map((n) => n.trim().toLowerCase()))
+  const isJob = (e) => { const t = (e.text ?? '').trim().toLowerCase(); return t && t !== 'brew' && !beerNames.has(t) }
+  const carried = entries.filter((e) => e.entry_date >= carryStart && e.entry_date < date && !e.done && isJob(e) && (e.lane === 'tank' || ['notes', 'casual', 'deliveries'].includes(e.lane)))
+    .sort((a, b) => a.entry_date.localeCompare(b.entry_date) || bySlot(a, b))
 
   const brewhouse = today.filter((e) => BREW_LANES.includes(e.lane)).map((e) => ({ ...task(e), lane: e.lane })).sort(bySlot)
 
@@ -52,15 +64,19 @@ export async function loadDay(date) {
     tasks: list.map(task),
   })).sort(bySlot)
 
-  const other = today.filter((e) => ['notes', 'casual', 'deliveries'].includes(e.lane)).map((e) => ({ ...task(e), lane: e.lane })).sort(bySlot)
+  const other = [
+    ...carried.filter((e) => e.lane !== 'tank').map((e) => ({ ...task(e), lane: e.lane })),
+    ...today.filter((e) => ['notes', 'casual', 'deliveries'].includes(e.lane)).map((e) => ({ ...task(e), lane: e.lane })).sort(bySlot),
+  ]
 
   // Tanks: scheduled tasks, else the template's step for this day of the brew, plus gravity.
   const templateById = Object.fromEntries(templates.map((t) => [t.id, t]))
   const tankDays = tanks.filter((t) => t.is_active !== false).map((t) => {
     const batch = batches.find((b) => b.tank_id === t.id) ?? null
-    const scheduled = today.filter((e) => e.lane === 'tank' && e.tank_id === t.id).map(task).sort(bySlot)
+    const todays = today.filter((e) => e.lane === 'tank' && e.tank_id === t.id).map(task).sort(bySlot)
+    const scheduled = [...carried.filter((e) => e.lane === 'tank' && e.tank_id === t.id).map(task), ...todays]
     let fromTemplate = []
-    if (!scheduled.length && batch?.recipes?.cellar_template_id && t.tank_type !== 'BBT' && batch.date_brewed) {
+    if (!todays.length && batch?.recipes?.cellar_template_id && t.tank_type !== 'BBT' && batch.date_brewed) {
       const day = daysBetween(batch.date_brewed, date) + 1 // brew day is day 1
       const tpl = templateById[batch.recipes.cellar_template_id]
       fromTemplate = stepsForTank(tpl, t).filter((s) => Number(s.day) === day).map((s) => ({ slot: s.slot, text: s.task, template: tpl.name, day })).sort(bySlot)

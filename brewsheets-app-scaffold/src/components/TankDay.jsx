@@ -20,6 +20,7 @@ export function TaskLine({ task, editor, onChanged }) {
       {task.id ? <input type="checkbox" checked={done} disabled={busy} onChange={toggle} /> : null}
       <span className="day-slot">{task.slot}</span>
       <span>{task.text}</span>
+      {task.carriedFrom && <span className="day-carried">from {new Date(`${task.carriedFrom}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</span>}
     </label>
   )
 }
