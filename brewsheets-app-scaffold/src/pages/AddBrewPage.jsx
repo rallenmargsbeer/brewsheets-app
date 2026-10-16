@@ -202,7 +202,7 @@ export default function AddBrewPage() {
   const [recipeId, setRecipeId] = useState('')
   const [today, setToday] = useState({ names: [], recipeIds: [] })
   // Hidden recipes aren't offered (unless already chosen, e.g. by a booking).
-  const pickable = recipes.filter((r) => (r.is_active !== false && !/historical import/i.test(r.name)) || r.id === recipeId)
+  const pickable = recipes.filter((r) => (r.is_active !== false && !r.is_rtd && !/historical import/i.test(r.name)) || r.id === recipeId)
   const todayKeys = new Set(today.names.map((n) => beerMatch(beerKey(n))))
   const scheduledRecipes = pickable.filter((r) => today.recipeIds.includes(r.id) || todayKeys.has(beerMatch(beerKey(r.name))))
   const [fullRecipe, setFullRecipe] = useState(null)

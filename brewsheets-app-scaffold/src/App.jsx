@@ -28,6 +28,7 @@ import UsersPage from './pages/UsersPage.jsx'
 import PackagingMaterialsPage from './pages/PackagingMaterialsPage.jsx'
 import UnleashedPage from './pages/UnleashedPage.jsx'
 import ExcisePage from './pages/ExcisePage.jsx'
+import StartBlendPage from './pages/StartBlendPage.jsx'
 import { AuthProvider, RequireAuth, RequireAdmin, useAuth, signOut } from './auth.jsx'
 import { BeerColoursProvider } from './components/BeerDot.jsx'
 
@@ -95,6 +96,7 @@ function Shell() {
           <Route path="/recipes/new" element={gate('/recipes', <RecipeEditPage />)} />
           <Route path="/recipes/:id" element={gate('/recipes', <RecipeEditPage />)} />
           <Route path="/brew-day" element={gate('/brew-day', <BrewDayPage />)} />
+          <Route path="/brew-day/blend" element={gate('/brew-day', <StartBlendPage />)} />
           <Route path="/batches" element={gate('/batches', <BatchesPage />)} />
           <Route path="/batches/new" element={gate('/batches', <AddBrewPage />)} />
           <Route path="/batches/:id" element={gate('/batches', <BatchDetailPage />)} />

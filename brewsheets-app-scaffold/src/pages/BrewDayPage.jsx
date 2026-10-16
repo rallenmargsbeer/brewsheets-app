@@ -45,6 +45,9 @@ export default function BrewDayPage() {
       <Link to="/batches/new">
         <button className={bookings.length ? 'secondary' : ''} style={{ fontSize: '1.25rem', padding: '1rem 2.5rem' }}>Start brew</button>
       </Link>
+      <p style={{ marginTop: '1.25rem' }}>
+        <Link to="/brew-day/blend"><button className="secondary" style={{ fontSize: '1.05rem', padding: '0.75rem 1.75rem' }}>Start RTD blend</button></Link>
+      </p>
     </div>
   )
 }

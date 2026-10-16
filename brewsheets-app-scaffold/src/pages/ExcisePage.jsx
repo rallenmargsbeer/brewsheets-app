@@ -15,7 +15,7 @@ export default function ExcisePage() {
   useEffect(() => {
     supabase
       .from('batches')
-      .select('id, batch_number, beer_style, package_date, abv, fv_to_bbt_l, daw_added_l, og_override, recipes(name, target_abv, is_rtd), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
+      .select('id, batch_number, beer_style, package_date, abv, fv_to_bbt_l, daw_added_l, og_override, recipes(name, target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brewhouse_yield_l, brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
       .eq('status', 'packaged')
       .not('package_date', 'is', null)
       .order('package_date', { ascending: false })

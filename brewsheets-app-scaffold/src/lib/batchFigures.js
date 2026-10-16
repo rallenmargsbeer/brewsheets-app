@@ -29,13 +29,22 @@ export function actualFg(batch) {
   return r ? { plato: n(r.gravity_plato), date: r.reading_date } : null
 }
 
+// RTD blend ABV: alcohol from ingredients with an alcohol % (ethanol at 96%), over the blend volume.
+export function blendAbv(batch) {
+  const vol = n(batch.fv_to_bbt_l) ?? n(batch.brewhouse_yield_l) ?? n(batch.target_volume_l)
+  const items = batch.batch_blend_items ?? []
+  if (!vol || !items.length) return null
+  const alc = items.reduce((a, i) => a + (n(i.actual_qty) ?? n(i.planned_qty) ?? 0) * ((n(i.abv_pct) ?? 0) / 100), 0)
+  return (alc / vol) * 100
+}
+
 // Excise: the beer's ABV has to be within 0.2% of its target ABV.
 export const ABV_TOLERANCE = 0.2
 export function abvCheck(batch) {
   const og = actualOg(batch)
   const fg = actualFg(batch)
   const target = n(batch.recipes?.target_abv) ?? n(batch.target_abv)
-  const rawAbv = og != null && fg ? abvTracker(og, fg.plato) : null
+  const rawAbv = batch.recipes?.is_rtd ? blendAbv(batch) : og != null && fg ? abvTracker(og, fg.plato) : null
   // Once DAW is confirmed in the BBT, the beer's ABV is diluted by it.
   const beerL = n(batch.fv_to_bbt_l), dawL = n(batch.daw_added_l)
   const abv = rawAbv != null && beerL > 0 && dawL > 0 ? (rawAbv * beerL) / (beerL + dawL) : rawAbv
