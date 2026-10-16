@@ -242,6 +242,10 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
   )
 }
 
+// Desktop browsers zoom with CSS zoom (keeps the sticky headers). Phones and tablets scale with a
+// transform instead, which every mobile browser applies reliably.
+const CSS_ZOOM = typeof CSS !== 'undefined' && CSS.supports?.('zoom', '0.5') && !(typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches)
+
 export default function SchedulePage() {
   const liveRange = () => ({ from: monthStart(todayIso()), to: addDays(todayIso(), CHUNK_DAYS * 2) })
   const [range, setRange] = useState(liveRange)
@@ -253,7 +257,17 @@ export default function SchedulePage() {
   const [zoom, setZoomState] = useState(() => { try { return Number(localStorage.getItem('sched-zoom')) || 1 } catch { return 1 } })
   const setZoom = (z) => { const v = Math.max(0.15, Math.min(1, Math.round(z * 100) / 100)); setZoomState(v); try { localStorage.setItem('sched-zoom', String(v)) } catch { /* private mode */ } }
   const zoomStep = (dir) => { const next = dir < 0 ? ZOOMS.find((z) => z < zoom - 0.001) : [...ZOOMS].reverse().find((z) => z > zoom + 0.001); if (next) setZoom(next) }
-  const zoomFit = () => { const t = gridRef.current, w = scrollRef.current?.clientWidth; const full = t ? t.getBoundingClientRect().width / zoom : 0; if (full && w) setZoom(Math.floor((w / full) * 100) / 100) }
+  // CSS zoom where the browser has it (keeps the sticky headers); otherwise a transform, with the
+  // wrapper taking the scaled size so the scroll area shrinks with it.
+  const [gridSize, setGridSize] = useState({ w: 0, h: 0 })
+  useEffect(() => {
+    const t = gridRef.current
+    if (!t || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setGridSize((g) => (g.w === t.offsetWidth && g.h === t.offsetHeight ? g : { w: t.offsetWidth, h: t.offsetHeight })))
+    ro.observe(t)
+    return () => ro.disconnect()
+  }, [gridRef.current])
+  const zoomFit = () => { const t = gridRef.current, w = scrollRef.current?.clientWidth; const full = t ? (CSS_ZOOM ? t.getBoundingClientRect().width / zoom : t.offsetWidth) : 0; if (full && w) setZoom(Math.floor((w / full) * 100) / 100) }
   const scrolledToToday = useRef(false)
   const [tanks, setTanks] = useState([])
   const [recipes, setRecipes] = useState([])
@@ -793,7 +807,8 @@ export default function SchedulePage() {
         <button className="secondary" onClick={zoomFit} title="Fit every column on screen">Fit width</button>
       </div>
       <div className="sc-scroll" ref={scrollRef} onScroll={onScroll}>
-        <table className="sc-grid" ref={gridRef} style={zoom !== 1 ? { zoom } : undefined}>
+        <div className="sc-zoomwrap" style={zoom !== 1 && !CSS_ZOOM && gridSize.w ? { width: gridSize.w * zoom, height: gridSize.h * zoom } : undefined}>
+        <table className={'sc-grid' + (zoom !== 1 ? ' sc-zoomed' : '')} ref={gridRef} style={zoom === 1 ? undefined : CSS_ZOOM ? { zoom } : { transform: `scale(${zoom})`, transformOrigin: '0 0' }}>
           <thead>
             <tr>
               <th className="sc-day">Day</th>
@@ -882,6 +897,7 @@ export default function SchedulePage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {packClash.length > 0 && (() => {

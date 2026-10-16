@@ -1,3 +1,5 @@
+/* Stop phones auto-enlarging text in wide tables (the schedule), so zooming out works. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 :root {
   /* Brand palette (as the sensory app): navy, teal, orange. */
   --navy: #141a24;
@@ -806,3 +808,5 @@ tr.today td { background: #fbf6e9; }
 .sc-zoom button { padding: 0.25rem 0.7rem; min-width: 2.4rem; font-weight: 700; }
 @media (max-width: 700px) { .sc-scroll { max-height: 80vh; } }
 @media (max-width: 700px) { .sc-hint { display: none; } }
+.sc-zoomwrap { overflow: hidden; }
+.sc-grid.sc-zoomed { min-width: 0; }
