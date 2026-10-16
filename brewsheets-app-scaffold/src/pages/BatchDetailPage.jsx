@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, createContext, useContext } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { tankLabel, statusLabel } from '../lib/tanks'
 import FermentationSection from '../components/FermentationSection.jsx'
@@ -18,6 +18,8 @@ import {
   saveTankAddition,
   updateBrewRunIngredient,
   listPackagingSessions,
+  addBrewRunIngredient,
+  deleteBrewRunIngredient,
 } from '../lib/api'
 import { batchFigures, actualOg, batchIbuSrm, abvCheck } from '../lib/batchFigures'
 import { useAuth } from '../auth.jsx'
@@ -253,9 +255,42 @@ function formatQty(qty) {
 // confirmed/locked — ingredient edits are deliberately decoupled from stage
 // gating. Saves trigger a full page refresh (onSaved) rather than local
 // state patching, same as everywhere else on this page.
-function IngredientList({ title, items, ingredients, onSaved }) {
+// Brew sheets for batches without a recipe (e.g. a split brew) are fully editable:
+// every section can have lines added and removed. Provided by TurnStepper.
+const CustomSheet = createContext(null)
+
+// "+ Add" row for a custom sheet: ingredient, amount (kg or g) and minutes for kettle hops.
+function AddLine({ runId, section, stage, ingredients, onSaved, count }) {
+  const [name, setName] = useState('')
+  const [qty, setQty] = useState('')
+  const [min, setMin] = useState('')
+  const [busy, setBusy] = useState(false)
+  const kg = usesKg(section)
+  async function add() {
+    setBusy(true)
+    try {
+      const g = Number(qty) * (kg ? 1000 : 1)
+      await addBrewRunIngredient({ brew_run_id: runId, section, addition_stage: stage ?? null, item_name: name, planned_qty: g, actual_qty: g, time_min: min === '' ? null : Number(min), sort_order: count, extra_notes: 'Added on the brew sheet' })
+      setName(''); setQty(''); setMin('')
+      onSaved()
+    } finally { setBusy(false) }
+  }
+  return (
+    <div className="ing-addline">
+      <IngredientPicker value={name} section={section} ingredients={ingredients ?? []} onCommit={setName} width={200} />
+      <label><input type="number" inputMode="decimal" step={kg ? '0.001' : '1'} value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 80 }} /> {kg ? 'kg' : 'g'}</label>
+      {section === 'kettle' && <label><input type="number" inputMode="numeric" value={min} onChange={(e) => setMin(e.target.value)} style={{ width: 60 }} /> min</label>}
+      <button className="secondary" onClick={add} disabled={busy || !name || !(Number(qty) > 0)}>+ Add</button>
+    </div>
+  )
+}
+
+function IngredientList({ title, items, ingredients, onSaved, section, stage }) {
   const [adding, setAdding] = useState(false)
-  if (!items || items.length === 0) return null
+  const custom = useContext(CustomSheet)
+  const editable = !!(custom && section)
+  if (!editable && (!items || items.length === 0)) return null
+  items = items ?? []
   const notAdded = items.filter((i) => !i.added_at)
   // Marks every ingredient in this section not yet added as added now.
   async function addAll() {
@@ -285,10 +320,11 @@ function IngredientList({ title, items, ingredients, onSaved }) {
         </thead>
         <tbody>
           {items.map((item) => (
-            <IngredientRow key={item.id} item={item} ingredients={ingredients} onSaved={onSaved} />
+            <IngredientRow key={item.id} item={item} ingredients={ingredients} onSaved={onSaved} removable={editable} />
           ))}
         </tbody>
       </table>
+      {editable && <AddLine runId={custom.runId} section={section} stage={stage} ingredients={ingredients} onSaved={onSaved} count={items.length} />}
       {items.length > 1 && (
         <button className="ing-addall" onClick={addAll} disabled={adding || !notAdded.length}>
           {!notAdded.length ? '✓ All added' : adding ? 'Adding…' : `Add all${title ? ` ${title.toLowerCase()}` : ''} (${notAdded.length})`}
@@ -306,7 +342,7 @@ function usesKg(section) {
   return section === 'grist' || section === 'kettle' || section === 'whirlpool'
 }
 
-function IngredientRow({ item, ingredients, onSaved }) {
+function IngredientRow({ item, ingredients, onSaved, removable }) {
   const kg = usesKg(item.section)
   const toDisplay = (g) => (g == null ? '' : kg ? +(g / 1000).toFixed(3) : g)
 
@@ -378,6 +414,10 @@ function IngredientRow({ item, ingredients, onSaved }) {
         {item.added_at
           ? <button className="ing-stamp" onClick={toggleAdded} disabled={saving} title="Tap to undo">✓ Added {addedTime}</button>
           : <button className="ing-add" onClick={toggleAdded} disabled={saving}>Add</button>}
+        {removable && !item.added_at && (
+          <button className="secondary" style={{ marginLeft: 4, padding: '0.2rem 0.5rem' }} aria-label={`Remove ${item.item_name}`} disabled={saving}
+            onClick={async () => { if (!window.confirm(`Remove ${item.item_name} from this turn?`)) return; await deleteBrewRunIngredient(item.id); onSaved() }}>✕</button>
+        )}
       </td>
     </tr>
   )
@@ -565,7 +605,11 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   const alphaAcidByName = new Map(masterIngredients.map((i) => [i.name, i.alpha_acid_pct]).filter(([, aa]) => aa != null))
   const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], alphaAcidByName, form.postboil_gravity, form.postboil_volume_l)
 
+  // Batches without a recipe (split / one-off) get a fully editable brew sheet.
+  const customSheet = !recipe || /no recipe/i.test(recipe.name ?? '') ? { runId: form.id ?? run?.id } : null
+
   return (
+    <CustomSheet.Provider value={customSheet}>
     <div className="brewday-turn" style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: '1rem' }}>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
@@ -679,8 +723,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                       onSaved={applySaved}
                     />
                   </div>
-                  <IngredientList title="Grist" items={gristItems} ingredients={masterIngredients} onSaved={onSaved} />
-                  <IngredientList title="Water (Mash)" items={mashWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
+                  <IngredientList title="Grist" section="grist" items={gristItems} ingredients={masterIngredients} onSaved={onSaved} />
+                  <IngredientList title="Water (Mash)" section="water" stage="mash" items={mashWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
               )}
 
@@ -760,8 +804,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                   {fld('preboil_gravity', 'Pre-Boil Grav. (actual)', 'number', 130)}
                   {fld('postboil_volume_l', 'Post-Boil Vol (L)', 'number', 130)}
                   {fld('postboil_gravity', 'Post-Boil Grav.', 'number', 120)}
-                  <IngredientList title="Kettle" items={kettleItems} ingredients={masterIngredients} onSaved={onSaved} />
-                  <IngredientList title="Water (Kettle)" items={kettleWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
+                  <IngredientList title="Kettle" section="kettle" items={kettleItems} ingredients={masterIngredients} onSaved={onSaved} />
+                  <IngredientList title="Water (Kettle)" section="water" stage="kettle" items={kettleWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
                   {/* Shown during the boil too, so they can be weighed out ready for knockout. */}
                   <IngredientList title="Whirlpool Additions (at knockout)" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
@@ -769,7 +813,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
 
               {s.key === 'knockout' && (
                 <>
-                  <IngredientList title="Whirlpool Additions" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
+                  <IngredientList title="Whirlpool Additions" section="whirlpool" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
                   {(recipe?.ko_temp != null || estimatedIBU != null || koPhRange) && (
                     <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                       {recipe?.ko_temp != null && <TargetValue label="Target KO Temp" value={recipe.ko_temp} unit="°C" />}
@@ -888,6 +932,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
         />
       </label>
     </div>
+    </CustomSheet.Provider>
   )
 }
 
