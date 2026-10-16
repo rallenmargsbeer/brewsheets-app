@@ -394,9 +394,19 @@ export async function consolidateFermenterLines(batch) {
 
 // After the batch grows by a turn, the whole-batch fermenter lines (on its first turn)
 // scale up to the new total. Lines the brewer has already changed keep their actual.
-export async function rescaleFermenterLines(runs, oldTotalL, newTotalL) {
+// When the target volume changes (a turn added), fermenter lines and the tank's planned
+// additions not yet added follow the new target.
+export async function rescaleFermenterLines(runs, oldTotalL, newTotalL, batchId = null) {
   if (!(oldTotalL > 0) || !(newTotalL > 0)) return
   const f = newTotalL / oldTotalL
+  if (batchId) {
+    const { data: adds, error: e1 } = await supabase.from('tank_additions').select('id, planned_qty').eq('batch_id', batchId).is('added_on', null).not('planned_qty', 'is', null)
+    if (e1) throw e1
+    for (const a of adds ?? []) {
+      const { error } = await supabase.from('tank_additions').update({ planned_qty: Number(a.planned_qty) * f }).eq('id', a.id)
+      if (error) throw error
+    }
+  }
   for (const run of runs) {
     for (const l of (run.brew_run_ingredients ?? []).filter((x) => x.section === 'fermenter')) {
       const planned = l.planned_qty == null ? null : Number(l.planned_qty) * f
@@ -583,16 +593,21 @@ async function createTankAdditions(batchId, recipe, batchVolumeL) {
   if (error) throw error
 }
 
+// Dry hops and other fermenter additions are always sized for the batch's TARGET volume
+// (turns × turn volume), never the actual knockout: a 100 HL batch gets the same dry hop
+// whether it yielded 9,782 L or 10,231 L. Older batches without a turn volume use 25 HL turns.
+export const targetVolumeL = (batch) =>
+  Number(batch.target_volume_l) || (Number(batch.turn_volume_l) * Number(batch.turn_quantity)) || (Number(batch.turn_quantity) * 2500) || Number(batch.brewhouse_yield_l) || 0
+
 // For a batch with no tank checklist (e.g. imported from the brew sheets): seed it from the
-// recipe's fermenter additions, sized for the batch's knockout volume. KO-timed lines are left
+// recipe's fermenter additions, sized for the batch's target volume. KO-timed lines are left
 // out (they went in at knockout).
 export async function loadTankAdditionsFromRecipe(batch) {
   if (!batch.recipe_id) return 0
   const recipe = await getRecipe(batch.recipe_id)
-  const { data: runs } = await supabase.from('brew_runs').select('ko_flowmeter_l').eq('batch_id', batch.id)
-  const ko = (runs ?? []).reduce((a, r) => a + (Number(r.ko_flowmeter_l) || 0), 0)
-  const vol = ko || Number(batch.brewhouse_yield_l) || Number(batch.target_volume_l) || 0
-  const notKo = { ...recipe, recipe_fermenter_additions: (recipe.recipe_fermenter_additions ?? []).filter((f) => !/^(ko|knock ?out)/i.test(f.timing_notes ?? '')) }
+  const { data: b } = await supabase.from('batches').select('target_volume_l, turn_volume_l, turn_quantity, brewhouse_yield_l').eq('id', batch.id).single()
+  const vol = targetVolumeL(b ?? batch)
+  const notKo = { ...recipe, recipe_fermenter_additions: (recipe.recipe_fermenter_additions ?? []).filter((f) => !/^(ko|knock ?out|dip ?hop)/i.test(f.timing_notes ?? '')) }
   await createTankAdditions(batch.id, notKo, vol)
   return notKo.recipe_fermenter_additions.length
 }

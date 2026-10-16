@@ -1010,10 +1010,10 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
     if (batch.recipes && batch.turn_volume_l) {
       // No yeast on the new turn: the whole-batch fermenter lines (turn 1) grow instead.
       await snapshotBrewRunIngredients(newRun.id, batch.recipes, batch.turn_volume_l, {}, 0)
-      await rescaleFermenterLines(batch.brew_runs ?? [], batch.turn_volume_l * turnCount, batch.turn_volume_l * nextNumber)
+      await rescaleFermenterLines(batch.brew_runs ?? [], batch.turn_volume_l * turnCount, batch.turn_volume_l * nextNumber, batch.id)
     }
     if (!batch.turn_quantity || batch.turn_quantity < nextNumber) {
-      await upsertBatch({ id: batch.id, turn_quantity: nextNumber })
+      await upsertBatch({ id: batch.id, turn_quantity: nextNumber, ...(batch.turn_volume_l ? { target_volume_l: batch.turn_volume_l * nextNumber } : {}) })
     }
     setActiveTurn(nextNumber)
     refresh()
