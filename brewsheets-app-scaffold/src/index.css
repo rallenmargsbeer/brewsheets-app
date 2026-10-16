@@ -769,3 +769,12 @@ tr.ing-added td { background: #f3faf5; }
 .bd-override { display: flex; gap: 0.3rem; align-items: center; margin-top: 0.3rem; }
 .bd-override input { width: 80px; padding: 2px 6px; }
 .bd-override button { padding: 2px 8px; font-size: 0.8rem; }
+
+.abv-cell.ok { background: #d9efe0; color: #14512a; font-weight: 600; }
+.abv-cell.bad { background: #fbdcd8; color: #7a140d; font-weight: 600; }
+.tile-reading { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; font-size: 0.95rem; margin-top: 2px; }
+.tile-reading.muted { color: var(--ink2); font-size: 0.85rem; }
+.tile-abv { border-radius: 4px; padding: 0.05rem 0.4rem; font-weight: 600; background: #eceeec; }
+.tile-abv.ok { background: #d9efe0; color: #14512a; } .tile-abv.bad { background: #fbdcd8; color: #7a140d; }
+.daw-note { background: #eef4f8; border-radius: 6px; padding: 0.5rem 0.7rem; font-size: 0.9rem; margin: 0.5rem 0 0; }
+.daw-note.exact { background: #e3f1e8; color: #14512a; }
