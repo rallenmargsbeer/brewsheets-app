@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { deleteFermentationReading } from '../lib/api'
 import AbvFlag from './AbvFlag.jsx'
+import BatchJobs from './BatchJobs.jsx'
 import { ABV_TOLERANCE } from '../lib/batchFigures'
 
 // °Plato -> specific gravity (standard approximation).
@@ -110,6 +111,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
   return (
     <>
       <AbvFlag check={check} />
+      <BatchJobs batch={batch} />
       <div style={box}>
         {readings.length === 0 ? (
           <p style={{ color: 'var(--ink2)', margin: 0 }}>No readings yet. Log them from the Cellar tab: tap this batch's tank.</p>

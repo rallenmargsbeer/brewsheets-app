@@ -782,3 +782,13 @@ tr.ing-added td { background: #f3faf5; }
 .millin-size { font-size: 1.2rem; font-weight: 700; padding: 0.5rem 1.2rem; -webkit-touch-callout: none; user-select: none; }
 .millin-menu { position: fixed; z-index: 1000; background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem; display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.3rem; box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
 .millin-table td, .millin-table th { font-size: 1.05rem; padding: 0.45rem 0.6rem; }
+
+.day-carried { font-size: 0.72rem; font-weight: 700; color: #7a4a00; background: #fdf0cc; border-radius: 999px; padding: 0.05rem 0.5rem; margin-left: 0.4rem; white-space: nowrap; }
+.batch-jobs { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }
+.batch-jobs h3 { margin: 0 0 0.5rem; }
+.batch-jobs .bj-row { display: flex; gap: 0.6rem; align-items: baseline; padding: 0.25rem 0; border-top: 1px solid var(--line); }
+.batch-jobs .bj-row:first-of-type { border-top: none; }
+.batch-jobs .bj-date { width: 92px; flex: none; color: var(--ink2); font-size: 0.85rem; }
+.batch-jobs .bj-row.today .bj-date { color: var(--ink); font-weight: 700; }
+.batch-jobs .bj-row.past { opacity: 0.6; }
+.batch-jobs .bj-sugg { color: var(--ink2); font-size: 0.75rem; }
