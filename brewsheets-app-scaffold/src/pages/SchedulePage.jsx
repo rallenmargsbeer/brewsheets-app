@@ -247,6 +247,13 @@ export default function SchedulePage() {
   const [range, setRange] = useState(liveRange)
   const [archive, setArchive] = useState('') // 'YYYY-MM' when viewing a past month
   const scrollRef = useRef(null)
+  const gridRef = useRef(null)
+  // Zoom out to see more of the grid (phones especially); remembered on this device.
+  const ZOOMS = [1, 0.85, 0.7, 0.55, 0.4, 0.3]
+  const [zoom, setZoomState] = useState(() => { try { return Number(localStorage.getItem('sched-zoom')) || 1 } catch { return 1 } })
+  const setZoom = (z) => { const v = Math.max(0.15, Math.min(1, Math.round(z * 100) / 100)); setZoomState(v); try { localStorage.setItem('sched-zoom', String(v)) } catch { /* private mode */ } }
+  const zoomStep = (dir) => { const next = dir < 0 ? ZOOMS.find((z) => z < zoom - 0.001) : [...ZOOMS].reverse().find((z) => z > zoom + 0.001); if (next) setZoom(next) }
+  const zoomFit = () => { const t = gridRef.current, w = scrollRef.current?.clientWidth; const full = t ? t.getBoundingClientRect().width / zoom : 0; if (full && w) setZoom(Math.floor((w / full) * 100) / 100) }
   const scrolledToToday = useRef(false)
   const [tanks, setTanks] = useState([])
   const [recipes, setRecipes] = useState([])
@@ -758,7 +765,7 @@ export default function SchedulePage() {
           {pastMonths().map((ym) => <option key={ym} value={ym}>{fmtMonth(ym)}</option>)}
         </select>
         {archive && <strong>Archive: {fmtMonth(archive)} (view only)</strong>}
-        {editor && !archive && <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · drag a selection to move it · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit (an empty tank or brew cell books a brew there)</span>}
+        {editor && !archive && <span className="sc-hint" style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Click and drag to select · drag a selection to move it · Ctrl+X / C / V to cut, copy, paste · Delete clears · double-click to edit (an empty tank or brew cell books a brew there)</span>}
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {showPlan && editor && <SchedulePlanPanel refreshKey={planKey} />}
@@ -779,8 +786,14 @@ export default function SchedulePage() {
         </div>
       )}
 
+      <div className="sc-zoom">
+        <button className="secondary" onClick={() => zoomStep(-1)} disabled={zoom <= ZOOMS[ZOOMS.length - 1]} aria-label="Zoom out">−</button>
+        <button className="secondary" onClick={() => setZoom(1)} title="Back to 100%">{Math.round(zoom * 100)}%</button>
+        <button className="secondary" onClick={() => zoomStep(1)} disabled={zoom >= 1} aria-label="Zoom in">+</button>
+        <button className="secondary" onClick={zoomFit} title="Fit every column on screen">Fit width</button>
+      </div>
       <div className="sc-scroll" ref={scrollRef} onScroll={onScroll}>
-        <table className="sc-grid">
+        <table className="sc-grid" ref={gridRef} style={zoom !== 1 ? { zoom } : undefined}>
           <thead>
             <tr>
               <th className="sc-day">Day</th>
