@@ -41,6 +41,18 @@ export function abvCheck(batch) {
   return { abv, target, diff, ok: Math.abs(diff) <= ABV_TOLERANCE + 1e-9 }
 }
 
+// DAW (de-aerated water) to bring beerL litres at abv down to the target ABV.
+export function dawLitres(beerL, abv, target) {
+  if (!(beerL > 0) || abv == null || !(target > 0) || abv <= target) return 0
+  return beerL * (abv / target - 1)
+}
+
+// Knockout volume (plus any dilution water): the most beer the FV can hold, for a DAW estimate.
+export const koLitres = (batch) => {
+  const ko = (batch.brew_runs ?? []).reduce((a, r) => a + (n(r.ko_flowmeter_l) ?? 0), 0)
+  return ko ? ko + dilutionWater(batch) : n(batch.brewhouse_yield_l)
+}
+
 export function batchFigures(batch, sessions = []) {
   const og = actualOg(batch)
   const fg = actualFg(batch)

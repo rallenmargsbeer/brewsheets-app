@@ -8,7 +8,7 @@ import { loadDay } from '../lib/dayTasks'
 import { isScheduleEditor } from '../lib/schedule'
 import BeerDot, { useBeerColour } from '../components/BeerDot.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
-import { abvCheck } from '../lib/batchFigures'
+import { abvCheck, actualFg, dawLitres, koLitres } from '../lib/batchFigures'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -32,7 +32,7 @@ function TankTile({ tank, batch, day, onClick }) {
     <button
       className="secondary"
       onClick={onClick}
-      style={{ textAlign: 'left', padding: '0.75rem', minHeight: 120, display: 'flex', flexDirection: 'column', gap: 4, fontWeight: 400, ...(colour ? { borderLeft: `5px solid ${colour.bg}` } : {}) }}
+      style={{ textAlign: 'left', padding: '0.9rem 1rem', minHeight: 175, display: 'flex', flexDirection: 'column', gap: 4, fontWeight: 400, ...(colour ? { borderLeft: `5px solid ${colour.bg}` } : {}) }}
     >
       <span style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'baseline' }}>
         <strong style={{ fontSize: '1.15rem' }}>{tankLabel(tank.name)}</strong>
@@ -42,9 +42,10 @@ function TankTile({ tank, batch, day, onClick }) {
       </span>
       {batch ? (
         <>
-          <span style={{ fontWeight: 600 }}><BeerDot name={batch.beer_style} />{batch.beer_style}</span>
+          <span style={{ fontWeight: 600, fontSize: '1.05rem' }}><BeerDot name={batch.beer_style} />{batch.beer_style}</span>
           <span style={{ color: 'var(--ink2)' }}>#{batch.batch_number}{days != null ? ` · Day ${days}` : ''}</span>
           <span className={'pill pill-' + batch.status} style={{ alignSelf: 'flex-start' }}>{batch.status}</span>
+          <TileReading batch={batch} />
         </>
       ) : (
         <span style={{ color: 'var(--ink2)' }}>Empty</span>
@@ -52,6 +53,19 @@ function TankTile({ tank, batch, day, onClick }) {
       {next && <span className="tile-task">Today: {next.text}</span>}
       {alert && <span className={`tile-alert ${alert.level}`}>{alert.level === 'warn' ? 'Check gravity' : alert.level === 'go' ? 'At FG' : 'Near FG'}</span>}
     </button>
+  )
+}
+
+// Latest gravity and the ABV it gives (green within excise range of target, red outside).
+function TileReading({ batch }) {
+  const fg = actualFg(batch)
+  if (!fg) return <span className="tile-reading muted">No gravity yet</span>
+  const c = abvCheck(batch)
+  return (
+    <span className="tile-reading">
+      <span><b>{fg.plato.toFixed(1)}</b> °P</span>
+      {c.abv != null && <span className={'tile-abv' + (c.ok === true ? ' ok' : c.ok === false ? ' bad' : '')}>{c.abv.toFixed(2)}% ABV</span>}
+    </span>
   )
 }
 
@@ -104,6 +118,21 @@ function ReadingForm({ batch, onSaved }) {
   )
 }
 
+// DAW to bring the beer down to target ABV: an estimate from the knockout volume until the
+// filtered litres are entered, then the exact amount.
+function DawNote({ check, batch, litres }) {
+  if (check.abv == null || check.target == null) return null
+  if (check.abv <= check.target) return <p className="daw-note">ABV {check.abv.toFixed(2)}% is at or under the {check.target}% target, so no DAW needed.</p>
+  const L = Number(litres)
+  if (L > 0) {
+    const daw = dawLitres(L, check.abv, check.target)
+    return <p className="daw-note exact">Add <b>{Math.round(daw).toLocaleString()} L of DAW</b> to {L.toLocaleString()} L at {check.abv.toFixed(2)}% for {check.target}% ({Math.round(L + daw).toLocaleString()} L in the BBT).</p>
+  }
+  const ko = koLitres(batch)
+  if (!ko) return <p className="daw-note">ABV {check.abv.toFixed(2)}% is over the {check.target}% target. Enter the litres to BBT for the DAW needed.</p>
+  return <p className="daw-note">Make about <b>{Math.ceil(dawLitres(ko, check.abv, check.target) / 10) * 10} L of DAW</b>: enough to bring up to {Math.round(ko).toLocaleString()} L (the knockout volume) from {check.abv.toFixed(2)}% to {check.target}%. The exact amount shows once the filtered litres are entered.</p>
+}
+
 function TransferForm({ batch, bbts, onSaved }) {
   const [bbtId, setBbtId] = useState('')
   const [litres, setLitres] = useState('')
@@ -112,7 +141,8 @@ function TransferForm({ batch, bbts, onSaved }) {
 
   const check = abvCheck(batch)
   async function save() {
-    if (check.ok === false && !window.confirm(`ABV ${check.abv.toFixed(2)}% is outside the excise range (${check.target}% ± 0.2%). Transfer to filter anyway?`)) return
+    // Over target is fixed with DAW; under target can't be, so confirm first.
+    if (check.ok === false && check.diff < 0 && !window.confirm(`ABV ${check.abv.toFixed(2)}% is under the excise range (${check.target}% ± 0.2%), and DAW can't raise it. Transfer to filter anyway?`)) return
     setSaving(true)
     setError(null)
     try {
@@ -123,7 +153,8 @@ function TransferForm({ batch, bbts, onSaved }) {
         bbt_transfer_date: today(),
         fv_to_bbt_l: litres === '' ? null : Number(litres),
       })
-      onSaved(`Transferred to ${tankLabel(bbts.find((t) => t.id === bbtId)?.name)}`)
+      const daw = dawLitres(Number(litres), check.abv, check.target)
+      onSaved(`Transferred to ${tankLabel(bbts.find((t) => t.id === bbtId)?.name)}` + (daw ? `. Add ${Math.round(daw).toLocaleString()} L of DAW to bring ${check.abv.toFixed(2)}% down to ${check.target}%.` : ''))
     } catch (e) {
       setError(e.message)
       setSaving(false)
@@ -144,6 +175,7 @@ function TransferForm({ batch, bbts, onSaved }) {
       <label style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: '0.5rem', maxWidth: 200 }}>
         Litres to BBT<input type="number" inputMode="numeric" value={litres} onChange={(e) => setLitres(e.target.value)} />
       </label>
+      <DawNote check={check} batch={batch} litres={litres} />
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       <button onClick={save} disabled={!bbtId || saving} style={{ marginTop: '0.5rem' }}>{saving ? '…' : 'Transfer'}</button>
     </div>
@@ -265,7 +297,7 @@ export default function CellarPage() {
       ) : (
         <>
           <h3>Fermenters</h3>
-          <div style={grid}>
+          <div style={{ ...grid, gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '1rem' }}>
             {fvs.map((t) => <TankTile key={t.id} tank={t} batch={batchIn(t)} day={days?.[t.id]} onClick={() => setOpenTankId(t.id)} />)}
           </div>
           {bbts.length > 0 && (
