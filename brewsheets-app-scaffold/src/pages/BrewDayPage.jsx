@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { tankLabel } from '../lib/tanks'
-import { listBookings, todayIso, addDays } from '../lib/schedule'
+import { listBookings, todayIso } from '../lib/schedule'
 
 const fmt = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
 
 export default function BrewDayPage() {
   const [bookings, setBookings] = useState([])
 
-  // Booked brews not started yet, from a few days back (in case one slipped) to a week ahead.
+  // Only today's booked brews that haven't been started yet.
   useEffect(() => {
     const today = todayIso()
-    listBookings({ unbrewedOnly: true, fromIso: addDays(today, -3), toIso: addDays(today, 7) })
+    listBookings({ unbrewedOnly: true, fromIso: today, toIso: today })
       .then(setBookings)
       .catch(() => setBookings([]))
   }, [])
@@ -23,7 +23,7 @@ export default function BrewDayPage() {
 
       {bookings.length > 0 && (
         <div style={{ maxWidth: 520, margin: '0 auto 2rem', textAlign: 'left' }}>
-          <h3 style={{ marginBottom: '0.5rem' }}>Booked brews</h3>
+          <h3 style={{ marginBottom: '0.5rem' }}>Booked for today</h3>
           {bookings.map((b) => (
             <div key={b.id} className={'bd-booking' + (b.brew_date === today ? ' bd-today' : '')}>
               <div>
