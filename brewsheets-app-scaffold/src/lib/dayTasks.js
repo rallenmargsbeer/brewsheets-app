@@ -14,7 +14,7 @@ const bySlot = (a, b) => slotRank(a.slot) - slotRank(b.slot)
 async function listCellarBatches() {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipes(name, target_fg, cellar_template_id), fermentation_readings(reading_date, gravity_plato, created_at)')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipes(name, target_fg, cellar_template_id, recipe_fermenter_additions(item_name, timing_notes)), fermentation_readings(reading_date, gravity_plato, created_at, notes), tank_additions(item_name)')
     .in('status', IN_TANK_STATUSES)
   if (error) throw error
   return data
@@ -78,6 +78,16 @@ export async function setTaskDone(id, done) {
   if (error) throw error
 }
 
+// The recipe's terminal dry hops (fermenter additions timed "Terminal") not yet in the tank:
+// none logged on the Cellar tab, and no reading note saying it was dry hopped (DH).
+function pendingDryHops(batch) {
+  const planned = (batch.recipes?.recipe_fermenter_additions ?? []).filter((a) => /terminal|dry ?hop|\bdh\b/i.test(a.timing_notes ?? '')).map((a) => a.item_name)
+  if (!planned.length) return []
+  if ((batch.fermentation_readings ?? []).some((r) => /\bDH\b|dry ?hop/i.test(r.notes ?? ''))) return []
+  const added = new Set((batch.tank_additions ?? []).map((a) => a.item_name))
+  return planned.filter((p) => !added.has(p))
+}
+
 // Suggestions from the gravity readings of a fermenting batch (°P). Target FG from the recipe.
 export function gravityAdvice(batch, date) {
   if (batch.status !== 'fermenting') return []
@@ -94,8 +104,11 @@ export function gravityAdvice(batch, date) {
   // The latest reading at least a day before the last one, to see if it's still moving.
   const prev = [...readings].reverse().find((r) => r.reading_date < last.reading_date)
   const stable = prev && Math.abs(Number(prev.gravity_plato) - g) <= 0.1
+  const dh = pendingDryHops(batch)
   if (fg != null && g <= fg + 0.2) {
-    out.push({ level: 'go', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: check VDK / diacetyl, then chill.` })
+    out.push(dh.length
+      ? { level: 'soon', label: 'Dry hop due', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: dry hop (${dh.join(', ')}) before VDK / diacetyl and chilling.` }
+      : { level: 'go', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: check VDK / diacetyl, then chill.` })
   } else if (stable) {
     out.push(fg != null
       ? { level: 'warn', text: `Gravity hasn't moved since ${prev.reading_date.slice(5)} (${fmt(g)}, target ${fmt(fg)}): check temperature, consider rousing.` }

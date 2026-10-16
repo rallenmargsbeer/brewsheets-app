@@ -51,7 +51,7 @@ function TankTile({ tank, batch, day, onClick }) {
         <span style={{ color: 'var(--ink2)' }}>Empty</span>
       )}
       {next && <span className="tile-task">Today: {next.text}</span>}
-      {alert && <span className={`tile-alert ${alert.level}`}>{alert.level === 'warn' ? 'Check gravity' : alert.level === 'go' ? 'At FG' : 'Near FG'}</span>}
+      {alert && <span className={`tile-alert ${alert.level}`}>{alert.label ?? (alert.level === 'warn' ? 'Check gravity' : alert.level === 'go' ? 'At FG' : 'Near FG')}</span>}
     </button>
   )
 }
