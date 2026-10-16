@@ -20,6 +20,7 @@ export const TABS = [
   { path: '/forecast', label: 'Forecast' },
   { path: '/reports', label: 'Reports', admin: true },
   { path: '/unleashed', label: 'Unleashed', admin: true },
+  { path: '/excise', label: 'Excise', admin: true },
   { path: '/users', label: 'Users', admin: true, locked: true },
 ]
 
@@ -53,7 +54,7 @@ export function useNavConfig() {
 
 const navClass = ({ isActive }) => 'nav-link' + (isActive ? ' active' : '')
 
-export default function NavTabs({ nav, isAdmin, badges = {}, extra }) {
+export default function NavTabs({ nav, isAdmin, isAccounts, badges = {}, extra }) {
   const { pathname } = useLocation()
   const addingBrew = pathname === '/batches/new' // belongs to Brew Day, not Batches
   const [editing, setEditing] = useState(null) // { order, adminOnly } while editing
@@ -113,6 +114,8 @@ export default function NavTabs({ nav, isAdmin, badges = {}, extra }) {
     )
   }
 
+  // Accounts users see the Excise tab and nothing else.
+  if (isAccounts) return <nav className="app-nav"><NavLink to="/excise" className={navClass}>Excise</NavLink>{extra}</nav>
   return (
     <nav className="app-nav">
       {nav.cfg.order.filter((p) => isAdmin || !nav.cfg.adminOnly.includes(p)).map((path) => {

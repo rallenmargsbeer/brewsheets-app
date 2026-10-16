@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 
-const AuthContext = createContext({ session: null, appUser: null, isAdmin: false, loading: true })
+const AuthContext = createContext({ session: null, appUser: null, isAdmin: false, isAccounts: false, loading: true })
 
 // Session plus the staff account (app_users row: name, role, status).
 export function AuthProvider({ children }) {
@@ -31,7 +31,9 @@ export function AuthProvider({ children }) {
   }, [loadUser])
 
   const isAdmin = appUser?.role === 'admin' && appUser?.status === 'active'
-  return <AuthContext.Provider value={{ session, appUser, isAdmin, loading, reloadUser: () => loadUser(session) }}>{children}</AuthContext.Provider>
+  // Accounts users only get the Excise tab.
+  const isAccounts = appUser?.role === 'accounts' && appUser?.status === 'active'
+  return <AuthContext.Provider value={{ session, appUser, isAdmin, isAccounts, loading, reloadUser: () => loadUser(session) }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => useContext(AuthContext)

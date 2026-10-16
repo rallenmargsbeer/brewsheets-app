@@ -360,6 +360,13 @@ export default function RecipeEditPage() {
               <option value="no">No (seasonal/one-off)</option>
             </select>
           </label>
+          <label style={{ display: 'block' }}>
+            <div style={{ fontSize: '0.85rem', color: '#444' }}>Excise type</div>
+            <select value={recipe.is_rtd ? 'rtd' : 'beer'} onChange={(e) => updateField('is_rtd', e.target.value === 'rtd')}>
+              <option value="beer">Beer</option>
+              <option value="rtd">RTD</option>
+            </select>
+          </label>
           <Field label="Target OG" value={recipe.target_og} onChange={(v) => updateField('target_og', v)} />
           <Field label="Target FG" value={recipe.target_fg} onChange={(v) => updateField('target_fg', v)} />
           <Field label="Target ABV (%)" value={recipe.target_abv} onChange={(v) => updateField('target_abv', v)} />

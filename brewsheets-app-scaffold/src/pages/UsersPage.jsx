@@ -59,6 +59,7 @@ export default function UsersPage() {
                     <select value={u.role} disabled={me} onChange={(e) => update(u, { role: e.target.value })}>
                       <option value="user">User</option>
                       <option value="admin">Admin</option>
+                      <option value="accounts">Accounts (Excise only)</option>
                     </select>
                   </td>
                   <td>{STATUS[u.status]}{!u.pin_hmac && <span className="stock-muted"> · no PIN</span>}</td>
