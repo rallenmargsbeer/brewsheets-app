@@ -762,11 +762,14 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                   {fld('postboil_gravity', 'Post-Boil Grav.', 'number', 120)}
                   <IngredientList title="Kettle" items={kettleItems} ingredients={masterIngredients} onSaved={onSaved} />
                   <IngredientList title="Water (Kettle)" items={kettleWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
+                  {/* Shown during the boil too, so they can be weighed out ready for knockout. */}
+                  <IngredientList title="Whirlpool Additions (at knockout)" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
               )}
 
               {s.key === 'knockout' && (
                 <>
+                  <IngredientList title="Whirlpool Additions" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
                   {(recipe?.ko_temp != null || estimatedIBU != null || koPhRange) && (
                     <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                       {recipe?.ko_temp != null && <TargetValue label="Target KO Temp" value={recipe.ko_temp} unit="°C" />}
@@ -824,7 +827,6 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                       locked={confirmed}
                     />
                   )}
-                  <IngredientList title="Whirlpool Additions" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
               )}
             </div>
