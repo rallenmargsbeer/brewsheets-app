@@ -41,10 +41,12 @@ export function abvCheck(batch) {
   return { abv, target, diff, ok: Math.abs(diff) <= ABV_TOLERANCE + 1e-9 }
 }
 
-// DAW (de-aerated water) to bring beerL litres at abv down to the target ABV.
+// DAW (de-aerated water) dilutes down to the top of the excise range: target + 0.2%.
+export const dawAim = (target) => Number(target) + ABV_TOLERANCE
 export function dawLitres(beerL, abv, target) {
-  if (!(beerL > 0) || abv == null || !(target > 0) || abv <= target) return 0
-  return beerL * (abv / target - 1)
+  const aim = dawAim(target)
+  if (!(beerL > 0) || abv == null || !(target > 0) || abv <= aim) return 0
+  return beerL * (abv / aim - 1)
 }
 
 // Knockout volume (plus any dilution water): the most beer the FV can hold, for a DAW estimate.

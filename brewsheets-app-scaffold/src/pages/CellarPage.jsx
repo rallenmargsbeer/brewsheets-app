@@ -8,7 +8,7 @@ import { loadDay } from '../lib/dayTasks'
 import { isScheduleEditor } from '../lib/schedule'
 import BeerDot, { useBeerColour } from '../components/BeerDot.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
-import { abvCheck, actualFg, dawLitres, koLitres } from '../lib/batchFigures'
+import { abvCheck, actualFg, dawLitres, dawAim, koLitres } from '../lib/batchFigures'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -122,15 +122,16 @@ function ReadingForm({ batch, onSaved }) {
 // filtered litres are entered, then the exact amount.
 function DawNote({ check, batch, litres }) {
   if (check.abv == null || check.target == null) return null
-  if (check.abv <= check.target) return <p className="daw-note">ABV {check.abv.toFixed(2)}% is at or under the {check.target}% target, so no DAW needed.</p>
+  const aim = dawAim(check.target).toFixed(1)
+  if (check.abv <= dawAim(check.target)) return <p className="daw-note">ABV {check.abv.toFixed(2)}% is at or under {aim}% (target {check.target}% + 0.2%), so no DAW needed.</p>
   const L = Number(litres)
   if (L > 0) {
     const daw = dawLitres(L, check.abv, check.target)
-    return <p className="daw-note exact">Add <b>{Math.round(daw).toLocaleString()} L of DAW</b> to {L.toLocaleString()} L at {check.abv.toFixed(2)}% for {check.target}% ({Math.round(L + daw).toLocaleString()} L in the BBT).</p>
+    return <p className="daw-note exact">Add <b>{Math.round(daw).toLocaleString()} L of DAW</b> to {L.toLocaleString()} L at {check.abv.toFixed(2)}% for {aim}% ({Math.round(L + daw).toLocaleString()} L in the BBT).</p>
   }
   const ko = koLitres(batch)
-  if (!ko) return <p className="daw-note">ABV {check.abv.toFixed(2)}% is over the {check.target}% target. Enter the litres to BBT for the DAW needed.</p>
-  return <p className="daw-note">Make about <b>{Math.ceil(dawLitres(ko, check.abv, check.target) / 10) * 10} L of DAW</b>: enough to bring up to {Math.round(ko).toLocaleString()} L (the knockout volume) from {check.abv.toFixed(2)}% to {check.target}%. The exact amount shows once the filtered litres are entered.</p>
+  if (!ko) return <p className="daw-note">ABV {check.abv.toFixed(2)}% is over {aim}% (target {check.target}% + 0.2%). Enter the litres to BBT for the DAW needed.</p>
+  return <p className="daw-note">Make about <b>{Math.ceil(dawLitres(ko, check.abv, check.target) / 10) * 10} L of DAW</b>: enough to bring up to {Math.round(ko).toLocaleString()} L (the knockout volume) from {check.abv.toFixed(2)}% to {aim}% (target {check.target}% + 0.2%). The exact amount shows once the filtered litres are entered.</p>
 }
 
 function TransferForm({ batch, bbts, onSaved }) {
@@ -154,7 +155,7 @@ function TransferForm({ batch, bbts, onSaved }) {
         fv_to_bbt_l: litres === '' ? null : Number(litres),
       })
       const daw = dawLitres(Number(litres), check.abv, check.target)
-      onSaved(`Transferred to ${tankLabel(bbts.find((t) => t.id === bbtId)?.name)}` + (daw ? `. Add ${Math.round(daw).toLocaleString()} L of DAW to bring ${check.abv.toFixed(2)}% down to ${check.target}%.` : ''))
+      onSaved(`Transferred to ${tankLabel(bbts.find((t) => t.id === bbtId)?.name)}` + (daw ? `. Add ${Math.round(daw).toLocaleString()} L of DAW to bring ${check.abv.toFixed(2)}% down to ${dawAim(check.target).toFixed(1)}%.` : ''))
     } catch (e) {
       setError(e.message)
       setSaving(false)
