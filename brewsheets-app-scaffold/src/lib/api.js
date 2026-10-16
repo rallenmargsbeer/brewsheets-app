@@ -21,7 +21,7 @@ export async function getRecipe(id) {
   const { data, error } = await supabase
     .from('recipes')
     .select(
-      '*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*)'
+      '*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*), recipe_blend_items(*)'
     )
     .eq('id', id)
     .single()
@@ -86,6 +86,20 @@ export async function replaceWhirlpoolAdditions(recipeId, items) {
   const { error } = await supabase.from('recipe_whirlpool_additions').insert(
     items.map((it, i) => ({ ...it, recipe_id: recipeId, sort_order: i }))
   )
+  if (error) throw error
+}
+
+// RTD blend ingredients, per litre of finished blend.
+export async function replaceBlendItems(recipeId, items) {
+  await supabase.from('recipe_blend_items').delete().eq('recipe_id', recipeId)
+  if (items.length === 0) return
+  const { error } = await supabase.from('recipe_blend_items').insert(items.map((it, i) => ({ ...it, recipe_id: recipeId, sort_order: i })))
+  if (error) throw error
+}
+
+export async function upsertBlendItems(rows) {
+  if (!rows.length) return
+  const { error } = await supabase.from('batch_blend_items').upsert(rows)
   if (error) throw error
 }
 
@@ -218,7 +232,7 @@ export async function listBatches() {
 export async function listBatchesInTanks(statuses) {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
     .not('tank_id', 'is', null)
     .in('status', statuses)
     .order('date_brewed', { ascending: false })
@@ -230,7 +244,7 @@ export async function getBatch(id) {
   const { data, error } = await supabase
     .from('batches')
     .select(
-      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*)), tanks(*), brew_runs(*, brew_run_ingredients(*)), fermentation_readings(*), cellar_tasks(*), tank_additions(*)'
+      '*, recipes(*, recipe_grist_items(*), recipe_water_additions(*), recipe_kettle_additions(*), recipe_whirlpool_additions(*), recipe_fermenter_additions(*), recipe_blend_items(*)), tanks(*), brew_runs(*, brew_run_ingredients(*)), fermentation_readings(*), cellar_tasks(*), tank_additions(*), batch_blend_items(*)'
     )
     .eq('id', id)
     .single()

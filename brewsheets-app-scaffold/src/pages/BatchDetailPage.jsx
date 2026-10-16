@@ -22,6 +22,7 @@ import {
 import { batchFigures, actualOg, batchIbuSrm, abvCheck } from '../lib/batchFigures'
 import { useAuth } from '../auth.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
+import BlendSheet from '../components/BlendSheet.jsx'
 import { blendGravity, waterForGravity, gravityAfter } from '../lib/dilution'
 import { useBuffer, lacticMl, remainingTurnsPh } from '../lib/acid'
 import { tinsethIbu, toSg } from '../lib/beerCalcs'
@@ -946,7 +947,10 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
   const allKnockedOut = turnNumbers.every((n) => runsByNumber[n]?.knockout_confirmed_at)
   // Sheet opens on Fermentation; the Add Brew wizard links straight to ?view=brewday.
   const [searchParams, setSearchParams] = useSearchParams()
-  const view = ['brewday', 'details'].includes(searchParams.get('view')) ? searchParams.get('view') : 'fermentation'
+  // RTD blends have a blend sheet instead of brew turns and fermentation.
+  const rtd = !!batch.recipes?.is_rtd
+  const views = rtd ? [['blend', 'Blend'], ['details', 'Batch Details']] : [['fermentation', 'Fermentation'], ['brewday', 'Brew Day'], ['details', 'Batch Details']]
+  const view = views.some(([k]) => k === searchParams.get('view')) ? searchParams.get('view') : views[0][0]
   const brewDay = view === 'brewday'
 
   async function addAnotherTurn() {
@@ -999,11 +1003,11 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
       </p>
 
       <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid var(--line)', marginBottom: '1rem' }}>
-        {[['fermentation', 'Fermentation'], ['brewday', 'Brew Day'], ['details', 'Batch Details']].map(([key, label]) => (
+        {views.map(([key, label]) => (
           <button
             key={key}
             className={view === key ? '' : 'secondary'}
-            onClick={() => setSearchParams(key === 'fermentation' ? {} : { view: key }, { replace: true })}
+            onClick={() => setSearchParams(key === views[0][0] ? {} : { view: key }, { replace: true })}
             style={{ borderBottomLeftRadius: 0, borderBottomRightRadius: 0, marginBottom: -2 }}
           >
             {label}
@@ -1011,6 +1015,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
         ))}
       </div>
 
+      {view === 'blend' && <BlendSheet batch={batch} onChanged={refresh} />}
       {view === 'fermentation' && <FermentationSection batch={batch} og={actualOg(batch)} check={abvCheck(batch)} onChanged={refresh} />}
 
       {brewDay && (

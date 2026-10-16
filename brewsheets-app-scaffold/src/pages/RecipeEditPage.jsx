@@ -9,6 +9,7 @@ import {
   replaceKettleAdditions,
   replaceWhirlpoolAdditions,
   replaceFermenterAdditions,
+  replaceBlendItems,
   deleteRecipe,
   listIngredients,
 } from '../lib/api'
@@ -167,6 +168,7 @@ export default function RecipeEditPage() {
   const [kettle, setKettle] = useState([])
   const [whirlpool, setWhirlpool] = useState([])
   const [fermenter, setFermenter] = useState([])
+  const [blend, setBlend] = useState([])
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -195,6 +197,7 @@ export default function RecipeEditPage() {
         setKettle([...(r.recipe_kettle_additions ?? [])].sort((a, b) => Number(b.boil_time_min ?? -1) - Number(a.boil_time_min ?? -1))) // boil order
         setWhirlpool(r.recipe_whirlpool_additions ?? [])
         setFermenter(r.recipe_fermenter_additions ?? [])
+        setBlend([...(r.recipe_blend_items ?? [])].sort((a, b) => a.sort_order - b.sort_order))
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -257,6 +260,7 @@ export default function RecipeEditPage() {
         recipe_kettle_additions: _rka,
         recipe_whirlpool_additions: _rwpa,
         recipe_fermenter_additions: _rfa,
+        recipe_blend_items: _rbi,
         ...recipeFields
       } = recipe
       const payload = cleanBlanks(recipeFields)
@@ -285,6 +289,12 @@ export default function RecipeEditPage() {
         whirlpool
           .filter((wp) => wp.item_name)
           .map(({ id: _i, recipe_id: _r, ...wp }) => cleanBlanks(wp))
+      )
+      await replaceBlendItems(
+        saved.id,
+        blend
+          .filter((b) => b.ingredient_name && b.qty_per_l !== '' && b.qty_per_l != null)
+          .map(({ id: _i, recipe_id: _r, sort_order: _s, ...b }) => cleanBlanks(b))
       )
       await replaceFermenterAdditions(
         saved.id,
@@ -376,6 +386,23 @@ export default function RecipeEditPage() {
         <RecipeEstimates recipe={recipe} grist={grist} kettle={kettle} whirlpool={whirlpool} ingredients={ingredients} />
       </Section>
 
+      {recipe.is_rtd ? (
+        <LineItemsEditor
+          title="Blend ingredients"
+          subtitle="RTD: everything blended into the brite tank, per litre of finished blend. Give anything alcoholic its alcohol % (ethanol 96) so the batch ABV can be calculated."
+          items={blend}
+          setItems={setBlend}
+          ingredients={ingredients}
+          defaults={{ unit: 'L' }}
+          fields={[
+            { key: 'ingredient_name', label: 'Ingredient', width: 260, pickerSection: 'fermenter' },
+            { key: 'qty_per_l', label: 'Qty per L of blend', type: 'number', width: 110 },
+            { key: 'unit', label: 'Unit', type: 'select', options: ['L', 'mL', 'kg', 'g'] },
+            { key: 'abv_pct', label: 'Alcohol %', type: 'number', width: 80 },
+          ]}
+        />
+      ) : (
+      <>
       <Section title="Mash Schedule" subtitle="These show up as targets on the Brew Day sheet, next to what actually happened.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
           <Field label="Target Strike Temp" value={recipe.target_strike_temp} onChange={(v) => updateField('target_strike_temp', v)} />
@@ -477,6 +504,9 @@ export default function RecipeEditPage() {
           <Field label="Filter" value={recipe.filter_micron} onChange={(v) => updateField('filter_micron', v)} />
         </div>
       </Section>
+
+      </>
+      )}
 
       <Section title="Notes">
         <textarea
