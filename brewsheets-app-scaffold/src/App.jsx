@@ -27,6 +27,7 @@ import SetPinPage from './pages/SetPinPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
 import PackagingMaterialsPage from './pages/PackagingMaterialsPage.jsx'
 import UnleashedPage from './pages/UnleashedPage.jsx'
+import ExcisePage from './pages/ExcisePage.jsx'
 import { AuthProvider, RequireAuth, RequireAdmin, useAuth, signOut } from './auth.jsx'
 import { BeerColoursProvider } from './components/BeerDot.jsx'
 
@@ -42,7 +43,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { appUser, isAdmin } = useAuth()
+  const { appUser, isAdmin, isAccounts } = useAuth()
   const signedIn = appUser?.status === 'active'
   const pendingUsers = usePendingUsers(isAdmin)
   const nav = useNavConfig()
@@ -67,6 +68,7 @@ function Shell() {
           <NavTabs
             nav={nav}
             isAdmin={isAdmin}
+            isAccounts={isAccounts}
             badges={{ '/users': pendingUsers.length }}
             extra={<button type="button" className="nav-link nav-signout" onClick={signOut} title={appUser.email}>{appUser.name.split(' ')[0]} · Sign out</button>}
           />
@@ -75,6 +77,15 @@ function Shell() {
       <main style={{ padding: '1.5rem', maxWidth: wide ? 'none' : 1100, margin: '0 auto' }}>
         {isAdmin && <PendingUsersBanner users={pendingUsers} />}
         {isAdmin && <IngredientReviewBanner />}
+        {isAccounts ? (
+          // Accounts: the Excise tab only; any other address lands there.
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/set-pin" element={<SetPinPage />} />
+            <Route path="/excise" element={user(<ExcisePage />)} />
+            <Route path="*" element={<Navigate to="/excise" replace />} />
+          </Routes>
+        ) : (
         <Routes>
           <Route path="/" element={<Navigate to="/today" replace />} />
           <Route path="/login" element={<LoginPage />} />
@@ -101,11 +112,13 @@ function Shell() {
           <Route path="/stock" element={gate('/stock', <StockPage />)} />
           <Route path="/forecast" element={gate('/forecast', <ForecastPage />)} />
           <Route path="/unleashed" element={gate('/unleashed', <UnleashedPage />)} />
+          <Route path="/excise" element={gate('/excise', <ExcisePage />)} />
           <Route path="/reports" element={gate('/reports', <ReportsPage />)} />
           <Route path="/reports/dashboard" element={gate('/reports/dashboard', <DashboardPage />)} />
           <Route path="/users" element={admin(<UsersPage />)} />
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Routes>
+        )}
       </main>
     </div>
   )
