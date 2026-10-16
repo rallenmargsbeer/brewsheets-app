@@ -123,7 +123,7 @@ function ReadingForm({ batch, onSaved }) {
 function DawNote({ check, batch, litres }) {
   if (check.abv == null || check.target == null) return null
   const aim = dawAim(check.target).toFixed(1)
-  if (check.abv <= dawAim(check.target)) return <p className="daw-note">ABV {check.abv.toFixed(2)}% is at or under {aim}% (target {check.target}% + 0.2%), so no DAW needed.</p>
+  if (check.abv <= dawAim(check.target)) return null
   const L = Number(litres)
   if (L > 0) {
     const daw = dawLitres(L, check.abv, check.target)
@@ -162,10 +162,10 @@ function TransferForm({ batch, bbts, onSaved }) {
     }
   }
 
-  if (bbts.length === 0) return <><AbvFlag check={check} compact /><p style={{ color: 'var(--ink2)', margin: 0 }}>No empty BBT right now.</p></>
+  if (bbts.length === 0) return <>{check.ok === false && check.diff < 0 && <AbvFlag check={check} />}<p style={{ color: 'var(--ink2)', margin: 0 }}>No empty BBT right now.</p></>
   return (
     <div>
-      <AbvFlag check={check} compact />
+      {check.ok === false && check.diff < 0 && <AbvFlag check={check} />}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
         {bbts.map((t) => (
           <button key={t.id} className={bbtId === t.id ? '' : 'secondary'} onClick={() => setBbtId(t.id)}>
