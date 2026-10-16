@@ -407,6 +407,16 @@ export async function rescaleFermenterLines(runs, oldTotalL, newTotalL) {
   }
 }
 
+export async function addBrewRunIngredient(row) {
+  const { error } = await supabase.from('brew_run_ingredients').insert(row)
+  if (error) throw error
+}
+
+export async function deleteBrewRunIngredient(id) {
+  const { error } = await supabase.from('brew_run_ingredients').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function updateBrewRunIngredient(id, fields) {
   const { data, error } = await supabase
     .from('brew_run_ingredients')

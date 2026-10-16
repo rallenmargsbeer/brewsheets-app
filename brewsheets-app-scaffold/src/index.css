@@ -792,3 +792,5 @@ tr.ing-added td { background: #f3faf5; }
 .batch-jobs .bj-row.today .bj-date { color: var(--ink); font-weight: 700; }
 .batch-jobs .bj-row.past { opacity: 0.6; }
 .batch-jobs .bj-sugg { color: var(--ink2); font-size: 0.75rem; }
+.ing-addline { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.4rem; }
+.ing-addline label { display: flex; align-items: center; gap: 4px; font-size: 0.85rem; }
