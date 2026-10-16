@@ -97,11 +97,13 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
   const events = [...byDay].map(([day, names]) => ({ day, label: names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0] }))
 
   async function remove(r) {
-    if (!window.confirm(`Delete the ${r.reading_date} reading?`)) return
+    if (!window.confirm(`Delete this ${r.reading_date} reading${r.gravity_plato != null ? ` (${r.gravity_plato} °P)` : ''}?`)) return
     await deleteFermentationReading(r.id)
     onChanged()
   }
 
+  // Several readings on one day show their time too.
+  const sameDay = readings.reduce((m, r) => m.set(r.reading_date, (m.get(r.reading_date) ?? 0) + 1), new Map())
   const target = batch.recipes?.target_abv != null ? Number(batch.recipes.target_abv) : null
   const abvClass = (abv) => (abv == null || target == null ? '' : Math.abs(abv - target) <= ABV_TOLERANCE + 1e-9 ? 'abv-cell ok' : 'abv-cell bad')
   const box = { marginBottom: '2rem', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: '1rem' }
@@ -145,7 +147,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
                     const abv = abvTracker(og, r.gravity_plato)
                     return (
                       <tr key={r.id}>
-                        <td>{r.reading_date}</td>
+                        <td>{r.reading_date}{sameDay.get(r.reading_date) > 1 && r.created_at ? ` ${new Date(r.created_at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}` : ''}</td>
                         <td>{dayOf(r, batch.date_brewed) ?? '—'}</td>
                         <td>{fmt(r.gravity_plato, 1)}</td>
                         <td>{fmt(r.temp_panel, 1)}</td>
