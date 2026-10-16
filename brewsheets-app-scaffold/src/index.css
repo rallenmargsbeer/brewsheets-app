@@ -799,3 +799,5 @@ tr.ing-added td { background: #f3faf5; }
 .jobs-cell .day-task { margin: 0; }
 tr.jobs-only td { color: var(--ink2); }
 tr.today td { background: #fbf6e9; }
+.recipe-mode { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 1rem 0 0.5rem; }
+.recipe-mode button { padding: 0.3rem 0.8rem; }

@@ -157,6 +157,15 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults, i
   )
 }
 
+// Amounts are stored per litre (g/L). New recipes are written as amounts for a 25 HL brew
+// (kg, or g for water salts); existing recipes open in g/L. A switch flips between the two.
+const BATCH_HL = 25
+const SCALE = { grist: 2.5, water: 2500, kettle: 2.5, whirlpool: 2.5, fermenter: 2.5 } // g/L -> amount per 25 HL
+const factor = (sec, mode) => (mode === 'batch' ? SCALE[sec] : 1)
+const toBatch = (items, sec, mode = 'batch') => items.map((i) => ({ ...i, qty_25: i.qty_g_per_l == null || i.qty_g_per_l === '' ? '' : +(Number(i.qty_g_per_l) * factor(sec, mode)).toFixed(6) }))
+const toPerL = (items, sec, mode = 'batch') => items.map(({ qty_25, ...i }) => ({ ...i, qty_g_per_l: qty_25 === '' || qty_25 == null ? '' : Number(qty_25) / factor(sec, mode) }))
+const unitLabel = (sec, mode) => (mode === 'batch' ? `${sec === 'water' ? 'g' : 'kg'} per ${BATCH_HL} HL` : 'Qty (g/L)')
+
 export default function RecipeEditPage() {
   const { id } = useParams()
   const isNew = !id
@@ -169,6 +178,8 @@ export default function RecipeEditPage() {
   const [whirlpool, setWhirlpool] = useState([])
   const [fermenter, setFermenter] = useState([])
   const [blend, setBlend] = useState([])
+  // How amounts are typed: 'batch' (per 25 HL, new recipes) or 'gl' (g/L, existing recipes).
+  const [mode, setMode] = useState(isNew ? 'batch' : 'gl')
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -192,11 +203,11 @@ export default function RecipeEditPage() {
     getRecipe(id)
       .then((r) => {
         setRecipe(r)
-        setGrist([...(r.recipe_grist_items ?? [])].sort((a, b) => Number(b.qty_g_per_l ?? 0) - Number(a.qty_g_per_l ?? 0))) // base malt first
-        setWater(r.recipe_water_additions ?? [])
-        setKettle([...(r.recipe_kettle_additions ?? [])].sort((a, b) => Number(b.boil_time_min ?? -1) - Number(a.boil_time_min ?? -1))) // boil order
-        setWhirlpool(r.recipe_whirlpool_additions ?? [])
-        setFermenter(r.recipe_fermenter_additions ?? [])
+        setGrist(toBatch([...(r.recipe_grist_items ?? [])].sort((a, b) => Number(b.qty_g_per_l ?? 0) - Number(a.qty_g_per_l ?? 0)), 'grist', 'gl')) // base malt first
+        setWater(toBatch(r.recipe_water_additions ?? [], 'water', 'gl'))
+        setKettle(toBatch([...(r.recipe_kettle_additions ?? [])].sort((a, b) => Number(b.boil_time_min ?? -1) - Number(a.boil_time_min ?? -1)), 'kettle', 'gl')) // boil order
+        setWhirlpool(toBatch(r.recipe_whirlpool_additions ?? [], 'whirlpool', 'gl'))
+        setFermenter(toBatch(r.recipe_fermenter_additions ?? [], 'fermenter', 'gl'))
         setBlend([...(r.recipe_blend_items ?? [])].sort((a, b) => a.sort_order - b.sort_order))
       })
       .catch((e) => setError(e.message))
@@ -224,13 +235,13 @@ export default function RecipeEditPage() {
   function validateLineItems() {
     const errors = []
     for (const g of grist) {
-      if (g.ingredient_name && g.qty_g_per_l === '') {
-        errors.push(`Grist item "${g.ingredient_name}" needs a Qty (g/L) value.`)
+      if (g.ingredient_name && g.qty_25 === '') {
+        errors.push(`Grist item "${g.ingredient_name}" needs a quantity.`)
       }
     }
     for (const w of water) {
-      if (w.additive_name && w.qty_g_per_l === '') {
-        errors.push(`Water addition "${w.additive_name}" needs a Qty (g/L) value.`)
+      if (w.additive_name && w.qty_25 === '') {
+        errors.push(`Water addition "${w.additive_name}" needs a quantity.`)
       }
     }
     return errors
@@ -268,25 +279,25 @@ export default function RecipeEditPage() {
       const saved = await upsertRecipe(payload)
       await replaceGristItems(
         saved.id,
-        grist
+        toPerL(grist, 'grist', mode)
           .filter((g) => g.ingredient_name)
           .map(({ id: _i, recipe_id: _r, ...g }) => cleanBlanks(g))
       )
       await replaceWaterAdditions(
         saved.id,
-        water
+        toPerL(water, 'water', mode)
           .filter((w) => w.additive_name)
           .map(({ id: _i, recipe_id: _r, ...w }) => cleanBlanks(w))
       )
       await replaceKettleAdditions(
         saved.id,
-        kettle
+        toPerL(kettle, 'kettle', mode)
           .filter((k) => k.item_name)
           .map(({ id: _i, recipe_id: _r, ...k }) => cleanBlanks(k))
       )
       await replaceWhirlpoolAdditions(
         saved.id,
-        whirlpool
+        toPerL(whirlpool, 'whirlpool', mode)
           .filter((wp) => wp.item_name)
           .map(({ id: _i, recipe_id: _r, ...wp }) => cleanBlanks(wp))
       )
@@ -298,7 +309,7 @@ export default function RecipeEditPage() {
       )
       await replaceFermenterAdditions(
         saved.id,
-        fermenter
+        toPerL(fermenter, 'fermenter', mode)
           .filter((f) => f.item_name)
           .map(({ id: _i, recipe_id: _r, ...f }) => cleanBlanks(f))
       )
@@ -383,7 +394,7 @@ export default function RecipeEditPage() {
           <Field label="Target IBU" value={recipe.target_ibu} onChange={(v) => updateField('target_ibu', v)} />
           <Field label="Target SRM" value={recipe.target_srm} onChange={(v) => updateField('target_srm', v)} />
         </div>
-        <RecipeEstimates recipe={recipe} grist={grist} kettle={kettle} whirlpool={whirlpool} ingredients={ingredients} />
+        <RecipeEstimates recipe={recipe} grist={toPerL(grist, 'grist', mode)} kettle={toPerL(kettle, 'kettle', mode)} whirlpool={toPerL(whirlpool, 'whirlpool', mode)} ingredients={ingredients} />
       </Section>
 
       {recipe.is_rtd ? (
@@ -428,6 +439,19 @@ export default function RecipeEditPage() {
         </div>
       </Section>
 
+      <div className="recipe-mode">
+        <span>Enter amounts as</span>
+        {[['batch', `per ${BATCH_HL} HL brew`], ['gl', 'g/L']].map(([m, label]) => (
+          <button key={m} type="button" className={mode === m ? '' : 'secondary'} onClick={() => {
+            if (m === mode) return
+            const flip = (items, sec) => toBatch(toPerL(items, sec, mode), sec, m)
+            setGrist(flip(grist, 'grist')); setWater(flip(water, 'water')); setKettle(flip(kettle, 'kettle')); setWhirlpool(flip(whirlpool, 'whirlpool')); setFermenter(flip(fermenter, 'fermenter'))
+            setMode(m)
+          }}>{label}</button>
+        ))}
+        <span className="stock-muted">{mode === 'batch' ? 'Malt, hops and fermenter additions in kg, water salts in g, for one 25 HL brew. Saved per litre, so any brew size scales.' : 'Grams per litre of wort.'}</span>
+      </div>
+
       <LineItemsEditor
         title="Grist / Malt Bill"
         subtitle="Pack Size is the bag weight this ingredient is bought in — leave it blank for anything not bought in fixed bags. It's what the Add Brew wizard uses to let you allocate whole bags per turn instead of a computed weight."
@@ -437,7 +461,7 @@ export default function RecipeEditPage() {
         defaults={{ pack_size_kg: 25 }}
         fields={[
           { key: 'ingredient_name', label: 'Ingredient', width: 200, pickerSection: 'grist' },
-          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
+          { key: 'qty_25', label: unitLabel('grist', mode), type: 'number' },
           { key: 'pack_size_kg', label: 'Pack Size (kg)', type: 'number', width: 90 },
         ]}
       />
@@ -449,7 +473,7 @@ export default function RecipeEditPage() {
         ingredients={ingredients}
         fields={[
           { key: 'additive_name', label: 'Additive', width: 200, pickerSection: 'water' },
-          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number' },
+          { key: 'qty_25', label: unitLabel('water', mode), type: 'number' },
           {
             key: 'addition_stage',
             label: 'Stage',
@@ -468,7 +492,7 @@ export default function RecipeEditPage() {
         fields={[
           { key: 'item_name', label: 'Item', width: 180, pickerSection: 'kettle' },
           { key: 'boil_time_min', label: 'Time (min)', type: 'number', width: 90 },
-          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
+          { key: 'qty_25', label: unitLabel('kettle', mode), type: 'number', width: 90 },
         ]}
       />
 
@@ -481,7 +505,7 @@ export default function RecipeEditPage() {
         fields={[
           { key: 'item_name', label: 'Item', width: 180, pickerSection: 'whirlpool' },
           { key: 'stand_time_min', label: 'Stand time (min)', type: 'number', width: 90 },
-          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
+          { key: 'qty_25', label: unitLabel('whirlpool', mode), type: 'number', width: 90 },
         ]}
       />
 
@@ -493,7 +517,7 @@ export default function RecipeEditPage() {
         ingredients={ingredients}
         fields={[
           { key: 'item_name', label: 'Item', width: 180, pickerSection: 'fermenter' },
-          { key: 'qty_g_per_l', label: 'Qty (g/L)', type: 'number', width: 90 },
+          { key: 'qty_25', label: unitLabel('fermenter', mode), type: 'number', width: 90 },
           { key: 'timing_notes', label: 'Timing (e.g. "day 3")', width: 140 },
         ]}
       />
