@@ -12,6 +12,8 @@ import {
 import { tankLabel, statusLabel } from '../lib/tanks'
 import { KEG_SIZES, CANS_PER_CUBE, sumSessions } from '../lib/packaging'
 import BeerDot from '../components/BeerDot.jsx'
+import AbvFlag from '../components/AbvFlag.jsx'
+import { abvCheck, dawLitres, dawAim } from '../lib/batchFigures'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -208,6 +210,59 @@ function SessionCard({ number, session, batch, onChanged }) {
   )
 }
 
+// Confirm the DAW (de-aerated water) that went into the BBT; Batch Details then shows the
+// ABV after dilution. Suggested amount is the Cellar transfer's: litres to BBT down to target + 0.2%.
+function DawConfirm({ batch, onChanged }) {
+  const check = abvCheck(batch)
+  const beerL = Number(batch.fv_to_bbt_l) || 0
+  const raw = check.rawAbv
+  const suggested = raw != null && check.target != null ? Math.round(dawLitres(beerL, raw, check.target)) : 0
+  const added = Number(batch.daw_added_l) || 0
+  const [litres, setLitres] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [error, setError] = useState(null)
+  if (!added && !suggested && !editing) return null
+
+  async function save(v) {
+    setError(null)
+    try {
+      await upsertBatch({ id: batch.id, daw_added_l: v, daw_added_at: v ? new Date().toISOString() : null })
+      setEditing(false)
+      onChanged()
+    } catch (e) { setError(e.message) }
+  }
+
+  const after = (l) => (raw != null && beerL > 0 ? (raw * beerL) / (beerL + l) : null)
+  if (added && !editing) {
+    return (
+      <div style={box}>
+        <h3 style={{ marginTop: 0 }}>DAW</h3>
+        <p style={{ margin: '0 0 0.5rem' }}>✓ <strong>{Math.round(added).toLocaleString()} L of DAW added</strong>{after(added) != null ? `: ${raw.toFixed(2)}% down to ${after(added).toFixed(2)}% ABV.` : '.'}</p>
+        <AbvFlag check={check} compact />
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="secondary" onClick={() => { setLitres(String(Math.round(added))); setEditing(true) }}>Change</button>
+          <button className="secondary" onClick={() => window.confirm('Remove the DAW confirmation?') && save(null)}>Undo</button>
+        </div>
+        {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      </div>
+    )
+  }
+  const L = litres === '' ? suggested : Number(litres)
+  return (
+    <div style={box}>
+      <h3 style={{ marginTop: 0 }}>DAW</h3>
+      {suggested > 0 && <p style={{ margin: '0 0 0.5rem' }}>Add <strong>{suggested.toLocaleString()} L of DAW</strong> to {beerL.toLocaleString()} L at {raw.toFixed(2)}% for {dawAim(check.target).toFixed(1)}% (target {check.target}% + 0.2%).</p>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-end' }}>
+        <label style={{ ...field, flex: '0 1 160px' }}>DAW added (L)<input type="number" inputMode="numeric" value={litres} placeholder={suggested ? String(suggested) : ''} onChange={(e) => setLitres(e.target.value)} /></label>
+        <button onClick={() => save(L)} disabled={!(L > 0)}>Confirm DAW added</button>
+        {editing && <button className="secondary" onClick={() => setEditing(false)}>Cancel</button>}
+      </div>
+      {L > 0 && after(L) != null && <p style={{ color: 'var(--ink2)', fontSize: '0.85rem', margin: '0.4rem 0 0' }}>ABV after {L.toLocaleString()} L DAW: {after(L).toFixed(2)}%</p>}
+      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+    </div>
+  )
+}
+
 export default function PackagingBatchPage() {
   const { id } = useParams()
   const [batch, setBatch] = useState(null)
@@ -251,6 +306,8 @@ export default function PackagingBatchPage() {
         {tankLabel(batch.tanks?.name)} · <span className={'pill pill-' + batch.status}>{statusLabel(batch.status)}</span> ·{' '}
         <Link to={`/batches/${batch.id}`}>Batch sheet</Link>
       </p>
+
+      <DawConfirm batch={batch} onChanged={refresh} />
 
       <div style={{ ...box, display: 'flex', flexWrap: 'wrap', gap: '1.5rem' }}>
         {KEG_SIZES.map((size) => (
