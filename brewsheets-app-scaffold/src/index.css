@@ -801,3 +801,8 @@ tr.jobs-only td { color: var(--ink2); }
 tr.today td { background: #fbf6e9; }
 .recipe-mode { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 1rem 0 0.5rem; }
 .recipe-mode button { padding: 0.3rem 0.8rem; }
+
+.sc-zoom { display: flex; gap: 0.3rem; align-items: center; justify-content: flex-end; margin: 0 0 0.4rem; }
+.sc-zoom button { padding: 0.25rem 0.7rem; min-width: 2.4rem; font-weight: 700; }
+@media (max-width: 700px) { .sc-scroll { max-height: 80vh; } }
+@media (max-width: 700px) { .sc-hint { display: none; } }
