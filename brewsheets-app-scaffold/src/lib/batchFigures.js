@@ -35,10 +35,13 @@ export function abvCheck(batch) {
   const og = actualOg(batch)
   const fg = actualFg(batch)
   const target = n(batch.recipes?.target_abv) ?? n(batch.target_abv)
-  const abv = og != null && fg ? abvTracker(og, fg.plato) : null
-  if (abv == null || target == null) return { abv, target, ok: null }
+  const rawAbv = og != null && fg ? abvTracker(og, fg.plato) : null
+  // Once DAW is confirmed in the BBT, the beer's ABV is diluted by it.
+  const beerL = n(batch.fv_to_bbt_l), dawL = n(batch.daw_added_l)
+  const abv = rawAbv != null && beerL > 0 && dawL > 0 ? (rawAbv * beerL) / (beerL + dawL) : rawAbv
+  if (abv == null || target == null) return { abv, rawAbv, dawL, target, ok: null }
   const diff = abv - target
-  return { abv, target, diff, ok: Math.abs(diff) <= ABV_TOLERANCE + 1e-9 }
+  return { abv, rawAbv, dawL, target, diff, ok: Math.abs(diff) <= ABV_TOLERANCE + 1e-9 }
 }
 
 // DAW (de-aerated water) dilutes down to the top of the excise range: target + 0.2%.

@@ -120,7 +120,8 @@ function ReadingForm({ batch, onSaved }) {
 
 // DAW to bring the beer down to target ABV: an estimate from the knockout volume until the
 // filtered litres are entered, then the exact amount.
-function DawNote({ check, batch, litres }) {
+function DawNote({ check: c, batch, litres }) {
+  const check = { ...c, abv: c.rawAbv ?? c.abv }
   if (check.abv == null || check.target == null) return null
   const aim = dawAim(check.target).toFixed(1)
   if (check.abv <= dawAim(check.target)) return null

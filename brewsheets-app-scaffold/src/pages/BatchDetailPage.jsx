@@ -1168,7 +1168,7 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
             {isAdmin && <OgOverride batch={batch} onChanged={onChanged} />}
           </Fact>
           <Fact label="Actual FG" value={fx(f.fg?.plato, 1, ' °P')} from={f.fg ? `Latest fermentation reading, ${fmtDate(f.fg.date)}` : 'Fermentation readings'} />
-          <Fact label="ABV" value={fx(f.abv, 2, '%')} from="From actual OG and FG" />
+          <Fact label="ABV" value={fx(abvCheck(batch).abv, 2, '%')} from={batch.daw_added_l > 0 && batch.fv_to_bbt_l > 0 ? `From actual OG and FG (${fx(abvCheck(batch).rawAbv, 2, '%')}), after ${Math.round(batch.daw_added_l).toLocaleString()} L DAW` : 'From actual OG and FG'} />
           <Fact label="IBU (est.)" value={fx(est.ibu, 0)} from={target(batch.recipes?.target_ibu)} />
           <Fact label="SRM (est.)" value={fx(est.srm, 1)} from={target(batch.recipes?.target_srm)} />
           <Fact label="Target ABV" value={fx(f.targetAbv, 1, '%')} from={f.targetAbv != null ? `Recipe${f.targetOg != null ? `: OG ${f.targetOg} °P, FG ${f.targetFg ?? '?'} °P` : ''}` : 'Set on the recipe'} />
@@ -1181,6 +1181,7 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
         <div className="bd-grid">
           <Fact label="Brewhouse yield" value={fx(f.yieldL, 0, ' L')} from={f.dilutionL ? `Knockout flowmeter + ${Math.round(f.dilutionL)} L dilution water` : 'Knockout flowmeter, all turns'} />
           <Fact label="FV to BBT" value={fx(batch.fv_to_bbt_l, 0, ' L')} from={batch.bbt_transfer_date ? `Cellar transfer, ${fmtDate(batch.bbt_transfer_date)}` : 'Cellar transfer'} />
+          <Fact label="DAW added" value={batch.daw_added_l > 0 ? `${Math.round(batch.daw_added_l).toLocaleString()} L` : null} from={batch.daw_added_at ? `Confirmed on Packaging, ${fmtDate(batch.daw_added_at.slice(0, 10))}` : 'Confirmed on Packaging'} />
           <Fact label="Packaged" value={f.packedLitres ? `${f.packedLitres.toLocaleString()} L` : null} from={packedText || 'Packaging sessions'} />
           <Fact label="Package date" value={packDate} from="Packaging sessions" />
         </div>

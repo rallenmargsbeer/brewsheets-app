@@ -218,7 +218,7 @@ export async function listBatches() {
 export async function listBatchesInTanks(statuses) {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, brewhouse_yield_l, fv_to_bbt_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
     .not('tank_id', 'is', null)
     .in('status', statuses)
     .order('date_brewed', { ascending: false })
