@@ -162,10 +162,10 @@ function TransferForm({ batch, bbts, onSaved }) {
     }
   }
 
-  if (bbts.length === 0) return <>{check.ok === false && check.diff < 0 && <AbvFlag check={check} />}<p style={{ color: 'var(--ink2)', margin: 0 }}>No empty BBT right now.</p></>
+  if (bbts.length === 0) return <><AbvFlag check={check} compact /><p style={{ color: 'var(--ink2)', margin: 0 }}>No empty BBT right now.</p></>
   return (
     <div>
-      {check.ok === false && check.diff < 0 && <AbvFlag check={check} />}
+      <AbvFlag check={check} compact />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
         {bbts.map((t) => (
           <button key={t.id} className={bbtId === t.id ? '' : 'secondary'} onClick={() => setBbtId(t.id)}>
