@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { deleteFermentationReading } from '../lib/api'
 import AbvFlag from './AbvFlag.jsx'
-import BatchJobs from './BatchJobs.jsx'
+import { useBatchJobs, JobsCell } from './BatchJobs.jsx'
+import { gravityAdvice } from '../lib/dayTasks'
 import { ABV_TOLERANCE } from '../lib/batchFigures'
 
 // °Plato -> specific gravity (standard approximation).
@@ -103,6 +104,18 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
     onChanged()
   }
 
+  // Jobs (schedule or cellar template) sit in the readings table, on their date's row.
+  const { rows: jobRows, refresh: refreshJobs } = useBatchJobs(batch)
+  const todayIso = new Date().toLocaleDateString('en-CA')
+  const advice = gravityAdvice(batch, todayIso)
+  const jobsByDate = jobRows.reduce((m, j) => m.set(j.date, [...(m.get(j.date) ?? []), j]), new Map())
+  const dates = [...new Set([...readings.map((r) => r.reading_date), ...jobsByDate.keys()])].filter(Boolean).sort()
+  const lines = dates.flatMap((d) => {
+    const rs = readings.filter((r) => r.reading_date === d)
+    const jobs = jobsByDate.get(d) ?? []
+    return rs.length ? rs.map((r, i) => ({ date: d, r, jobs: i === 0 ? jobs : [] })) : [{ date: d, r: null, jobs }]
+  })
+
   // Several readings on one day show their time too.
   const sameDay = readings.reduce((m, r) => m.set(r.reading_date, (m.get(r.reading_date) ?? 0) + 1), new Map())
   const target = batch.recipes?.target_abv != null ? Number(batch.recipes.target_abv) : null
@@ -111,9 +124,9 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
   return (
     <>
       <AbvFlag check={check} />
-      <BatchJobs batch={batch} />
       <div style={box}>
-        {readings.length === 0 ? (
+        {advice.map((a, i) => <div key={'a' + i} className={`day-advice ${a.level}`} style={{ marginBottom: '0.4rem' }}>{a.text}</div>)}
+        {lines.length === 0 ? (
           <p style={{ color: 'var(--ink2)', margin: 0 }}>No readings yet. Log them from the Cellar tab: tap this batch's tank.</p>
         ) : (
           <>
@@ -141,14 +154,24 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
                     <th>ABV tracker</th>
                     <th>Notes</th>
                     <th>Initials</th>
+                    <th>Jobs</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {readings.map((r) => {
+                  {lines.map(({ date, r, jobs }) => {
+                    if (!r) return (
+                      <tr key={'j' + date} className={'jobs-only' + (date === todayIso ? ' today' : '')}>
+                        <td>{date}</td>
+                        <td>{dayOf({ reading_date: date }, batch.date_brewed) ?? '—'}</td>
+                        <td colSpan={6}></td>
+                        <td><JobsCell jobs={jobs} onChanged={refreshJobs} /></td>
+                        <td></td>
+                      </tr>
+                    )
                     const abv = abvTracker(og, r.gravity_plato)
                     return (
-                      <tr key={r.id}>
+                      <tr key={r.id} className={date === todayIso ? 'today' : ''}>
                         <td>{r.reading_date}{sameDay.get(r.reading_date) > 1 && r.created_at ? ` ${new Date(r.created_at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}` : ''}</td>
                         <td>{dayOf(r, batch.date_brewed) ?? '—'}</td>
                         <td>{fmt(r.gravity_plato, 1)}</td>
@@ -157,6 +180,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
                         <td className={abvClass(abv)}>{abv == null ? '—' : `${abv.toFixed(2)}%`}</td>
                         <td>{r.notes ?? ''}</td>
                         <td>{r.initials ?? ''}</td>
+                        <td>{jobs.length > 0 && <JobsCell jobs={jobs} onChanged={refreshJobs} />}</td>
                         <td><button className="secondary" onClick={() => remove(r)} aria-label="Delete reading" style={{ padding: '0.2rem 0.5rem' }}>✕</button></td>
                       </tr>
                     )
