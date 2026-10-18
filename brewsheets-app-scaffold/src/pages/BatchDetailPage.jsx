@@ -8,6 +8,7 @@ import SplitTurnDialog from '../components/SplitTurnDialog.jsx'
 import {
   getBatch,
   upsertBatch,
+  batchNumberTaken,
   deleteBatch,
   listTanks,
   listIngredients,
@@ -1156,6 +1157,36 @@ function Fact({ label, value, from, children }) {
   )
 }
 
+// Admins can set the batch number by hand (e.g. to match the old sheets); it must not clash.
+function BatchNumberOverride({ batch, onChanged }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState('')
+  const [error, setError] = useState(null)
+  async function save() {
+    setError(null)
+    const v = val.trim()
+    try {
+      if (await batchNumberTaken(v, batch.id)) return setError(`Batch ${v} already exists`)
+      await upsertBatch({ id: batch.id, batch_number: v })
+      setEditing(false)
+      onChanged()
+    } catch (e) { setError(e.message) }
+  }
+  if (!editing) return (
+    <div className="bd-override">
+      <button className="secondary" onClick={() => { setVal(batch.batch_number ?? ''); setEditing(true) }}>Change</button>
+    </div>
+  )
+  return (
+    <div className="bd-override">
+      <input value={val} onChange={(e) => setVal(e.target.value)} aria-label="Batch number" autoFocus />
+      <button onClick={save} disabled={!val.trim() || val.trim() === String(batch.batch_number)}>Save</button>
+      <button className="secondary" onClick={() => { setEditing(false); setError(null) }}>Cancel</button>
+      {error && <span style={{ color: 'crimson' }}>{error}</span>}
+    </div>
+  )
+}
+
 // Admins can override the Actual OG (e.g. a lab reading); clearing it goes back to the KO gravities.
 function OgOverride({ batch, onChanged }) {
   const [editing, setEditing] = useState(false)
@@ -1204,6 +1235,9 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
       <section className="bd-card">
         <h3>Batch</h3>
         <div className="bd-grid">
+          <Fact label="Batch #" value={batch.batch_number} from="Next number on Add Brew">
+            {isAdmin && <BatchNumberOverride batch={batch} onChanged={onChanged} />}
+          </Fact>
           <Fact label="Status" value={statusLabel(batch.status)} from="Moves on with Brew Day, knockout and packaging" />
           <Fact label="Beer" value={batch.recipes?.name} from={batch.recipes?.style} />
           <Fact label="Date brewed" value={fmtDate(batch.date_brewed)} from="Add Brew" />

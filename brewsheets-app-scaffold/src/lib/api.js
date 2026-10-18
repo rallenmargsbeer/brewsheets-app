@@ -680,3 +680,10 @@ async function doMoveFermenterAdditions(batchId) {
   const { error: delErr } = await supabase.from('brew_run_ingredients').delete().in('id', rows.map((r) => r.id))
   if (delErr) throw delErr
 }
+
+// True if another batch already uses this batch number.
+export async function batchNumberTaken(number, exceptId) {
+  const { data, error } = await supabase.from('batches').select('id').eq('batch_number', String(number)).neq('id', exceptId).limit(1)
+  if (error) throw error
+  return data.length > 0
+}
