@@ -13,6 +13,8 @@ const isLmWholesale = (customer) => /liquid\s*mix.*wholesale/i.test(customer ?? 
 
 // Columns: each Unleashed warehouse, then the two Liquid Mix accounts.
 const locationKey = (it) => (it.source === 'unleashed' ? `unleashed|${it.location}` : it.source)
+// The one-page meeting handout leaves out this location (and some columns, marked np).
+const PRINT_HIDE_LOC = /YBC/i
 const locationLabel = (key) => (key.startsWith('unleashed|') ? key.slice(10).replace(/ MRBC Brewery$/, '') : SOURCE_LABEL[key])
 
 // Core range if Unleashed can't be read for the sub-group.
@@ -236,6 +238,7 @@ export default function StockPage() {
             </span>
           </div>
 
+          <div className="stock-tables">
           {TABLES.map((f) => {
             const all = view.list.filter(f.match)
             const core = all.filter((r) => r.core).sort((a, b) => (a.cover ?? 1e9) - (b.cover ?? 1e9))
@@ -250,13 +253,13 @@ export default function StockPage() {
                     <thead>
                       <tr>
                         <th className="stock-beer">Beer</th>
-                        {locs.map((l) => <th key={l} className={l === 'transit' ? 'stock-transit' : ''} title={l === 'transit' ? view.transitRoutes : undefined}>{locationLabel(l)}</th>)}
+                        {locs.map((l) => <th key={l} className={(l === 'transit' ? 'stock-transit' : '') + (PRINT_HIDE_LOC.test(locationLabel(l) ?? '') ? ' np' : '')} title={l === 'transit' ? view.transitRoutes : undefined}>{locationLabel(l)}</th>)}
                         <th className="stock-total">Total</th>
-                        <th>Sold / wk</th>
+                        <th className="np">Sold / wk</th>
                         <th>Forecast / wk</th>
-                        <th>Packaging</th>
+                        <th className="np">Packaging</th>
                         <th className="stock-cover-h">Weeks of cover<br /><span className="stock-muted" style={{ fontWeight: 400, fontSize: '0.75rem' }}>on hand</span></th>
-                        <th className="stock-cover-h">Weeks of cover<br /><span className="stock-muted" style={{ fontWeight: 400, fontSize: '0.75rem' }}>incl. scheduled</span></th>
+                        <th className="stock-cover-h np">Weeks of cover<br /><span className="stock-muted" style={{ fontWeight: 400, fontSize: '0.75rem' }}>incl. scheduled</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -267,13 +270,13 @@ export default function StockPage() {
                           ),
                           <tr key={r.key} className={r.core ? '' : 'stock-other'}>
                             <td className="stock-beer"><BeerDot name={r.beer} />{r.beer}{f.sizes && <span className={`stock-size s${r.size}`}>{r.size} L</span>}</td>
-                            {locs.map((l) => <td key={l} className={(r.at[l] < 0 ? 'stock-neg ' : '') + (l === 'transit' ? 'stock-transit' : '')}>{num(r.at[l])}</td>)}
+                            {locs.map((l) => <td key={l} className={(r.at[l] < 0 ? 'stock-neg ' : '') + (l === 'transit' ? 'stock-transit' : '') + (PRINT_HIDE_LOC.test(locationLabel(l) ?? '') ? ' np' : '')}>{num(r.at[l])}</td>)}
                             <td className={'stock-total' + (r.total < 0 ? ' stock-neg' : '')}>{num(r.total) || '0'}</td>
-                            <td title={r.lmEstimated ? 'LM Wholesale part estimated from our sales to them' : undefined}>
+                            <td className="np" title={r.lmEstimated ? 'LM Wholesale part estimated from our sales to them' : undefined}>
                               {r.weekly ? r.weekly.toFixed(r.weekly < 10 ? 1 : 0) : ''}{r.lmEstimated ? '*' : ''}
                             </td>
                             <td className={r.useForecast ? '' : 'stock-muted'}>{r.fcWeekly ? r.fcWeekly.toFixed(r.fcWeekly < 10 ? 1 : 0) : ''}</td>
-                            <td className="stock-coming">
+                            <td className="stock-coming np">
                               {r.coming.slice(0, 2).map((i) => (
                                 <div key={i.date}>+{i.qty.toLocaleString()} <span>{new Date(`${i.date}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
                               ))}
@@ -282,7 +285,7 @@ export default function StockPage() {
                             <td className="stock-cover">
                               {!r.core ? null : r.coverNow == null ? <span className="stock-muted">no sales</span> : <CoverBar weeks={r.coverNow} target={target} />}
                             </td>
-                            <td className="stock-cover">
+                            <td className="stock-cover np">
                               {!r.core ? null : r.cover == null ? <span className="stock-muted">no sales</span> : <CoverBar weeks={r.cover} target={target} />}
                             </td>
                           </tr>,
@@ -295,22 +298,23 @@ export default function StockPage() {
               </section>
             )
           })}
+          </div>
 
-          <section className="stock-card stock-plan">
+          <section className="stock-card stock-plan stock-noprint">
             <h2>Brew plan <span>next 3 months · stock + tanks + booked brews against forecast</span></h2>
             {plan ? <BrewPlanTable plan={plan} months={3} weeks={target} /> : <p className="stock-muted" style={{ padding: '0.5rem 0.9rem' }}>Loading…</p>}
           </section>
           {capacity && (
-            <section className="stock-card stock-plan">
+            <section className="stock-card stock-plan stock-noprint">
               <h2>Brewhouse capacity <span>brewing by month within the monthly limit</span></h2>
               <CapacityTable plan={capacity} />
             </section>
           )}
 
-          <p className="stock-muted" style={{ fontSize: '0.8rem' }}>
+          <p className="stock-muted stock-noprint" style={{ fontSize: '0.8rem' }}>
             Forecast / wk = this month's forecast (Forecast page) as a weekly rate. {planNote(target)}
           </p>
-          <p className="stock-muted" style={{ fontSize: '0.8rem' }}>
+          <p className="stock-muted stock-noprint" style={{ fontSize: '0.8rem' }}>
             Weeks of cover is shown for the core range. Sold / wk = Unleashed sales to everyone except LM Wholesale, plus what leaves LM Wholesale.
             Weeks of cover counts packaging on the schedule from its day (canning counts are cubes, kegging counts are kegs).
             {view.historyDays < 14
