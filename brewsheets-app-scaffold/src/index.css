@@ -501,7 +501,33 @@ tbody tr:hover td {
   .stock-card h2 { padding: 0.3rem 0.6rem; font-size: 0.95rem; }
   .stock-table { font-size: 0.78rem; }
   .stock-table th, .stock-table td { padding: 0.18rem 0.4rem; }
-  .stock-cover, .stock-cover-h { min-width: 90px; }
+  .stock-cover, .stock-cover-h { min-width: 80px; }
+  /* One A4 page: only the three stock tables, without the columns marked np. */
+  .np { display: none !important; }
+  .stock-table { font-size: 0.72rem; }
+  .stock-table th, .stock-table td { padding: 0.1rem 0.35rem; }
+  .stock-card { margin-bottom: 0.35rem; }
+  .stock-card h2 { padding: 0.2rem 0.5rem; font-size: 0.85rem; }
+  h1 { font-size: 1.1rem; margin: 0; }
+  /* The stock tables in two columns: cubes over the small kegs, 50 L kegs beside them. */
+  .stock-tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "cube keg" "kegsmall keg"; gap: 3mm 4mm; align-items: start; }
+  .stock-tables .stock-cube { grid-area: cube; }
+  .stock-tables .stock-keg { grid-area: keg; }
+  .stock-tables .stock-kegsmall { grid-area: kegsmall; }
+  .stock-tables .stock-card { margin: 0; }
+  .stock-tables .stock-scroll { overflow: visible; }
+  .stock-tables .stock-card { break-inside: auto; }
+  .stock-tables .stock-card h2 { padding: 0.12rem 0.45rem; font-size: 0.78rem; }
+  .stock-tables .stock-table { width: 100%; font-size: 0.74rem; line-height: 1.2; }
+  .stock-tables .stock-cover-h .stock-muted { font-size: 0.55rem !important; }
+  .stock-tables .stock-table td { padding: 0.02rem 0.25rem; white-space: nowrap; }
+  .stock-tables .stock-table th { padding: 0.05rem 0.25rem; font-size: 0.6rem; letter-spacing: 0; white-space: normal; line-height: 1.1; vertical-align: bottom; }
+  .stock-tables .stock-size { font-size: 0.55rem; padding: 0 0.2rem; }
+  .stock-tables .stock-cover, .stock-tables .stock-cover-h { min-width: 0; width: 16mm; }
+  .stock-tables .stock-bar { height: 0.85rem; }
+  .stock-tables .stock-bar > span { font-size: 0.62rem; line-height: 0.85rem; padding-right: 0.2rem; }
+  .stock-tables .stock-divider td { font-size: 0.55rem; padding: 0.02rem 0.25rem; }
+  .stock-print-title { margin: 0 0 0.3rem; font-size: 0.85rem; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
