@@ -3,7 +3,7 @@ import { deleteFermentationReading } from '../lib/api'
 import AbvFlag from './AbvFlag.jsx'
 import { useBatchJobs, JobsCell } from './BatchJobs.jsx'
 import { gravityAdvice } from '../lib/dayTasks'
-import { ABV_TOLERANCE } from '../lib/batchFigures'
+import { withinExcise } from '../lib/batchFigures'
 
 // °Plato -> specific gravity (standard approximation).
 const sg = (p) => 1 + p / (258.6 - (p / 258.2) * 227.1)
@@ -119,7 +119,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
   // Several readings on one day show their time too.
   const sameDay = readings.reduce((m, r) => m.set(r.reading_date, (m.get(r.reading_date) ?? 0) + 1), new Map())
   const target = batch.recipes?.target_abv != null ? Number(batch.recipes.target_abv) : null
-  const abvClass = (abv) => (abv == null || target == null ? '' : Math.abs(abv - target) <= ABV_TOLERANCE + 1e-9 ? 'abv-cell ok' : 'abv-cell bad')
+  const abvClass = (abv) => (abv == null || target == null ? '' : withinExcise(abv, target) ? 'abv-cell ok' : 'abv-cell bad')
   const box = { marginBottom: '2rem', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: '1rem' }
   return (
     <>
