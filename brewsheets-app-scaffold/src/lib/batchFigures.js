@@ -40,6 +40,8 @@ export function blendAbv(batch) {
 
 // Excise: the beer's ABV has to be within 0.2% of its target ABV.
 export const ABV_TOLERANCE = 0.2
+// Checked on the ABV as shown (2 decimals), so 2.90% against a 3.1% target is in range.
+export const withinExcise = (abv, target) => Math.abs(Math.round(abv * 100) / 100 - Number(target)) <= ABV_TOLERANCE + 1e-9
 export function abvCheck(batch) {
   const og = actualOg(batch)
   const fg = actualFg(batch)
@@ -49,8 +51,8 @@ export function abvCheck(batch) {
   const beerL = n(batch.fv_to_bbt_l), dawL = n(batch.daw_added_l)
   const abv = rawAbv != null && beerL > 0 && dawL > 0 ? (rawAbv * beerL) / (beerL + dawL) : rawAbv
   if (abv == null || target == null) return { abv, rawAbv, dawL, target, ok: null }
-  const diff = abv - target
-  return { abv, rawAbv, dawL, target, diff, ok: Math.abs(diff) <= ABV_TOLERANCE + 1e-9 }
+  const diff = Math.round(abv * 100) / 100 - target
+  return { abv, rawAbv, dawL, target, diff, ok: withinExcise(abv, target) }
 }
 
 // DAW (de-aerated water) dilutes down to the top of the excise range: target + 0.2%.
