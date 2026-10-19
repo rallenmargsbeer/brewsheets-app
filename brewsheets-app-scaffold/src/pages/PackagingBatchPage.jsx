@@ -14,6 +14,7 @@ import { KEG_SIZES, CANS_PER_CUBE, sumSessions } from '../lib/packaging'
 import BeerDot from '../components/BeerDot.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
 import { abvCheck, dawLitres, dawAim } from '../lib/batchFigures'
+import { useAutoSave, SaveStatus } from '../lib/useAutoSave.jsx'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -112,45 +113,32 @@ function DoChecks({ session, onChanged }) {
 
 function SessionCard({ number, session, batch, onChanged }) {
   const [s, setS] = useState(session)
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState(null)
-  const [error, setError] = useState(null)
-  // Only reset the form when it's a different session, so adding a DO check mid-run
-  // (which refreshes the page) doesn't wipe counts typed in but not yet saved.
+  // Only reset the form when it's a different session, so a refresh (e.g. after a DO check)
+  // never wipes what's being typed.
   useEffect(() => setS(session), [session.id])
-  const set = (k) => (e) => setS({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   const t = sumSessions([s])
 
-  async function save() {
-    if (s.tank_empty && !session.tank_empty &&
-        !window.confirm(`Tank empty: mark #${batch.batch_number} as Packaged? ${tankLabel(batch.tanks?.name)} will show as empty.`)) return
-    setSaving(true)
-    setError(null)
-    try {
-      const num = (v) => (v === '' || v == null ? null : Number(v))
-      const int = (v) => Number(v) || 0
-      await upsertPackagingSession({
-        id: s.id,
-        package_date: s.package_date,
-        operator: s.operator || null,
-        kegs_20: int(s.kegs_20),
-        kegs_30: int(s.kegs_30),
-        kegs_50: int(s.kegs_50),
-        cubes: int(s.cubes),
-        co2_vols: num(s.co2_vols),
-        do_ppb: num(s.do_ppb),
-        tank_empty: !!s.tank_empty,
-        notes: s.notes || null,
-      })
-      if (s.tank_empty && !session.tank_empty) {
-        await upsertBatch({ id: batch.id, status: 'packaged', package_date: s.package_date })
-      }
-      setMsg('Saved')
+  // Every box saves as it's filled in; there's no Save button to forget.
+  const num = (v) => (v === '' || v == null ? null : Number(v))
+  const int = (v) => Number(v) || 0
+  const FORMAT = { kegs_20: int, kegs_30: int, kegs_50: int, cubes: int, co2_vols: num, do_ppb: num }
+  const { saveSoon, saveNow, status } = useAutoSave(async (k, v) => {
+    await upsertPackagingSession({ id: s.id, [k]: FORMAT[k] ? FORMAT[k](v) : v === '' ? null : v })
+    onChanged()
+  })
+  const typed = (k) => ({
+    onChange: (e) => { setS((x) => ({ ...x, [k]: e.target.value })); saveSoon(k, e.target.value) },
+    onBlur: (e) => saveNow(k, e.target.value),
+  })
+
+  // Ticking Tank empty also marks the batch Packaged, so it asks first.
+  async function setTankEmpty(checked) {
+    if (checked && !window.confirm(`Tank empty: mark #${batch.batch_number} as Packaged? ${tankLabel(batch.tanks?.name)} will show as empty.`)) return
+    setS((x) => ({ ...x, tank_empty: checked }))
+    await saveNow('tank_empty', checked)
+    if (checked) {
+      await upsertBatch({ id: batch.id, status: 'packaged', package_date: s.package_date })
       onChanged()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -171,10 +159,10 @@ function SessionCard({ number, session, batch, onChanged }) {
         <div className="pk-group pk-tank">
           <div className="pk-group-head"><h4>In tank</h4></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <label style={field}>Date<input type="date" value={s.package_date ?? ''} onChange={set('package_date')} /></label>
-            <label style={field}>Operator<input value={s.operator ?? ''} onChange={set('operator')} /></label>
-            <label style={field}>CO₂ (vols)<input type="number" inputMode="decimal" step="0.01" value={s.co2_vols ?? ''} onChange={set('co2_vols')} /></label>
-            <label style={field}>DO (ppb)<input type="number" inputMode="decimal" value={s.do_ppb ?? ''} onChange={set('do_ppb')} /></label>
+            <label style={field}>Date<input type="date" value={s.package_date ?? ''} {...typed('package_date')} /></label>
+            <label style={field}>Operator<input value={s.operator ?? ''} {...typed('operator')} /></label>
+            <label style={field}>CO₂ (vols)<input type="number" inputMode="decimal" step="0.01" value={s.co2_vols ?? ''} {...typed('co2_vols')} /></label>
+            <label style={field}>DO (ppb)<input type="number" inputMode="decimal" value={s.do_ppb ?? ''} {...typed('do_ppb')} /></label>
           </div>
         </div>
 
@@ -185,26 +173,24 @@ function SessionCard({ number, session, batch, onChanged }) {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
             {KEG_SIZES.map((size) => (
-              <label key={size} style={field}>{size} L kegs<input type="number" inputMode="numeric" min="0" value={s[`kegs_${size}`] ?? 0} onChange={set(`kegs_${size}`)} /></label>
+              <label key={size} style={field}>{size} L kegs<input type="number" inputMode="numeric" min="0" value={s[`kegs_${size}`] ?? 0} {...typed(`kegs_${size}`)} /></label>
             ))}
-            <label style={field}>Cubes ({CANS_PER_CUBE} × 375 mL)<input type="number" inputMode="numeric" min="0" value={s.cubes ?? 0} onChange={set('cubes')} /></label>
+            <label style={field}>Cubes ({CANS_PER_CUBE} × 375 mL)<input type="number" inputMode="numeric" min="0" value={s.cubes ?? 0} {...typed('cubes')} /></label>
           </div>
-          <label style={{ ...field, marginTop: '0.5rem' }}>Notes<input value={s.notes ?? ''} onChange={set('notes')} /></label>
+          <label style={{ ...field, marginTop: '0.5rem' }}>Notes<input value={s.notes ?? ''} {...typed('notes')} /></label>
         </div>
 
         <DoChecks session={session} onChanged={onChanged} />
 
         <div className="pk-group pk-finish">
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 600, color: 'var(--ink)' }}>
-            <input type="checkbox" checked={!!s.tank_empty} onChange={set('tank_empty')} /> Tank empty (batch fully packaged)
+            <input type="checkbox" checked={!!s.tank_empty} onChange={(e) => setTankEmpty(e.target.checked)} /> Tank empty (batch fully packaged)
           </label>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save session'}</button>
+            <SaveStatus status={status} />
             <button className="secondary" onClick={remove}>Delete</button>
-            {msg && <span style={{ color: '#11603f', fontWeight: 600 }}>✓ {msg}</span>}
           </div>
         </div>
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
       </div>
     </div>
   )
