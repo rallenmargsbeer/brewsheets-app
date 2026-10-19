@@ -83,7 +83,7 @@ export async function loadDay(date) {
     }
     // The beer in the tank: the batch, or the schedule's run for this half-day.
     const beer = batch?.beer_style ?? scheduled.find((s) => s.beer)?.beer ?? null
-    return { tank: t, batch, beer, scheduled, fromTemplate, advice: batch ? gravityAdvice(batch, date) : [] }
+    return { tank: t, batch, beer, scheduled, fromTemplate, advice: batch ? gravityAdvice(batch, date, { chilled: isChilled(batch, entries.filter((e) => e.lane === 'tank' && e.tank_id === t.id), date) }) : [] }
   })
   return { date, brewhouse, packaging, other, tanks: tankDays }
 }
@@ -104,8 +104,15 @@ function pendingDryHops(batch) {
   return planned.filter((p) => !added.has(p))
 }
 
+// A chill / crash job ticked off on the schedule for this batch's tank since brew day.
+export const CHILL_JOB = /chill|crash/i
+export const isChilled = (batch, jobs, date) => (jobs ?? []).some((e) =>
+  e.done && CHILL_JOB.test(e.text ?? '') && (!e.tank_id || e.tank_id === batch.tank_id) &&
+  (!batch.date_brewed || e.entry_date >= batch.date_brewed) && e.entry_date <= date)
+
 // Suggestions from the gravity readings of a fermenting batch (°P). Target FG from the recipe.
-export function gravityAdvice(batch, date) {
+// Once it's been chilled (chill job ticked off) only the reading reminder is left.
+export function gravityAdvice(batch, date, { chilled = false } = {}) {
   if (batch.status !== 'fermenting') return []
   const readings = (batch.fermentation_readings ?? [])
     .filter((r) => r.gravity_plato != null && r.reading_date <= date)
@@ -116,6 +123,7 @@ export function gravityAdvice(batch, date) {
   const last = readings[readings.length - 1]
   if (!last) return [{ level: 'info', text: 'No gravity reading yet: take one.' }]
   if (last.reading_date < date) out.push({ level: 'info', text: `Take today's gravity reading (last ${fmt(last.gravity_plato)} on ${last.reading_date.slice(5)}).` })
+  if (chilled) return out
   const g = Number(last.gravity_plato)
   // The latest reading at least a day before the last one, to see if it's still moving.
   const prev = [...readings].reverse().find((r) => r.reading_date < last.reading_date)
