@@ -280,7 +280,7 @@ export default function AddBrewPage() {
         beer_style: recipe?.name,
         status: 'brewing',
         tank_id: tankId,
-        date_brewed: new Date().toISOString().slice(0, 10),
+        date_brewed: new Date().toLocaleDateString('en-CA'),
         turn_volume_l: turnVolumeL,
         turn_quantity: quantity,
         target_volume_l: turnVolumeL * quantity,
