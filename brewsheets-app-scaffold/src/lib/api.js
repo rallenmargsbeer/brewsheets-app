@@ -687,3 +687,14 @@ export async function batchNumberTaken(number, exceptId) {
   if (error) throw error
   return data.length > 0
 }
+
+// Recipe lines naming an ingredient that isn't in Unleashed yet (allowed while writing a
+// recipe, but the recipe can't be brewed until it's there).
+export function missingIngredients(recipe, ingredients) {
+  const have = new Set(ingredients.map((i) => i.name.toLowerCase()))
+  const names = ['recipe_grist_items', 'recipe_water_additions', 'recipe_kettle_additions', 'recipe_whirlpool_additions', 'recipe_fermenter_additions', 'recipe_blend_items']
+    .flatMap((k) => recipe?.[k] ?? [])
+    .map((l) => l.ingredient_name ?? l.additive_name ?? l.item_name)
+    .filter((n) => n && !have.has(n.toLowerCase()))
+  return [...new Set(names)]
+}

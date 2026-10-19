@@ -256,8 +256,9 @@ function formatQty(qty) {
 // confirmed/locked — ingredient edits are deliberately decoupled from stage
 // gating. Saves trigger a full page refresh (onSaved) rather than local
 // state patching, same as everywhere else on this page.
-// Brew sheets for batches without a recipe (e.g. a split brew) are fully editable:
-// every section can have lines added and removed. Provided by TurnStepper.
+// Every brew sheet can have lines added and removed. Batches without a recipe (e.g. a split
+// brew) show an add row in every section; recipe batches keep it behind "+ Add ingredient".
+// Provided by TurnStepper.
 const CustomSheet = createContext(null)
 
 // "+ Add" row for a custom sheet: ingredient, amount (kg or g) and minutes for kettle hops.
@@ -288,9 +289,15 @@ function AddLine({ runId, section, stage, ingredients, onSaved, count }) {
 
 function IngredientList({ title, items, ingredients, onSaved, section, stage }) {
   const [adding, setAdding] = useState(false)
+  const [open, setOpen] = useState(false)
   const custom = useContext(CustomSheet)
-  const editable = !!(custom && section)
+  const editable = !!(custom?.runId && section)
   if (!editable && (!items || items.length === 0)) return null
+  const showAdd = editable && (custom.full || open)
+  // Recipe batches: an empty section is just its add button.
+  if (editable && !custom.full && !open && !items?.length) return (
+    <button className="secondary ing-addtoggle" onClick={() => setOpen(true)}>+ Add {title ? title.toLowerCase() : 'ingredient'}</button>
+  )
   items = items ?? []
   const notAdded = items.filter((i) => !i.added_at)
   // Marks every ingredient in this section not yet added as added now.
@@ -325,7 +332,8 @@ function IngredientList({ title, items, ingredients, onSaved, section, stage }) 
           ))}
         </tbody>
       </table>
-      {editable && <AddLine runId={custom.runId} section={section} stage={stage} ingredients={ingredients} onSaved={onSaved} count={items.length} />}
+      {showAdd && <AddLine runId={custom.runId} section={section} stage={stage} ingredients={ingredients} onSaved={onSaved} count={items.length} />}
+      {editable && !showAdd && <button className="secondary ing-addtoggle" onClick={() => setOpen(true)}>+ Add ingredient</button>}
       {items.length > 1 && (
         <button className="ing-addall" onClick={addAll} disabled={adding || !notAdded.length}>
           {!notAdded.length ? '✓ All added' : adding ? 'Adding…' : `Add all${title ? ` ${title.toLowerCase()}` : ''} (${notAdded.length})`}
@@ -635,7 +643,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], alphaAcidByName, form.postboil_gravity, form.postboil_volume_l)
 
   // Batches without a recipe (split / one-off) get a fully editable brew sheet.
-  const customSheet = !recipe || /no recipe/i.test(recipe.name ?? '') ? { runId: form.id ?? run?.id } : null
+  const customSheet = { runId: form.id ?? run?.id, full: !recipe || /no recipe/i.test(recipe.name ?? '') }
 
   return (
     <CustomSheet.Provider value={customSheet}>

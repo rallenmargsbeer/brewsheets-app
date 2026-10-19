@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { listRecipes, getRecipe, listTanks, listBatches, listBatchesInTanks, upsertBatch, upsertBlendItems } from '../lib/api'
+import { listRecipes, getRecipe, listTanks, listBatches, listBatchesInTanks, upsertBatch, upsertBlendItems, listIngredients, missingIngredients } from '../lib/api'
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
 
 const today = () => new Date().toLocaleDateString('en-CA')
@@ -28,6 +28,8 @@ export default function StartBlendPage() {
     setSaving(true); setError(null)
     try {
       const recipe = await getRecipe(recipeId)
+      const missing = missingIngredients(recipe, await listIngredients())
+      if (missing.length) throw new Error(`This recipe uses ingredients that aren't in Unleashed yet: ${missing.join(', ')}. Add them in Unleashed (or change the recipe) before blending it.`)
       const nums = (await listBatches()).map((b) => parseInt(b.batch_number, 10)).filter(Number.isInteger)
       const V = Number(volume)
       const batch = await upsertBatch({

@@ -807,7 +807,7 @@ export default function SchedulePage() {
         <button className="secondary" onClick={zoomFit} title="Fit every column on screen">Fit width</button>
       </div>
       <div className="sc-scroll" ref={scrollRef} onScroll={onScroll}>
-        <div className="sc-zoomwrap" style={zoom !== 1 && !CSS_ZOOM && gridSize.w ? { width: gridSize.w * zoom, height: gridSize.h * zoom } : undefined}>
+        <div className="sc-zoomwrap" style={zoom !== 1 && !CSS_ZOOM && gridSize.w ? { width: gridSize.w * zoom, height: gridSize.h * zoom, overflow: 'hidden' } : undefined}>
         <table className={'sc-grid' + (zoom !== 1 ? ' sc-zoomed' : '')} ref={gridRef} style={zoom === 1 ? undefined : CSS_ZOOM ? { zoom } : { transform: `scale(${zoom})`, transformOrigin: '0 0' }}>
           <thead>
             <tr>

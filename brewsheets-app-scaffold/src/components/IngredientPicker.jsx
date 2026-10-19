@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 // Type-ahead over the Unleashed ingredient list. Only an exact Unleashed name can be
 // committed (typing is case-insensitive; the saved name always uses Unleashed's
 // spelling). Anything else reverts to the previous name on blur.
-export default function IngredientPicker({ value, section, ingredients, onCommit, disabled, width = 200 }) {
+// allowNew (recipes): any name can be kept, flagged as not in Unleashed yet.
+export default function IngredientPicker({ value, section, ingredients, onCommit, disabled, width = 200, allowNew = false }) {
   const [text, setText] = useState(value ?? '')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
@@ -50,6 +51,7 @@ export default function IngredientPicker({ value, section, ingredients, onCommit
     setOpen(false)
     const exact = byLower.get(text.trim().toLowerCase())
     if (exact) commit(exact)
+    else if (allowNew && text.trim()) commit(text.trim())
     else if (text !== (value ?? '')) {
       setWarning(`"${text}" isn't an Unleashed ingredient`)
       setText(value)
@@ -111,6 +113,7 @@ export default function IngredientPicker({ value, section, ingredients, onCommit
         </ul>
       )}
       {warning && <div style={{ color: 'crimson', fontSize: '0.75rem', marginTop: 2 }}>{warning}</div>}
+      {allowNew && value && !byLower.has(value.toLowerCase()) && <div style={{ color: '#8a5a00', fontSize: '0.75rem', marginTop: 2 }}>Not in Unleashed yet: can't be brewed until it is</div>}
     </div>
   )
 }

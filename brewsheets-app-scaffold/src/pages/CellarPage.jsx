@@ -65,6 +65,7 @@ function TileReading({ batch }) {
     <span className="tile-reading">
       <span><b>{fg.plato.toFixed(1)}</b> °P</span>
       {c.abv != null && <span className={'tile-abv' + (c.ok === true ? ' ok' : c.ok === false ? ' bad' : '')}>{c.abv.toFixed(2)}% ABV</span>}
+      {c.target != null && <span className="tile-target">target {Number(c.target).toFixed(1)}%</span>}
     </span>
   )
 }
