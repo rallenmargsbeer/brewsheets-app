@@ -15,6 +15,8 @@ import BeerDot from '../components/BeerDot.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
 import { abvCheck, dawLitres, dawAim } from '../lib/batchFigures'
 import { useAutoSave, SaveStatus } from '../lib/useAutoSave.jsx'
+import { loadIncoming, beerMatch } from '../lib/incoming'
+import { addDays, todayIso } from '../lib/schedule'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -196,6 +198,45 @@ function SessionCard({ number, session, batch, onChanged }) {
   )
 }
 
+// What the schedule has this beer down for (Canning / Kegging cells), from the brite tank
+// transfer to three weeks out, beside what's been packed so far.
+function ScheduledPack({ batch, packed }) {
+  const [rows, setRows] = useState(null)
+  useEffect(() => {
+    const since = [batch.bbt_transfer_date ?? addDays(todayIso(), -14), addDays(todayIso(), -30)].sort()[1]
+    const until = addDays(todayIso(), 21)
+    loadIncoming({ since, days: 60 })
+      .then((all) => setRows(all.filter((r) => beerMatch(r.beer) === beerMatch(batch.beer_style) && r.date <= until)))
+      .catch(() => setRows([]))
+  }, [batch.id, batch.beer_style, batch.bbt_transfer_date])
+  if (!rows?.length) return null
+  const fmt = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+  const cubes = rows.filter((r) => r.format === 'cube').reduce((a, r) => a + r.qty, 0)
+  const kegs = rows.filter((r) => r.format === 'keg').reduce((a, r) => a + r.qty, 0)
+  return (
+    <div style={box}>
+      <h3 style={{ marginTop: 0 }}>Scheduled</h3>
+      <table>
+        <thead><tr><th>Day</th><th>Line</th><th>On the schedule</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td>{fmt(r.date)} {r.slot}</td>
+              <td>{r.lane.startsWith('canning') ? 'Canning' : 'Kegging'}</td>
+              <td>{r.text}</td>
+              <td style={{ textAlign: 'right', fontWeight: 600 }}>{r.format === 'cube' ? `${r.qty} cubes` : `${r.qty} × ${r.size} L kegs`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p style={{ margin: '0.5rem 0 0', color: 'var(--ink2)', fontSize: '0.9rem' }}>
+        {cubes > 0 && <>Cubes: <strong>{packed.cubes}</strong> packed of <strong>{cubes}</strong> scheduled. </>}
+        {kegs > 0 && <>Kegs: <strong>{packed.kegs}</strong> packed of <strong>{kegs}</strong> scheduled.</>}
+      </p>
+    </div>
+  )
+}
+
 // Confirm the DAW (de-aerated water) that went into the BBT; Batch Details then shows the
 // ABV after dilution. Suggested amount is the Cellar transfer's: litres to BBT down to target + 0.2%.
 function DawConfirm({ batch, onChanged }) {
@@ -302,6 +343,8 @@ export default function PackagingBatchPage() {
         <div><div style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Cubes</div><strong style={{ fontSize: '1.3rem' }}>{t.cubes}</strong> <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>({(t.cubes * CANS_PER_CUBE).toLocaleString()} cans)</span></div>
         <div><div style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Packaged</div><strong style={{ fontSize: '1.3rem' }}>{Math.round(t.litres).toLocaleString()} L</strong>{target ? <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}> of {target.toLocaleString()} L to BBT</span> : null}</div>
       </div>
+
+      <ScheduledPack batch={batch} packed={t} />
 
       {sessions.map((s, i) => (
         <SessionCard key={s.id} number={i + 1} session={s} batch={batch} onChanged={refresh} />
