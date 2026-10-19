@@ -690,9 +690,10 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   const fermenterItems = batchFermenterItems ?? ingredients.filter((i) => i.section === 'fermenter')
 
   // Target Strike Volume isn't a stored number — it's the grist bill for
-  // this turn (already snapshotted at turn volume) times the recipe's own
-  // liquor:grist ratio (defaults to 3:1, editable per recipe).
-  const gristKg = gristItems.reduce((sum, i) => sum + (i.planned_qty ?? 0), 0) / 1000
+  // this turn times the recipe's own liquor:grist ratio (defaults to 3:1, editable
+  // per recipe). It uses what actually went in, so a malt swapped or cut on the day
+  // (actual changed, a line added) gives the right strike volume.
+  const gristKg = gristItems.reduce((sum, i) => sum + Number(i.actual_qty ?? i.planned_qty ?? 0), 0) / 1000
   const strikeVolumeL =
     recipe?.liquor_grist_ratio != null && gristKg > 0 ? gristKg * recipe.liquor_grist_ratio : null
 
