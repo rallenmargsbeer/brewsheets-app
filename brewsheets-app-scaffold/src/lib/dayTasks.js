@@ -111,9 +111,9 @@ export const isChilled = (batch, jobs, date) => (jobs ?? []).some((e) =>
   (!batch.date_brewed || e.entry_date >= batch.date_brewed) && e.entry_date <= date)
 
 // Suggestions from the gravity readings of a fermenting batch (°P). Target FG from the recipe.
-// Once it's been chilled (chill job ticked off) only the reading reminder is left.
+// Once it's been chilled (chill job ticked off) there's nothing more: no readings after chill.
 export function gravityAdvice(batch, date, { chilled = false } = {}) {
-  if (batch.status !== 'fermenting') return []
+  if (batch.status !== 'fermenting' || chilled) return []
   const readings = (batch.fermentation_readings ?? [])
     .filter((r) => r.gravity_plato != null && r.reading_date <= date)
     .sort((a, b) => a.reading_date.localeCompare(b.reading_date) || String(a.created_at).localeCompare(String(b.created_at)))
@@ -123,7 +123,6 @@ export function gravityAdvice(batch, date, { chilled = false } = {}) {
   const last = readings[readings.length - 1]
   if (!last) return [{ level: 'info', text: 'No gravity reading yet: take one.' }]
   if (last.reading_date < date) out.push({ level: 'info', text: `Take today's gravity reading (last ${fmt(last.gravity_plato)} on ${last.reading_date.slice(5)}).` })
-  if (chilled) return out
   const g = Number(last.gravity_plato)
   // The latest reading at least a day before the last one, to see if it's still moving.
   const prev = [...readings].reverse().find((r) => r.reading_date < last.reading_date)
