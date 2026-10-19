@@ -846,3 +846,6 @@ tr.today td { background: #fbf6e9; }
   .nav-fold:not(.open) > :not(.nav-toggle) { display: none; }
   .app-nav.open .nav-toggle { flex-basis: 100%; text-align: left; }
 }
+.save-status { font-size: 0.85rem; color: var(--ink2); }
+.save-status.ok { color: #11603f; font-weight: 600; }
+.save-status.bad { color: crimson; }
