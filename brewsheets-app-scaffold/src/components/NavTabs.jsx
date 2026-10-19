@@ -61,6 +61,10 @@ export default function NavTabs({ nav, isAdmin, isAccounts, badges = {}, extra }
   const [editing, setEditing] = useState(null) // { order, adminOnly } while editing
   const [drag, setDrag] = useState(null)
   const [error, setError] = useState(null)
+  // On phones the tabs fold away behind a menu button (showing the current tab) and fold
+  // up again after picking one.
+  const [open, setOpen] = useState(false)
+  useEffect(() => setOpen(false), [pathname])
 
   const tab = (path) => TABS.find((t) => t.path === path)
   if (editing) {
@@ -117,8 +121,12 @@ export default function NavTabs({ nav, isAdmin, isAccounts, badges = {}, extra }
 
   // Accounts users see the Excise tab and nothing else.
   if (isAccounts) return <nav className="app-nav"><NavLink to="/excise" className={navClass}>Excise</NavLink>{extra}</nav>
+  const current = TABS.find((t) => pathname === t.path || pathname.startsWith(t.path + '/'))
   return (
-    <nav className="app-nav">
+    <nav className={'app-nav nav-fold' + (open ? ' open' : '')}>
+      <button type="button" className="nav-link nav-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? '✕ Close' : `☰ ${addingBrew ? 'Brew Day' : current?.label ?? 'Menu'}`}
+      </button>
       {nav.cfg.order.filter((p) => isAdmin || !nav.cfg.adminOnly.includes(p)).map((path) => {
         const t = tab(path)
         const cls = path === '/brew-day' ? (p) => navClass({ isActive: p.isActive || addingBrew }) : path === '/batches' ? (p) => navClass({ isActive: p.isActive && !addingBrew }) : navClass
