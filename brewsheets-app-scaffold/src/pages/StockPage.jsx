@@ -9,6 +9,13 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString('en-AU', { timeZone: '
 const num = (n) => (n ? Math.round(n).toLocaleString() : '')
 const DAY = 86400000
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY)
+// Fixed beer order for the stock tables: litres sold in the 12 months to Oct 2026 (Unleashed
+// sales orders), most first. Kept as is so the sheet never reshuffles; beers not listed go
+// after these, A to Z.
+const BEER_ORDER = ['ITP', 'Mermid', 'Megsy', 'Kolsch', 'Pale Ale', 'Drift XPA', 'Draught', 'River Dog', 'Red IPA', 'Stout', 'Beyond the Pines', 'Pink Pony', 'Brown', 'English Bitter', 'Lager', 'Wander', '8 Ball', 'Grape Expectations', 'Czech Pilsner', 'Panther Cream Whisky', 'Panther Cream Blueberry & Coffee', 'Margarita Cocktail', 'Panther Cream']
+const beerRank = (beer) => { const i = BEER_ORDER.findIndex((b) => b.toLowerCase() === (beer ?? '').toLowerCase()); return i < 0 ? BEER_ORDER.length : i }
+const byFixedOrder = (a, b) => beerRank(a.beer) - beerRank(b.beer) || a.beer.localeCompare(b.beer) || (b.size ?? 0) - (a.size ?? 0)
+
 const isLmWholesale = (customer) => /liquid\s*mix.*wholesale/i.test(customer ?? '')
 
 // Columns: each Unleashed warehouse, then the two Liquid Mix accounts.
@@ -241,8 +248,8 @@ export default function StockPage() {
           <div className="stock-tables">
           {TABLES.map((f) => {
             const all = view.list.filter(f.match)
-            const core = all.filter((r) => r.core).sort((a, b) => (a.cover ?? 1e9) - (b.cover ?? 1e9))
-            const other = all.filter((r) => !r.core).sort((a, b) => a.beer.localeCompare(b.beer) || b.size - a.size)
+            const core = all.filter((r) => r.core).sort(byFixedOrder)
+            const other = all.filter((r) => !r.core).sort(byFixedOrder)
             const rows = [...core, ...other]
             const locs = view.locations.filter((l) => rows.some((r) => r.at[l]))
             return (
