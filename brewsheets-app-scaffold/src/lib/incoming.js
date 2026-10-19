@@ -13,8 +13,8 @@ export function packCount(text) {
   return first ? Number(first[0]) : 0
 }
 
-export async function loadIncoming({ days = 120 } = {}) {
-  const today = todayIso()
+export async function loadIncoming({ days = 120, since = null } = {}) {
+  const today = since ?? todayIso()
   // Look back far enough to see the brews whose packaging is coming up.
   const from = addDays(today, -60)
   const to = addDays(today, days)
@@ -41,7 +41,7 @@ export async function loadIncoming({ days = 120 } = {}) {
     const qty = list.reduce((a, e) => a + packCount(e.text), 0)
     // Kegging cells may name a size ("45 x 50L", "20 x 30L"); otherwise they're 50 L kegs.
     const size = Number(/(\d{2})\s*l\b/i.exec(list.map((e) => e.text).join(' '))?.[1] ?? 50)
-    if (beer && qty) out.push({ beer, format: lane.startsWith('canning') ? 'cube' : 'keg', size, date, qty })
+    if (beer && qty) out.push({ beer, format: lane.startsWith('canning') ? 'cube' : 'keg', size, date, slot, lane, qty, text: list.map((e) => e.text).join(', ') })
   }
   return out.sort((a, b) => a.date.localeCompare(b.date))
 }
