@@ -559,6 +559,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
       setError(null)
       try {
         const saved = await upsertBrewRun(id ? { id, [key]: v } : { batch_id: batchId, run_number: runNumber, [key]: v })
+        // Turn 1's date is the batch's Date brewed.
+        if (key === 'brew_date' && runNumber === 1 && v) await upsertBatch({ id: batchId, date_brewed: v })
         setForm((f) => ({ ...f, id: saved.id, [key]: saved[key] }))
         onSaved(saved)
         return saved.id
