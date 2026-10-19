@@ -3,7 +3,8 @@ import { deleteFermentationReading } from '../lib/api'
 import AbvFlag from './AbvFlag.jsx'
 import { useBatchJobs, JobsCell } from './BatchJobs.jsx'
 import { gravityAdvice } from '../lib/dayTasks'
-import { withinExcise } from '../lib/batchFigures'
+import { withinExcise, ABV_TOLERANCE } from '../lib/batchFigures'
+import { sgToPlato } from '../lib/dilution'
 
 // °Plato -> specific gravity (standard approximation).
 const sg = (p) => 1 + p / (258.6 - (p / 258.2) * 227.1)
@@ -19,15 +20,19 @@ const dayOf = (r, brewed) =>
 
 const fmt = (v, dp) => (v == null || v === '' ? '—' : Number(v).toFixed(dp))
 
-// One series (°P over fermentation day), so no legend: the heading names it.
-function GravityChart({ points, events = [] }) {
+// FG (°P) that gives this ABV from the OG, inverting the tracker formula.
+const fgForAbv = (ogPlato, abv) => sgToPlato(sg(Number(ogPlato)) - abv / 131.25)
+
+// One series (°P over fermentation day), so no legend: the heading names it. band: the FG
+// range that finishes the beer within its excise ABV range, shaded behind the line.
+function GravityChart({ points, events = [], band = null }) {
   const [hover, setHover] = useState(null)
   const W = 640, H = 220, L = 40, R = 12, T = 12, B = 28
   const xs = points.map((p) => p.day)
   const ys = points.map((p) => p.plato)
   const xMax = Math.max(1, ...xs, ...events.map((e) => e.day))
-  const yMax = Math.ceil(Math.max(...ys) + 0.5)
-  const yMin = Math.max(0, Math.floor(Math.min(...ys) - 0.5))
+  const yMax = Math.ceil(Math.max(...ys, ...(band ? [band.hi] : [])) + 0.5)
+  const yMin = Math.max(0, Math.floor(Math.min(...ys, ...(band ? [band.lo] : [])) - 0.5))
   const x = (d) => L + (d / xMax) * (W - L - R)
   const y = (v) => T + (1 - (v - yMin) / (yMax - yMin || 1)) * (H - T - B)
   const yTicks = Array.from({ length: 5 }, (_, i) => yMin + ((yMax - yMin) * i) / 4)
@@ -56,6 +61,12 @@ function GravityChart({ points, events = [] }) {
         {xTicks.map((d) => (
           <text key={d} x={x(d)} y={H - 8} textAnchor="middle" fontSize="11" fill="var(--muted)">{d}</text>
         ))}
+        {band && (
+          <g>
+            <rect x={L} width={W - L - R} y={y(band.hi)} height={Math.max(1, y(band.lo) - y(band.hi))} fill="#11603f" opacity="0.12" />
+            <text x={L + 4} y={y(band.hi) - 4} textAnchor="start" fontSize="11" fill="var(--ink2)">In spec: FG {band.lo.toFixed(1)} to {band.hi.toFixed(1)} °P (ABV {band.abvLo.toFixed(1)} to {band.abvHi.toFixed(1)}%)</text>
+          </g>
+        )}
         {h && <line x1={x(h.day)} x2={x(h.day)} y1={T} y2={H - B} stroke="var(--muted)" strokeWidth="1" strokeDasharray="3 3" />}
         {/* Tank additions (dry hops etc.): a marker line per day, labelled with what went in */}
         {events.map((e) => (
@@ -119,6 +130,10 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
   // Several readings on one day show their time too.
   const sameDay = readings.reduce((m, r) => m.set(r.reading_date, (m.get(r.reading_date) ?? 0) + 1), new Map())
   const target = batch.recipes?.target_abv != null ? Number(batch.recipes.target_abv) : null
+  const band = og != null && target != null ? (() => {
+    const abvLo = target - ABV_TOLERANCE, abvHi = target + ABV_TOLERANCE
+    return { lo: fgForAbv(og, abvHi), hi: fgForAbv(og, abvLo), abvLo, abvHi }
+  })() : null
   const abvClass = (abv) => (abv == null || target == null ? '' : withinExcise(abv, target) ? 'abv-cell ok' : 'abv-cell bad')
   const box = { marginBottom: '2rem', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 6, padding: '1rem' }
   return (
@@ -133,7 +148,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
             {points.length >= 2 && (
               <>
                 <h3 style={{ marginTop: 0 }}>Gravity (°P)</h3>
-                <GravityChart points={points} events={events} />
+                <GravityChart points={points} events={events} band={band} />
               </>
             )}
             {added.length > 0 && (

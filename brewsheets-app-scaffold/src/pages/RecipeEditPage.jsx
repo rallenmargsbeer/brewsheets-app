@@ -130,6 +130,7 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults, i
                       ingredients={ingredients}
                       onCommit={(name) => update(i, f.key, name)}
                       width={f.width ?? 180}
+                      allowNew
                     />
                   ) : (
                     <input

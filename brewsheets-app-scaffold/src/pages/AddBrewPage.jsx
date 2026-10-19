@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { listRecipes, getRecipe, listBatches, listTanks, upsertBatch, initializeBrewRuns } from '../lib/api'
+import { listRecipes, getRecipe, listBatches, listTanks, upsertBatch, initializeBrewRuns, listIngredients, missingIngredients } from '../lib/api'
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import { getBooking, linkBookingToBatch, listScheduleEntries, listBookings } from '../lib/schedule'
 import { beerKey } from '../lib/beerColours'
@@ -215,6 +215,7 @@ export default function AddBrewPage() {
   const [tankId, setTankId] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
+  const [ingredients, setIngredients] = useState(null)
   // Started from a booked brew on the Brew Day page: pre-fill recipe, turn size and tank.
   const [searchParams] = useSearchParams()
   const bookingId = searchParams.get('booking')
@@ -237,6 +238,7 @@ export default function AddBrewPage() {
       .then((t) => setTanks(t.filter((x) => x.is_active !== false && x.tank_type !== 'BBT')))
       .catch((e) => setError(e.message))
     listBatches().then(setBatches).catch((e) => setError(e.message))
+    listIngredients().then(setIngredients).catch((e) => setError(e.message))
     // Today's brews on the schedule (brewhouse cells and booked brews), to put first in the picker.
     const day = new Date().toLocaleDateString('en-CA')
     Promise.all([listScheduleEntries(day, day), listBookings({ fromIso: day, toIso: day })])
@@ -259,6 +261,9 @@ export default function AddBrewPage() {
     getRecipe(recipeId).then(setFullRecipe).catch((e) => setError(e.message))
   }, [recipeId])
 
+  // A recipe using ingredients not in Unleashed yet can't be brewed.
+  const missing = fullRecipe && ingredients ? missingIngredients(fullRecipe, ingredients) : []
+  const blocked = missing.length > 0
   const baggedGristItems = (fullRecipe?.recipe_grist_items ?? []).filter((g) => g.pack_size_kg > 0)
   // Only the items whose split isn't obvious actually show up in the Allocate Grist Bags
   // table — see needsBagReview above. Depends on turnQuantity, so there's nothing to show
@@ -272,6 +277,7 @@ export default function AddBrewPage() {
     setCreating(true)
     setError(null)
     try {
+      if (blocked) throw new Error(`Not in Unleashed yet: ${missing.join(', ')}`)
       const batchNumber = await suggestNextBatchNumber()
       const recipe = recipes.find((r) => r.id === recipeId)
       const batch = await upsertBatch({
@@ -353,14 +359,20 @@ export default function AddBrewPage() {
             ))}
           </optgroup>
         </select>
+        {blocked && (
+          <p style={{ color: 'crimson', marginBottom: 0 }}>
+            This recipe uses ingredients that aren't in Unleashed yet: {missing.join(', ')}. Add them in Unleashed (or change the recipe) before brewing it.
+          </p>
+        )}
       </StepCard>
 
-      <StepCard number={2} title="Select Brew Turn Volume" done={turnVolumeL != null} active={!!recipeId}>
+      <StepCard number={2} title="Select Brew Turn Volume" done={turnVolumeL != null} active={!!recipeId && !blocked}>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {TURN_VOLUMES.map((v) => (
             <button
               key={v.label}
               className={turnVolumeL === v.litres ? '' : 'secondary'}
+              disabled={blocked}
               onClick={() => {
                 setTurnVolumeL(v.litres)
                 setTurnQuantity(null)
