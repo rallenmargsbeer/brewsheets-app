@@ -698,3 +698,25 @@ export function missingIngredients(recipe, ingredients) {
     .filter((n) => n && !have.has(n.toLowerCase()))
   return [...new Set(names)]
 }
+
+// Yeast generations: a fresh pitch is gen 0, a repitch is the source batch's gen + 1, up to 5.
+export const MAX_YEAST_GEN = 5
+export const yeastGen = (batch) => Number(batch?.yeast_generation) || 0
+// The batch's yeast: carried over on a repitch, else its fermenter line from the Yeast group.
+export function yeastName(batch, ingredients = []) {
+  if (batch?.yeast_name) return batch.yeast_name
+  const yeasts = new Set(ingredients.filter((i) => /yeast/i.test(i.unleashed_group ?? '')).map((i) => i.name))
+  const lines = (batch?.brew_runs ?? []).flatMap((r) => r.brew_run_ingredients ?? []).filter((i) => i.section === 'fermenter')
+  return lines.find((i) => yeasts.has(i.item_name))?.item_name ?? null
+}
+
+// Batches in tanks that yeast could be repitched from (not this one).
+export async function listRepitchSources(excludeId) {
+  const { data, error } = await supabase
+    .from('batches')
+    .select('id, batch_number, beer_style, status, yeast_generation, yeast_name, tanks(name, tank_type), brew_runs(brew_run_ingredients(section, item_name))')
+    .in('status', ['fermenting', 'conditioning'])
+    .neq('id', excludeId)
+  if (error) throw error
+  return data.filter((b) => b.tanks && b.tanks.tank_type !== 'BBT')
+}
