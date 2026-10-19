@@ -1,6 +1,6 @@
 // IBU (Tinseth) and colour (SRM, Morey) estimates. The formulas are conventionally in
 // lb / oz / gallons and SG; the app is metric and °P everywhere else, so conversions stay in here.
-import { platoToSg } from './dilution'
+import { platoToSg, sgToPlato } from './dilution'
 
 const KG_TO_LB = 2.20462
 const L_TO_GAL = 0.264172
@@ -46,3 +46,23 @@ export function moreySrm(malts, volumeL) {
 
 // Lookups from the Ingredients page by name.
 export const byName = (ingredients, field) => new Map(ingredients.filter((i) => i[field] != null).map((i) => [i.name, Number(i[field])]))
+
+// Estimated OG (°P) from grist in g/L: potential (PPG, from the Ingredients page) x brewhouse
+// efficiency. 1 kg/L = 8.3454 lb/gal. Null if any malt has no PPG.
+export function estimateOg(malts, effPct) {
+  let points = 0
+  let any = false
+  for (const m of malts) {
+    if (!(m.grams > 0)) continue
+    if (m.ppg == null) return null
+    points += (m.grams / 1000) * 8.3454 * m.ppg * (effPct / 100)
+    any = true
+  }
+  return any ? sgToPlato(1 + points / 1000) : null
+}
+
+// ABV from OG and FG (°P or SG), same formula as the fermentation ABV tracker.
+export function estimateAbv(og, fg) {
+  const a = toSg(og), b = toSg(fg)
+  return a && b ? (a - b) * 131.25 : null
+}
