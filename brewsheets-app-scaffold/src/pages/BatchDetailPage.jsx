@@ -287,7 +287,9 @@ function AddLine({ runId, section, stage, ingredients, onSaved, count }) {
   )
 }
 
-function IngredientList({ title, items, ingredients, onSaved, section, stage }) {
+// removable: lines can be removed even where nothing can be added (the whole-batch fermenter
+// lines, e.g. no fresh yeast when repitching).
+function IngredientList({ title, items, ingredients, onSaved, section, stage, removable = false }) {
   const [adding, setAdding] = useState(false)
   const [open, setOpen] = useState(false)
   const custom = useContext(CustomSheet)
@@ -328,7 +330,7 @@ function IngredientList({ title, items, ingredients, onSaved, section, stage }) 
         </thead>
         <tbody>
           {items.map((item) => (
-            <IngredientRow key={item.id} item={item} ingredients={ingredients} onSaved={onSaved} removable={editable} />
+            <IngredientRow key={item.id} item={item} ingredients={ingredients} onSaved={onSaved} removable={editable || removable} />
           ))}
         </tbody>
       </table>
@@ -425,7 +427,7 @@ function IngredientRow({ item, ingredients, onSaved, removable }) {
           : <button className="ing-add" onClick={toggleAdded} disabled={saving}>Add</button>}
         {removable && !item.added_at && (
           <button className="secondary" style={{ marginLeft: 4, padding: '0.2rem 0.5rem' }} aria-label={`Remove ${item.item_name}`} disabled={saving}
-            onClick={async () => { if (!window.confirm(`Remove ${item.item_name} from this turn?`)) return; await deleteBrewRunIngredient(item.id); onSaved() }}>✕</button>
+            onClick={async () => { if (!window.confirm(`Remove ${item.item_name} from this ${item.section === 'fermenter' ? 'batch' : 'turn'}?`)) return; await deleteBrewRunIngredient(item.id); onSaved() }}>✕</button>
         )}
       </td>
     </tr>
@@ -961,7 +963,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
           <p style={{ color: '#666', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
             For the whole batch, not this turn. Not gated to a stage: visible any time so you can see what's coming, or confirm what got pitched.
           </p>
-          {fermenterItems.length > 0 && <IngredientList items={fermenterItems} ingredients={masterIngredients} onSaved={onSaved} />}
+          {fermenterItems.length > 0 && <IngredientList items={fermenterItems} ingredients={masterIngredients} onSaved={onSaved} removable />}
           {koAdditions.length > 0 && <KnockoutAdditions items={koAdditions} onSaved={onSaved} />}
         </div>
       )}
