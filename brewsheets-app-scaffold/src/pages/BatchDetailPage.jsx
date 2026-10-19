@@ -545,21 +545,10 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
     }
   }
 
-  async function saveNotes() {
-    if (!form.id) return
-    setSaving(true)
-    try {
-      const saved = await upsertBrewRun({ id: form.id, notes: form.notes || null })
-      applySaved(saved)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Date and Brewer aren't part of any stage, so they save as soon as they're entered.
-  // Saves run one after another so a new turn is only inserted once.
+  // Every field saves as soon as it's entered (Confirm only locks the stage), so nothing typed
+  // is lost. Saves run one after another so a new turn is only inserted once.
   const headerSave = useRef(Promise.resolve(form.id))
-  function saveHeader(key, value) {
+  function saveField(key, value) {
     const v = value === '' ? null : value
     const known = form.id
     headerSave.current = headerSave.current.then(async (prev) => {
@@ -579,7 +568,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
     })
   }
 
-  const field = (key, label, type = 'text', width = 110, autoSave = false) => (
+  const field = (key, label, type = 'text', width = 110, autoSave = true) => (
     <label style={{ display: 'inline-block', marginRight: '0.75rem', marginBottom: '0.5rem' }}>
       <div style={{ fontSize: '0.8rem', color: '#555' }}>{label}</div>
       <input
@@ -588,9 +577,9 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
         onChange={(e) => {
           set(key, e.target.value)
           // A date picked from the picker saves straight away (iPad pickers don't always blur).
-          if (autoSave && type === 'date' && /^20\d\d-/.test(e.target.value)) saveHeader(key, e.target.value)
+          if (autoSave && type === 'date' && /^20\d\d-/.test(e.target.value)) saveField(key, e.target.value)
         }}
-        onBlur={autoSave ? (e) => { if ((e.target.value || null) !== (run?.[key] ?? null)) saveHeader(key, e.target.value) } : undefined}
+        onBlur={autoSave ? (e) => { if ((e.target.value || null) !== (run?.[key] ?? null)) saveField(key, e.target.value) } : undefined}
         style={{ width }}
       />
     </label>
@@ -651,8 +640,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <div>
-        {field('brew_date', 'Date', 'date', 140, true)}
-        {field('brewer', 'Brewer', 'text', 140, true)}
+        {field('brew_date', 'Date', 'date', 140)}
+        {field('brewer', 'Brewer', 'text', 140)}
       </div>
 
       {/* Progress strip — a glance at where this turn is at */}
@@ -905,6 +894,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                       targetPlato={recipe?.target_og}
                       water={form.correction_l}
                       onWater={(v) => set('correction_l', v)}
+                      onCommit={(v) => saveField('correction_l', v)}
                       locked={confirmed}
                     />
                   )}
@@ -963,7 +953,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
         <textarea
           value={form.notes ?? ''}
           onChange={(e) => set('notes', e.target.value)}
-          onBlur={saveNotes}
+          onBlur={(e) => { if ((e.target.value || null) !== (run?.notes ?? null)) saveField('notes', e.target.value) }}
           rows={2}
           style={{ width: '100%' }}
         />
@@ -1403,7 +1393,7 @@ function PackagedTable({ sessions }) {
 }
 
 // Last turn's knockout: how much water takes the whole batch down to the recipe's target OG.
-function DilutionPrompt({ turns, targetPlato, water, onWater, locked }) {
+function DilutionPrompt({ turns, targetPlato, water, onWater, onCommit, locked }) {
   const target = Number(targetPlato)
   const sorted = [...turns].sort((a, b) => a.run_number - b.run_number)
   const missing = sorted.filter((t) => !(Number(t.ko_flowmeter_l) > 0 && Number(t.whirlpool_gravity) > 0)).map((t) => t.run_number)
@@ -1435,9 +1425,9 @@ function DilutionPrompt({ turns, targetPlato, water, onWater, locked }) {
       )}
       <div className="dil-row">
         <label>Dilution water added (L)
-          <input type="number" min="0" value={water ?? ''} onChange={(e) => onWater(e.target.value)} disabled={locked} style={{ width: 110 }} />
+          <input type="number" min="0" value={water ?? ''} onChange={(e) => onWater(e.target.value)} onBlur={(e) => onCommit?.(e.target.value)} disabled={locked} style={{ width: 110 }} />
         </label>
-        {!locked && need > 0.5 && <button className="secondary" onClick={() => onWater(String(Math.round(need)))}>Use {Math.round(need)} L</button>}
+        {!locked && need > 0.5 && <button className="secondary" onClick={() => { onWater(String(Math.round(need))); onCommit?.(String(Math.round(need))) }}>Use {Math.round(need)} L</button>}
         {after != null && <span className="dil-after">→ batch OG {after.toFixed(2)} °P, {Math.round(blend.volumeL + added).toLocaleString()} L</span>}
       </div>
     </div>
