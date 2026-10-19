@@ -689,6 +689,11 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   // Whole-batch fermenter lines live on the first turn but show on every turn.
   const fermenterItems = batchFermenterItems ?? ingredients.filter((i) => i.section === 'fermenter')
 
+  // Hops for this turn's boil and whirlpool, in boil order, so they can be weighed out
+  // while lautering. A hop is anything in a Hops group on the Ingredients page or with an alpha acid.
+  const hopNames = new Set(masterIngredients.filter((i) => /hop/i.test(i.unleashed_group ?? '') || i.alpha_acid_pct != null).map((i) => i.name))
+  const boilHops = [...kettleItems, ...whirlpoolItems].filter((i) => hopNames.has(i.item_name))
+
   // Target Strike Volume isn't a stored number — it's the grist bill for
   // this turn times the recipe's own liquor:grist ratio (defaults to 3:1, editable
   // per recipe). It uses what actually went in, so a malt swapped or cut on the day
@@ -885,6 +890,12 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                   </div>
                   {fld('first_runnings_gravity', '1st Runnings Grav.', 'number', 140)}
                   {fld('last_runnings_gravity', 'Last Runnings Grav.', 'number', 140)}
+                  {boilHops.length > 0 && (
+                    <div className="grab-hops">
+                      <strong>Grab for the boil:</strong>{' '}
+                      {boilHops.map((h) => `${h.item_name} ${formatQty(Number(h.actual_qty ?? h.planned_qty))}${h.section === 'whirlpool' ? ' (whirlpool)' : h.time_min != null ? ` @ ${h.time_min} min` : ''}`).join(' · ')}
+                    </div>
+                  )}
                 </>
               )}
 
