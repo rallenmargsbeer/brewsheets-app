@@ -1,4 +1,5 @@
 import { tinsethIbu, moreySrm, byName, estimateOg, estimateAbv } from '../lib/beerCalcs'
+import { loadBrewhouseEff, effFor } from '../lib/brewhouseEff'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
@@ -569,9 +570,16 @@ function RecipeEstimates({ recipe, grist, kettle, whirlpool, ingredients }) {
   const srm = moreySrm(malts, 1)
   const missingAlpha = hops.filter((h) => h.grams > 0 && h.minutes != null && h.alphaPct == null && ingredients.some((i) => i.name === h.name && i.unleashed_group?.toLowerCase().includes('hop'))).map((h) => h.name)
   const missingColour = malts.filter((m) => m.grams > 0 && m.lovibond == null).map((m) => m.name)
-  // Brewhouse efficiency for the OG estimate: our recipe targets work out at 70 to 82%, about 77% on average.
-  const [eff, setEff] = useState(() => { try { return Number(localStorage.getItem('recipeEff')) || 77 } catch { return 77 } })
-  const setEfficiency = (v) => { setEff(v); try { localStorage.setItem('recipeEff', String(v)) } catch { /* private mode */ } }
+  // Brewhouse efficiency for the OG estimate, from past turns' KO gravity and volume (editable here).
+  const [hist, setHist] = useState(null)
+  const [eff, setEff] = useState('')
+  useEffect(() => {
+    loadBrewhouseEff().then((turns) => {
+      const h = effFor(turns, recipe.id)
+      setHist(h)
+      setEff(h ? h.eff.toFixed(0) : '80')
+    }).catch(() => setEff('80'))
+  }, [recipe.id])
   const ppg = byName(ingredients, 'potential_ppg')
   const og = estimateOg(grist.map((g) => ({ grams: Number(g.qty_g_per_l), ppg: ppg.get(g.ingredient_name) })), Number(eff) || 0)
   const missingPpg = grist.filter((g) => Number(g.qty_g_per_l) > 0 && !ppg.has(g.ingredient_name)).map((g) => g.ingredient_name)
@@ -580,7 +588,8 @@ function RecipeEstimates({ recipe, grist, kettle, whirlpool, ingredients }) {
   return (
     <div className="rec-est">
       <div><span>Estimated OG</span><strong>{og != null ? `${og.toFixed(1)} °P` : '—'}</strong>{vs(og, recipe.target_og)}{' '}
-        at <input type="number" value={eff} onChange={(e) => setEfficiency(e.target.value)} aria-label="Brewhouse efficiency %" style={{ width: 56 }} />% efficiency</div>
+        at <input type="number" value={eff} onChange={(e) => setEff(e.target.value)} aria-label="Brewhouse efficiency %" style={{ width: 56 }} />% efficiency
+        {hist && <small> ({hist.own ? 'this beer' : 'all beers'}: {hist.eff.toFixed(1)}% average of {hist.n} turns)</small>}</div>
       <div><span>Estimated ABV</span><strong>{abv != null ? `${abv.toFixed(1)}%` : '—'}</strong>{abv != null ? ' from target OG and FG' : ' (needs target OG and FG)'}{vs(abv, recipe.target_abv)}</div>
       <div><span>Estimated IBU</span><strong>{ibu != null ? ibu.toFixed(0) : '—'}</strong>{vs(ibu, recipe.target_ibu)}</div>
       <div><span>Estimated SRM</span><strong>{srm != null ? srm.toFixed(1) : '—'}</strong>{vs(srm, recipe.target_srm)}</div>
