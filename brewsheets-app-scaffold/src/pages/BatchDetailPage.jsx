@@ -545,11 +545,16 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
     }
   }
 
-  // Every field saves as soon as it's entered (Confirm only locks the stage), so nothing typed
-  // is lost. Saves run one after another so a new turn is only inserted once.
+  // Every field saves as it's typed (a moment after the last keystroke, and straight away on
+  // leaving the box or leaving the page). Confirm only locks the stage. Saves run one after
+  // another so a new turn is only inserted once.
   const headerSave = useRef(Promise.resolve(form.id))
+  const lastSaved = useRef(Object.fromEntries(Object.entries(run ?? {}).map(([k, x]) => [k, x == null ? null : String(x)])))
+  const pending = useRef({}) // key -> { value, timer }
   function saveField(key, value) {
-    const v = value === '' ? null : value
+    const v = value === '' || value == null ? null : String(value)
+    if (key in lastSaved.current && lastSaved.current[key] === v) return
+    lastSaved.current[key] = v
     const known = form.id
     headerSave.current = headerSave.current.then(async (prev) => {
       const id = prev ?? known
@@ -558,28 +563,42 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
         const saved = await upsertBrewRun(id ? { id, [key]: v } : { batch_id: batchId, run_number: runNumber, [key]: v })
         // Turn 1's date is the batch's Date brewed.
         if (key === 'brew_date' && runNumber === 1 && v) await upsertBatch({ id: batchId, date_brewed: v })
-        setForm((f) => ({ ...f, id: saved.id, [key]: saved[key] }))
+        setForm((f) => ({ ...f, id: saved.id }))
         onSaved(saved)
         return saved.id
       } catch (e) {
-        setError(e.message)
+        delete lastSaved.current[key]
+        setError(`Not saved: ${e.message}`)
         return id
       }
     })
   }
+  function saveSoon(key, value) {
+    clearTimeout(pending.current[key]?.timer)
+    pending.current[key] = { value, timer: setTimeout(() => { delete pending.current[key]; saveField(key, value) }, 700) }
+  }
+  function saveNow(key, value) {
+    clearTimeout(pending.current[key]?.timer)
+    delete pending.current[key]
+    saveField(key, value)
+  }
+  // Leaving the page (or turn) mid-typing still saves what was typed.
+  const flushRef = useRef(null)
+  flushRef.current = () => { for (const [k, p] of Object.entries(pending.current)) saveNow(k, p.value) }
+  useEffect(() => () => flushRef.current(), [])
+  // The handlers a typed field needs: set the form, save as you type, save on leaving it.
+  const typed = (key) => ({
+    onChange: (e) => { set(key, e.target.value); saveSoon(key, e.target.value) },
+    onBlur: (e) => saveNow(key, e.target.value),
+  })
 
-  const field = (key, label, type = 'text', width = 110, autoSave = true) => (
+  const field = (key, label, type = 'text', width = 110) => (
     <label style={{ display: 'inline-block', marginRight: '0.75rem', marginBottom: '0.5rem' }}>
       <div style={{ fontSize: '0.8rem', color: '#555' }}>{label}</div>
       <input
         type={type}
         value={form[key] ?? ''}
-        onChange={(e) => {
-          set(key, e.target.value)
-          // A date picked from the picker saves straight away (iPad pickers don't always blur).
-          if (autoSave && type === 'date' && /^20\d\d-/.test(e.target.value)) saveField(key, e.target.value)
-        }}
-        onBlur={autoSave ? (e) => { if ((e.target.value || null) !== (run?.[key] ?? null)) saveField(key, e.target.value) } : undefined}
+        {...typed(key)}
         style={{ width }}
       />
     </label>
@@ -893,8 +912,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                       turns={[...otherRuns, { ...form, run_number: runNumber }]}
                       targetPlato={recipe?.target_og}
                       water={form.correction_l}
-                      onWater={(v) => set('correction_l', v)}
-                      onCommit={(v) => saveField('correction_l', v)}
+                      onWater={(v) => { set('correction_l', v); saveSoon('correction_l', v) }}
+                      onCommit={(v) => saveNow('correction_l', v)}
                       locked={confirmed}
                     />
                   )}
@@ -952,8 +971,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
         <br />
         <textarea
           value={form.notes ?? ''}
-          onChange={(e) => set('notes', e.target.value)}
-          onBlur={(e) => { if ((e.target.value || null) !== (run?.notes ?? null)) saveField('notes', e.target.value) }}
+          {...typed('notes')}
           rows={2}
           style={{ width: '100%' }}
         />
