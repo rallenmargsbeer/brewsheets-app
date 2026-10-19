@@ -26,9 +26,13 @@ export default function TodayPage() {
   useEffect(() => { listBeerColours().then(setBeerColours).catch(() => {}) }, [])
   useEffect(() => { setDay(null); setError(null); load() }, [date])
 
-  const tanks = day ? day.tanks.filter((d) => d.scheduled.length || d.fromTemplate.length || d.advice.length) : []
-  const fvs = tanks.filter((d) => d.tank.tank_type !== 'BBT').sort(byName)
-  const bts = tanks.filter((d) => d.tank.tank_type === 'BBT').sort(byName)
+  // Fermenters only (no bright tanks), and without the "Brew" job: that's in Brewhouse already.
+  const notBrew = (t) => !/^\s*brew(\s*day)?\s*$/i.test(t.text ?? '')
+  const tanks = day ? day.tanks
+    .filter((d) => d.tank.tank_type !== 'BBT')
+    .map((d) => ({ ...d, scheduled: d.scheduled.filter(notBrew), fromTemplate: d.fromTemplate.filter(notBrew) }))
+    .filter((d) => d.scheduled.length || d.fromTemplate.length || d.advice.length) : []
+  const fvs = tanks.sort(byName)
   const empty = day && !day.brewhouse.length && !tanks.length && !day.packaging.length && !day.other.length
 
   const tankRows = (list) => list.map((d) => (
@@ -71,7 +75,6 @@ export default function TodayPage() {
       )}
 
       {fvs.length > 0 && <section className="day-card"><h2>Fermenters</h2>{tankRows(fvs)}</section>}
-      {bts.length > 0 && <section className="day-card"><h2>Bright tanks</h2>{tankRows(bts)}</section>}
 
       {day && day.packaging.length > 0 && (
         <section className="day-card">
