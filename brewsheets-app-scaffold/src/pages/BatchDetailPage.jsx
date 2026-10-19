@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect, useRef, createContext, useContext } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { tankLabel, statusLabel } from '../lib/tanks'
 import FermentationSection from '../components/FermentationSection.jsx'
@@ -548,13 +548,39 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
     }
   }
 
-  const field = (key, label, type = 'text', width = 110) => (
+  // Date and Brewer aren't part of any stage, so they save as soon as they're entered.
+  // Saves run one after another so a new turn is only inserted once.
+  const headerSave = useRef(Promise.resolve(form.id))
+  function saveHeader(key, value) {
+    const v = value === '' ? null : value
+    const known = form.id
+    headerSave.current = headerSave.current.then(async (prev) => {
+      const id = prev ?? known
+      setError(null)
+      try {
+        const saved = await upsertBrewRun(id ? { id, [key]: v } : { batch_id: batchId, run_number: runNumber, [key]: v })
+        setForm((f) => ({ ...f, id: saved.id, [key]: saved[key] }))
+        onSaved(saved)
+        return saved.id
+      } catch (e) {
+        setError(e.message)
+        return id
+      }
+    })
+  }
+
+  const field = (key, label, type = 'text', width = 110, autoSave = false) => (
     <label style={{ display: 'inline-block', marginRight: '0.75rem', marginBottom: '0.5rem' }}>
       <div style={{ fontSize: '0.8rem', color: '#555' }}>{label}</div>
       <input
         type={type}
         value={form[key] ?? ''}
-        onChange={(e) => set(key, e.target.value)}
+        onChange={(e) => {
+          set(key, e.target.value)
+          // A date picked from the picker saves straight away (iPad pickers don't always blur).
+          if (autoSave && type === 'date' && /^20\d\d-/.test(e.target.value)) saveHeader(key, e.target.value)
+        }}
+        onBlur={autoSave ? (e) => { if ((e.target.value || null) !== (run?.[key] ?? null)) saveHeader(key, e.target.value) } : undefined}
         style={{ width }}
       />
     </label>
@@ -615,8 +641,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       <div>
-        {field('brew_date', 'Date', 'date', 140)}
-        {field('brewer', 'Brewer', 'text', 140)}
+        {field('brew_date', 'Date', 'date', 140, true)}
+        {field('brewer', 'Brewer', 'text', 140, true)}
       </div>
 
       {/* Progress strip — a glance at where this turn is at */}
