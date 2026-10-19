@@ -9,6 +9,10 @@ import {
   getBatch,
   upsertBatch,
   batchNumberTaken,
+  listRepitchSources,
+  yeastName,
+  yeastGen,
+  MAX_YEAST_GEN,
   deleteBatch,
   listTanks,
   listIngredients,
@@ -354,6 +358,7 @@ function usesKg(section) {
 }
 
 function IngredientRow({ item, ingredients, onSaved, removable }) {
+  const sheet = useContext(CustomSheet)
   const kg = usesKg(item.section)
   const toDisplay = (g) => (g == null ? '' : kg ? +(g / 1000).toFixed(3) : g)
 
@@ -427,10 +432,73 @@ function IngredientRow({ item, ingredients, onSaved, removable }) {
           : <button className="ing-add" onClick={toggleAdded} disabled={saving}>Add</button>}
         {removable && !item.added_at && (
           <button className="secondary" style={{ marginLeft: 4, padding: '0.2rem 0.5rem' }} aria-label={`Remove ${item.item_name}`} disabled={saving}
-            onClick={async () => { if (!window.confirm(`Remove ${item.item_name} from this ${item.section === 'fermenter' ? 'batch' : 'turn'}?`)) return; await deleteBrewRunIngredient(item.id); onSaved() }}>✕</button>
+            onClick={async () => {
+              if (!window.confirm(`Remove ${item.item_name} from this ${item.section === 'fermenter' ? 'batch' : 'turn'}?`)) return
+              await deleteBrewRunIngredient(item.id)
+              // No longer a repitch: back to a fresh pitch (gen 0).
+              if (/^repitch/i.test(item.item_name) && sheet?.batchId) await upsertBatch({ id: sheet.batchId, yeast_generation: null, yeast_source_batch_id: null, yeast_name: null })
+              onSaved()
+            }}>✕</button>
         )}
       </td>
     </tr>
+  )
+}
+
+// Repitching yeast from another tank instead of a fresh pitch: pick the tank, and this batch
+// becomes that batch's yeast generation + 1 (fresh pitch is gen 0, max gen 5).
+function RepitchLine({ runId, batchId, count, ingredients, onSaved }) {
+  const [sources, setSources] = useState(null)
+  const [from, setFrom] = useState('')
+  const [kg, setKg] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const open = sources != null
+  async function start() {
+    setError(null)
+    try { setSources(await listRepitchSources(batchId)) } catch (e) { setError(e.message) }
+  }
+  const src = sources?.find((b) => b.id === from)
+  async function add() {
+    setBusy(true); setError(null)
+    try {
+      const gen = yeastGen(src) + 1
+      const yeast = yeastName(src, ingredients)
+      const g = kg === '' ? null : Number(kg) * 1000
+      await addBrewRunIngredient({ brew_run_id: runId, section: 'fermenter', item_name: `Repitch${yeast ? ` ${yeast}` : ''} from ${tankLabel(src.tanks.name)} #${src.batch_number} (gen ${gen})`, planned_qty: g, actual_qty: g, sort_order: count, extra_notes: 'Repitched yeast (added on the brew sheet)' })
+      await upsertBatch({ id: batchId, yeast_generation: gen, yeast_source_batch_id: src.id, yeast_name: yeast })
+      setSources(null); setFrom(''); setKg('')
+      onSaved()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+  if (!open) return (
+    <>
+      <button className="secondary ing-addtoggle" onClick={start} disabled={!runId}>+ Repitch from another tank</button>
+      {error && <span style={{ color: 'crimson', marginLeft: 6 }}>{error}</span>}
+    </>
+  )
+  return (
+    <div className="ing-addline">
+      <label>From
+        <select value={from} onChange={(e) => setFrom(e.target.value)} autoFocus>
+          <option value="">Pick a tank…</option>
+          {[...sources].sort((a, b) => a.tanks.name.localeCompare(b.tanks.name, undefined, { numeric: true })).map((b) => {
+            const gen = yeastGen(b)
+            const yeast = yeastName(b, ingredients)
+            return (
+              <option key={b.id} value={b.id} disabled={gen >= MAX_YEAST_GEN}>
+                {tankLabel(b.tanks.name)} · {b.beer_style} #{b.batch_number}{yeast ? ` · ${yeast}` : ''} · gen {gen}{gen >= MAX_YEAST_GEN ? ' (max, can’t repitch)' : ''}
+              </option>
+            )
+          })}
+        </select>
+      </label>
+      <label>Slurry <input type="number" inputMode="decimal" step="0.1" value={kg} onChange={(e) => setKg(e.target.value)} style={{ width: 80 }} /> kg</label>
+      <button onClick={add} disabled={busy || !src}>{src ? `+ Add repitch (gen ${yeastGen(src) + 1})` : '+ Add repitch'}</button>
+      <button className="secondary" onClick={() => setSources(null)}>Cancel</button>
+      {!sources.length && <span className="stock-muted">No other fermenters with beer in them.</span>}
+      {error && <span style={{ color: 'crimson' }}>{error}</span>}
+    </div>
   )
 }
 
@@ -653,7 +721,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], alphaAcidByName, form.postboil_gravity, form.postboil_volume_l)
 
   // Batches without a recipe (split / one-off) get a fully editable brew sheet.
-  const customSheet = { runId: form.id ?? run?.id, full: !recipe || /no recipe/i.test(recipe.name ?? '') }
+  const customSheet = { runId: form.id ?? run?.id, batchId, full: !recipe || /no recipe/i.test(recipe.name ?? '') }
 
   return (
     <CustomSheet.Provider value={customSheet}>
@@ -957,7 +1025,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
 
       {/* Not gated to a stage — fermentation isn't time-tracked on this sheet, but
           pitching/dry-hopping happens right around knockout so it's worth showing here. */}
-      {(fermenterItems.length > 0 || koAdditions.length > 0) && (
+      {(form.id ?? run?.id) && (
         <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
           <strong>Fermenter Additions · whole batch{turnVolumeL && turnCount ? ` (${(turnVolumeL * turnCount).toLocaleString()} L)` : ''}</strong>
           <p style={{ color: '#666', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
@@ -965,6 +1033,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
           </p>
           {fermenterItems.length > 0 && <IngredientList items={fermenterItems} ingredients={masterIngredients} onSaved={onSaved} removable />}
           {koAdditions.length > 0 && <KnockoutAdditions items={koAdditions} onSaved={onSaved} />}
+          {/* Whole-batch lines live on turn 1. */}
+          <RepitchLine runId={runNumber === 1 ? form.id ?? run?.id : otherRuns.find((r) => r.run_number === 1)?.id ?? form.id ?? run?.id} batchId={batchId} count={fermenterItems.length} ingredients={masterIngredients} onSaved={onSaved} />
         </div>
       )}
 
@@ -1290,6 +1360,7 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
           <Fact label="Tank" value={tank ? tankLabel(tank.name) : null} from="Brew Day tank step / Cellar transfer" />
           <Fact label="Turns" value={turns ? `${f.turnsDone} of ${turns} knocked out` : null} from={batch.turn_volume_l ? `${batch.turn_volume_l} L each` : null} />
           <Fact label="Target volume" value={fx(batch.target_volume_l, 0, ' L')} from="Add Brew" />
+          <Fact label="Yeast" value={yeastName(batch, ingredients) ? `${yeastName(batch, ingredients)} · gen ${yeastGen(batch)}` : `gen ${yeastGen(batch)}`} from={batch.yeast_source_batch_id ? 'Repitched on Brew Day' : 'Fresh pitch (gen 0)'} />
         </div>
       </section>
 
