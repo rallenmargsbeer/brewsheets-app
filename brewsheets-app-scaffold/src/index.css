@@ -838,3 +838,11 @@ tr.today td { background: #fbf6e9; }
 @media (max-width: 700px) { .sc-hint { display: none; } }
 .sc-zoomwrap { width: max-content; min-width: 100%; } /* clips only when scaled (inline style), so the grid scrolls sideways */
 .sc-grid.sc-zoomed { min-width: 0; }
+
+/* Phones: tabs fold away behind the menu button. */
+.nav-toggle { display: none; background: none; border: 1px solid rgba(242, 237, 226, 0.3); cursor: pointer; font: inherit; }
+@media (max-width: 700px) {
+  .nav-toggle { display: inline-block; }
+  .nav-fold:not(.open) > :not(.nav-toggle) { display: none; }
+  .app-nav.open .nav-toggle { flex-basis: 100%; text-align: left; }
+}
