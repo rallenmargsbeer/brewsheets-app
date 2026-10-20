@@ -590,3 +590,13 @@ export async function listBookingEntries(bookingId) {
   if (error) throw error
   return data
 }
+
+// The dates each booking's "Brew" cell sits on (in its tank's lane), by booking id.
+export async function bookingBrewDates(bookingIds) {
+  if (!bookingIds.length) return new Map()
+  const { data, error } = await supabase.from('schedule_entries').select('booking_id, entry_date, text').in('booking_id', bookingIds).eq('lane', 'tank')
+  if (error) throw error
+  const out = new Map()
+  for (const e of data) if (/^brew$/i.test((e.text ?? '').trim())) out.set(e.booking_id, [...(out.get(e.booking_id) ?? []), e.entry_date])
+  return out
+}

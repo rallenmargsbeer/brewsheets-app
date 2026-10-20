@@ -292,7 +292,9 @@ export default function AddBrewPage() {
         target_volume_l: turnVolumeL * quantity,
       })
       await initializeBrewRuns(batch.id, quantity, fullRecipe, turnVolumeL, bagAllocations)
-      if (booking) await linkBookingToBatch(booking.id, batch.id)
+      // Started without picking the booking: today's unstarted booking for this tank is this brew.
+      const own = booking ?? (await listBookings({ unbrewedOnly: true, fromIso: batch.date_brewed, toIso: batch.date_brewed }).catch(() => [])).find((b) => b.tank_id === tankId)
+      if (own) await linkBookingToBatch(own.id, batch.id)
       navigate(`/batches/${batch.id}?view=brewday`)
     } catch (e) {
       setError(e.message)
