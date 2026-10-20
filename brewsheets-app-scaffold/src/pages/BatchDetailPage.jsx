@@ -692,7 +692,25 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   // Hops for this turn's boil and whirlpool, in boil order, so they can be weighed out
   // while lautering. A hop is anything in a Hops group on the Ingredients page or with an alpha acid.
   const hopNames = new Set(masterIngredients.filter((i) => /hop/i.test(i.unleashed_group ?? '') || i.alpha_acid_pct != null).map((i) => i.name))
-  const boilHops = [...kettleItems, ...whirlpoolItems].filter((i) => hopNames.has(i.item_name))
+  // Each hop's amount keeps the batch on the current recipe: the recipe's amount for every
+  // turn, less what earlier turns actually put in, shared over the turns left. So an over-pour
+  // on turn 1 comes off turn 2, and a recipe changed mid-batch applies from now on. Lines
+  // added on the day (not in the recipe) use their own planned amount.
+  const recipeLines = { kettle: recipe?.recipe_kettle_additions ?? [], whirlpool: recipe?.recipe_whirlpool_additions ?? [] }
+  const sameTime = (a, b) => a == null || b == null || Number(a) === Number(b)
+  const boilHops = [...kettleItems, ...whirlpoolItems].filter((i) => hopNames.has(i.item_name)).map((h) => {
+    const rl = recipeLines[h.section].find((r) => r.item_name === h.item_name && (h.section !== 'kettle' || sameTime(r.boil_time_min, h.time_min)))
+    const perTurn = rl && turnVolumeL ? Number(rl.qty_g_per_l) * Number(turnVolumeL) : Number(h.planned_qty ?? 0)
+    const earlier = otherRuns
+      .filter((r) => r.run_number < runNumber)
+      .flatMap((r) => (r.brew_run_ingredients ?? []).filter((x) => x.section === h.section && x.item_name === h.item_name && sameTime(x.time_min, h.time_min)).map((x) => ({ ...x, run: r.run_number })))
+    const used = earlier.reduce((a, x) => a + Number(x.actual_qty ?? x.planned_qty ?? 0), 0)
+    const turnsLeft = Math.max(1, (turnCount || runNumber) - runNumber + 1)
+    const need = Math.max(0, (perTurn * (turnCount || runNumber) - used) / turnsLeft)
+    // Say why when an earlier turn didn't get the recipe amount.
+    const off = earlier.some((x) => Math.abs(Number(x.actual_qty ?? x.planned_qty ?? 0) - perTurn) > 0.5)
+    return { ...h, need, earlier: off ? earlier : null }
+  })
 
   // Target Strike Volume isn't a stored number — it's the grist bill for
   // this turn times the recipe's own liquor:grist ratio (defaults to 3:1, editable
@@ -893,7 +911,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                   {boilHops.length > 0 && (
                     <div className="grab-hops">
                       <strong>Grab for the boil:</strong>{' '}
-                      {boilHops.map((h) => `${h.item_name} ${formatQty(Number(h.actual_qty ?? h.planned_qty))}${h.section === 'whirlpool' ? ' (whirlpool)' : h.time_min != null ? ` @ ${h.time_min} min` : ''}`).join(' · ')}
+                      {boilHops.map((h) => `${h.item_name} ${formatQty(h.need)}${h.section === 'whirlpool' ? ' (whirlpool)' : h.time_min != null ? ` @ ${Number(h.time_min)} min` : ''}${h.earlier ? ` (turn ${h.earlier.map((x) => `${x.run} had ${formatQty(Number(x.actual_qty ?? x.planned_qty))}`).join(', turn ')})` : ''}`).join(' · ')}
                     </div>
                   )}
                 </>
