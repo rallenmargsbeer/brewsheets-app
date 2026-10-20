@@ -32,6 +32,7 @@ import AbvFlag from '../components/AbvFlag.jsx'
 import BlendSheet from '../components/BlendSheet.jsx'
 import { blendGravity, waterForGravity, gravityAfter } from '../lib/dilution'
 import { useBuffer, lacticMl, remainingTurnsPh } from '../lib/acid'
+import { batchEfficiency } from '../lib/brewhouseEff'
 import { tinsethIbu, toSg } from '../lib/beerCalcs'
 import BeerDot from '../components/BeerDot.jsx'
 
@@ -959,8 +960,9 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
               {s.key === 'knockout' && (
                 <>
                   <IngredientList title="Whirlpool Additions" section="whirlpool" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
-                  {(recipe?.ko_temp != null || estimatedIBU != null || koPhRange) && (
+                  {(recipe?.target_og != null || recipe?.ko_temp != null || estimatedIBU != null || koPhRange) && (
                     <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                      {recipe?.target_og != null && <TargetValue label="Target KO Gravity" value={recipe.target_og} unit="°P" />}
                       {recipe?.ko_temp != null && <TargetValue label="Target KO Temp" value={recipe.ko_temp} unit="°C" />}
                       {koPhRange && <TargetValue label="Target KO pH" value={koPhRange} unit="" />}
                       <TargetValue
@@ -1369,6 +1371,8 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
   useEffect(() => { listPackagingSessions(batch.id).then(setSessions).catch(() => setSessions([])) }, [batch.id])
   const f = batchFigures(batch, sessions)
   const est = batchIbuSrm(batch, ingredients)
+  const eff = batchEfficiency(batch, ingredients)
+  const perTurn = (k) => (eff.turns.filter((t) => t[k] != null).length > 1 ? `. Turns: ${eff.turns.filter((t) => t[k] != null).map((t) => `${t.run}: ${t[k].toFixed(0)}%`).join(', ')}` : '')
   const target = (v) => (v != null && v !== '' ? `Recipe target ${v}` : 'Estimated from Brew Day')
   const tank = tanks.find((t) => t.id === batch.tank_id)
   const turns = batch.turn_quantity || (batch.brew_runs ?? []).length
@@ -1407,6 +1411,14 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
           <Fact label="Target ABV" value={fx(f.targetAbv, 1, '%')} from={f.targetAbv != null ? `Recipe${f.targetOg != null ? `: OG ${f.targetOg} °P, FG ${f.targetFg ?? '?'} °P` : ''}` : 'Set on the recipe'} />
         </div>
         <div style={{ marginTop: '0.75rem' }}><AbvFlag check={abvCheck(batch)} compact /></div>
+      </section>
+
+      <section className="bd-card">
+        <h3>Efficiency</h3>
+        <div className="bd-grid">
+          <Fact label="Mash efficiency" value={fx(eff.mash, 0, '%')} from={eff.mash != null ? `Pre-boil gravity × volume vs the grist's potential${perTurn('mash')}` : 'Needs pre-boil gravity and volume on Brew Day, and PPG for every malt'} />
+          <Fact label="Brewhouse efficiency" value={fx(eff.brewhouse, 0, '%')} from={eff.brewhouse != null ? `KO gravity × KO volume vs the grist's potential${perTurn('brewhouse')}` : 'Needs KO gravity and volume on Brew Day, and PPG for every malt'} />
+        </div>
       </section>
 
       <section className="bd-card">
