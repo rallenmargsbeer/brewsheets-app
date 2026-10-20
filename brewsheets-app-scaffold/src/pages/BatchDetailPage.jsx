@@ -1416,6 +1416,7 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
       <section className="bd-card">
         <h3>Efficiency</h3>
         <div className="bd-grid">
+          <Fact label="Conversion efficiency" value={fx(eff.conversion, 0, '%')} from={eff.conversion != null ? `1st runnings gravity vs the most the strike water could hold${perTurn('conversion')}` : 'Needs 1st runnings gravity and actual strike volume on Brew Day, and PPG for every malt'} />
           <Fact label="Mash efficiency" value={fx(eff.mash, 0, '%')} from={eff.mash != null ? `Pre-boil gravity × volume vs the grist's potential${perTurn('mash')}` : 'Needs pre-boil gravity and volume on Brew Day, and PPG for every malt'} />
           <Fact label="Brewhouse efficiency" value={fx(eff.brewhouse, 0, '%')} from={eff.brewhouse != null ? `KO gravity × KO volume vs the grist's potential${perTurn('brewhouse')}` : 'Needs KO gravity and volume on Brew Day, and PPG for every malt'} />
         </div>
