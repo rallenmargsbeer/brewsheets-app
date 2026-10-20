@@ -41,7 +41,7 @@ export function effFor(turns, recipeId) {
 }
 
 // One batch's efficiencies, each turn and the whole batch (turns weighted by their extract):
-// mash = pre-boil gravity x pre-boil volume, brewhouse = KO gravity x KO volume, both against
+// conversion = first runnings in the strike water, mash = pre-boil gravity x pre-boil volume, brewhouse = KO gravity x KO volume, both against
 // the grist's potential (actual weights where entered, else planned, else the recipe's g/L).
 export function batchEfficiency(batch, ingredients) {
   const ppg = new Map(ingredients.filter((i) => i.potential_ppg != null).map((i) => [i.name, Number(i.potential_ppg)]))
@@ -59,15 +59,24 @@ export function batchEfficiency(batch, ingredients) {
     if (!(potential > 0)) continue
     const mash = points(Number(r.preboil_gravity), Number(r.preboil_volume_l))
     const bh = points(Number(r.whirlpool_gravity), Number(r.ko_flowmeter_l))
-    turns.push({ run: r.run_number, potential, mash, bh })
+    // Conversion (Braukaiser): extract dissolved in the strike water (plus the malt's ~4%
+    // moisture) at first-runnings gravity, against the grist's extract (PPG / 46.2 = fraction).
+    const fw = Number(r.first_runnings_gravity), water = Number(r.mash_water_l)
+    const extractKg = grist.reduce((a, g) => a + g.kg * (ppg.get(g.name) / 46.214), 0)
+    const gristKg = grist.reduce((a, g) => a + g.kg, 0)
+    const conv = fw > 0 && fw < 40 && water > 0 && extractKg > 0
+      ? (((water + 0.04 * gristKg) * fw) / (100 - fw)) / extractKg * 100 : null
+    turns.push({ run: r.run_number, potential, mash, bh, conv })
   }
   const overall = (k) => {
     const ts = turns.filter((t) => t[k] != null)
     return ts.length ? (ts.reduce((a, t) => a + t[k], 0) / ts.reduce((a, t) => a + t.potential, 0)) * 100 : null
   }
+  const convTurns = turns.filter((t) => t.conv != null)
   return {
+    conversion: convTurns.length ? convTurns.reduce((a, t) => a + t.conv, 0) / convTurns.length : null,
     mash: overall('mash'),
     brewhouse: overall('bh'),
-    turns: turns.map((t) => ({ run: t.run, mash: t.mash != null ? (t.mash / t.potential) * 100 : null, brewhouse: t.bh != null ? (t.bh / t.potential) * 100 : null })),
+    turns: turns.map((t) => ({ run: t.run, conversion: t.conv, mash: t.mash != null ? (t.mash / t.potential) * 100 : null, brewhouse: t.bh != null ? (t.bh / t.potential) * 100 : null })),
   }
 }
