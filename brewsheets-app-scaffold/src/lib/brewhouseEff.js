@@ -39,3 +39,35 @@ export function effFor(turns, recipeId) {
   if (mine.length >= 3) return { eff: avg(mine), n: mine.length, own: true }
   return turns.length ? { eff: avg(turns), n: turns.length, own: false } : null
 }
+
+// One batch's efficiencies, each turn and the whole batch (turns weighted by their extract):
+// mash = pre-boil gravity x pre-boil volume, brewhouse = KO gravity x KO volume, both against
+// the grist's potential (actual weights where entered, else planned, else the recipe's g/L).
+export function batchEfficiency(batch, ingredients) {
+  const ppg = new Map(ingredients.filter((i) => i.potential_ppg != null).map((i) => [i.name, Number(i.potential_ppg)]))
+  const recipeGrist = batch.recipes?.recipe_grist_items ?? []
+  const points = (g, L) => (g > 0 && L > 0 ? 1000 * (toSg(g) - 1) * L * L_GAL : null)
+  const turns = []
+  for (const r of [...(batch.brew_runs ?? [])].sort((a, b) => a.run_number - b.run_number)) {
+    const own = (r.brew_run_ingredients ?? []).filter((i) => i.section === 'grist')
+    const turnL = Number(batch.turn_volume_l) || 2500
+    const grist = own.length
+      ? own.map((i) => ({ name: i.item_name, kg: Number(i.actual_qty ?? i.planned_qty ?? 0) / 1000 }))
+      : recipeGrist.map((g) => ({ name: g.ingredient_name, kg: (Number(g.qty_g_per_l) * turnL) / 1000 }))
+    if (!grist.length || grist.some((g) => g.kg > 0 && !ppg.has(g.name))) continue
+    const potential = grist.reduce((a, g) => a + g.kg * KG_LB * ppg.get(g.name), 0)
+    if (!(potential > 0)) continue
+    const mash = points(Number(r.preboil_gravity), Number(r.preboil_volume_l))
+    const bh = points(Number(r.whirlpool_gravity), Number(r.ko_flowmeter_l))
+    turns.push({ run: r.run_number, potential, mash, bh })
+  }
+  const overall = (k) => {
+    const ts = turns.filter((t) => t[k] != null)
+    return ts.length ? (ts.reduce((a, t) => a + t[k], 0) / ts.reduce((a, t) => a + t.potential, 0)) * 100 : null
+  }
+  return {
+    mash: overall('mash'),
+    brewhouse: overall('bh'),
+    turns: turns.map((t) => ({ run: t.run, mash: t.mash != null ? (t.mash / t.potential) * 100 : null, brewhouse: t.bh != null ? (t.bh / t.potential) * 100 : null })),
+  }
+}
