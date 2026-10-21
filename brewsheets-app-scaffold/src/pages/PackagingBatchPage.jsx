@@ -159,7 +159,7 @@ function SessionCard({ number, session, batch, onChanged, startOpen }) {
         <h3>Session {number}{s.package_date ? ` · ${s.package_date}` : ''}</h3>
         <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <span className="pk-litres">{Math.round(t.litres).toLocaleString()} L</span>
-          <button className="secondary pk-toggle" onClick={() => setOpen(!open)}>{open ? 'Close' : 'Open'}</button>
+          <button className="secondary pk-toggle" onClick={() => { setOpen(!open); if (open) saveNow('closed_at', new Date().toISOString()) }}>{open ? 'Close' : 'Open'}</button>
         </span>
       </div>
 
@@ -203,7 +203,7 @@ function SessionCard({ number, session, batch, onChanged, startOpen }) {
           </label>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <SaveStatus status={status} />
-            <button onClick={() => setOpen(false)}>Done</button>
+            <button onClick={async () => { setOpen(false); await saveNow('closed_at', new Date().toISOString()) }}>Done</button>
             <button className="secondary" onClick={remove}>Delete</button>
           </div>
         </div>
@@ -361,7 +361,7 @@ export default function PackagingBatchPage() {
       <ScheduledPack batch={batch} packed={t} />
 
       {sessions.map((s, i) => (
-        <SessionCard key={s.id} number={i + 1} session={s} batch={batch} onChanged={refresh} startOpen={i === sessions.length - 1 && s.package_date === today()} />
+        <SessionCard key={s.id} number={i + 1} session={s} batch={batch} onChanged={refresh} startOpen={i === sessions.length - 1 && s.package_date === today() && !s.closed_at} />
       ))}
 
       {batch.status !== 'packaged' && (
