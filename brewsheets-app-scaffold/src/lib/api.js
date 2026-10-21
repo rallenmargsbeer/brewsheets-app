@@ -232,7 +232,7 @@ export async function listBatches() {
 export async function listBatchesInTanks(statuses) {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipe_id, target_volume_l, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipe_id, target_volume_l, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(id, gravity_plato, temp_panel, ph, notes, initials, reading_date, created_at)')
     .not('tank_id', 'is', null)
     .in('status', statuses)
     .order('date_brewed', { ascending: false })
@@ -497,6 +497,12 @@ export async function upsertFermentationReading(reading) {
     .single()
   if (error) throw error
   return data
+}
+
+// Change some fields of an existing reading.
+export async function updateFermentationReading(id, fields) {
+  const { error } = await supabase.from('fermentation_readings').update(fields).eq('id', id)
+  if (error) throw error
 }
 
 export async function deleteFermentationReading(id) {

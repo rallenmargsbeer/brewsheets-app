@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { deleteFermentationReading } from '../lib/api'
+import { deleteFermentationReading, updateFermentationReading } from '../lib/api'
+import { useAutoSave, SaveStatus } from '../lib/useAutoSave.jsx'
 import AbvFlag from './AbvFlag.jsx'
 import { useBatchJobs, JobsCell } from './BatchJobs.jsx'
 import { gravityAdvice, isChilled } from '../lib/dayTasks'
@@ -92,6 +93,37 @@ function GravityChart({ points, events = [], band = null }) {
   )
 }
 
+// One reading's cells as inputs; each saves as it's typed.
+function EditRow({ r, onDone, onChanged }) {
+  const [v, setV] = useState({ gravity_plato: r.gravity_plato ?? '', temp_panel: r.temp_panel ?? '', ph: r.ph ?? '', notes: r.notes ?? '', initials: r.initials ?? '', reading_date: r.reading_date })
+  const NUM = ['gravity_plato', 'temp_panel', 'ph']
+  const { saveSoon, saveNow, status } = useAutoSave(async (k, val) => {
+    if (k === 'reading_date' && !val) return // a reading always has a date
+    await updateFermentationReading(r.id, { [k]: val === '' ? null : NUM.includes(k) ? Number(val) : val })
+    onChanged()
+  })
+  const box = (k, props = {}) => (
+    <input value={v[k]} {...props}
+      onChange={(e) => { setV({ ...v, [k]: e.target.value }); saveSoon(k, e.target.value) }}
+      onBlur={(e) => saveNow(k, e.target.value)} />
+  )
+  const num = { type: 'number', inputMode: 'decimal', style: { width: 64 } }
+  return (
+    <tr className="reading-edit">
+      <td>{box('reading_date', { type: 'date', style: { width: 130 } })}</td>
+      <td></td>
+      <td>{box('gravity_plato', { ...num, step: '0.1' })}</td>
+      <td>{box('temp_panel', { ...num, step: '0.1' })}</td>
+      <td>{box('ph', { ...num, step: '0.01' })}</td>
+      <td><SaveStatus status={status} /></td>
+      <td>{box('notes', { style: { width: 140 } })}</td>
+      <td>{box('initials', { style: { width: 50 } })}</td>
+      <td></td>
+      <td><button onClick={onDone} style={{ padding: '0.2rem 0.5rem' }}>Done</button></td>
+    </tr>
+  )
+}
+
 export default function FermentationSection({ batch, og = batch.actual_og, check, onChanged }) {
   const readings = [...(batch.fermentation_readings ?? [])].sort(
     (a, b) => (a.reading_date ?? '').localeCompare(b.reading_date ?? '') || (a.created_at ?? '').localeCompare(b.created_at ?? '')
@@ -109,6 +141,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
   for (const a of added) if (a.day != null) byDay.set(a.day, [...(byDay.get(a.day) ?? []), a.item_name])
   const events = [...byDay].map(([day, names]) => ({ day, label: names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0] }))
 
+  const [editing, setEditing] = useState(null)
   async function remove(r) {
     if (!window.confirm(`Delete this ${r.reading_date} reading${r.gravity_plato != null ? ` (${r.gravity_plato} °P)` : ''}?`)) return
     await deleteFermentationReading(r.id)
@@ -184,6 +217,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
                         <td></td>
                       </tr>
                     )
+                    if (editing === r.id) return <EditRow key={r.id} r={r} onDone={() => setEditing(null)} onChanged={onChanged} />
                     const abv = abvTracker(og, r.gravity_plato)
                     return (
                       <tr key={r.id} className={date === todayIso ? 'today' : ''}>
@@ -196,7 +230,10 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
                         <td>{r.notes ?? ''}</td>
                         <td>{r.initials ?? ''}</td>
                         <td>{jobs.length > 0 && <JobsCell jobs={jobs} onChanged={refreshJobs} />}</td>
-                        <td><button className="secondary" onClick={() => remove(r)} aria-label="Delete reading" style={{ padding: '0.2rem 0.5rem' }}>✕</button></td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <button className="secondary" onClick={() => setEditing(r.id)} aria-label="Edit reading" style={{ padding: '0.2rem 0.5rem', marginRight: 4 }}>✎</button>
+                          <button className="secondary" onClick={() => remove(r)} aria-label="Delete reading" style={{ padding: '0.2rem 0.5rem' }}>✕</button>
+                        </td>
                       </tr>
                     )
                   })}
