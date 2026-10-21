@@ -176,7 +176,8 @@ export default function RecipeEditPage() {
   const [recipe, setRecipe] = useState(emptyRecipe)
   const [grist, setGrist] = useState([])
   const [water, setWater] = useState([])
-  const [kettle, setKettle] = useState([])
+  // Every new recipe starts with antifoam: 400 ml per 25 HL turn at 60 min (0.4 in kg-per-25 HL terms).
+  const [kettle, setKettle] = useState(() => (isNew ? [{ item_name: 'Bintani AAFA Anti Foam Agent', boil_time_min: 60, qty_25: 0.4 }] : []))
   const [whirlpool, setWhirlpool] = useState([])
   const [fermenter, setFermenter] = useState([])
   const [blend, setBlend] = useState([])
@@ -293,7 +294,7 @@ export default function RecipeEditPage() {
       )
       await replaceKettleAdditions(
         saved.id,
-        toPerL(kettle, 'kettle', mode)
+        toPerL(recipe.is_rtd ? [] : kettle, 'kettle', mode) // RTDs aren't boiled (no default antifoam)
           .filter((k) => k.item_name)
           .map(({ id: _i, recipe_id: _r, ...k }) => cleanBlanks(k))
       )
