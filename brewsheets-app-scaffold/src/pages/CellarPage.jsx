@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listTanks, listIngredients, listBatchesInTanks, upsertBatch, upsertFermentationReading } from '../lib/api'
-import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
+import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import AddToTank from '../components/AddToTank.jsx'
 import TankDay from '../components/TankDay.jsx'
 import { loadDay } from '../lib/dayTasks'
@@ -224,7 +224,7 @@ function TankPanel({ tank, batch, day, editor, emptyBbts, ingredients, onClose, 
         ) : (
           <>
             <p style={{ color: 'var(--ink2)', margin: '0.5rem 0 0' }}>
-              Day {daysInTank(batch, tank)} · <span className={'pill pill-' + batch.status}>{batch.status}</span> ·{' '}
+              Day {daysInTank(batch, tank)} · <span className={'pill pill-' + batch.status}>{statusLabel(batch.status)}</span> ·{' '}
               <Link to={`/batches/${batch.id}`}>Open batch sheet</Link>
             </p>
 

@@ -306,6 +306,7 @@ tbody tr:hover td {
 .pill-planned { background: #e6e9ec; color: #3b4651; }
 .pill-brewing { background: #fde3d3; color: #9a3a0c; }
 .pill-fermenting { background: #fdf0c4; color: #7a5600; }
+.pill-chilling { background: #dff1f6; color: #0f5566; }
 .pill-conditioning { background: #d9e7fa; color: #1d4f91; }
 .pill-packaged { background: #d4efe2; color: #11603f; }
 .pill-archived { background: #ece9e1; color: #6b6f6c; }

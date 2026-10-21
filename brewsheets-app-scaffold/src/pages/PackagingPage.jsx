@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listBatchesInTanks, listPackagingTotals } from '../lib/api'
-import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
+import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import { sumSessions } from '../lib/packaging'
 import BeerDot from '../components/BeerDot.jsx'
 
 // Conditioning first, then anything else still sitting in a BBT.
-const ORDER = { conditioning: 0, fermenting: 1, brewing: 2, planned: 3 }
+const ORDER = { conditioning: 0, chilling: 1, fermenting: 2, brewing: 3, planned: 4 }
 
 export default function PackagingPage() {
   const [batches, setBatches] = useState([])
@@ -50,7 +50,7 @@ export default function PackagingPage() {
                     <span style={{ color: 'var(--ink2)' }}>#{b.batch_number}</span>
                   </div>
                   <div style={{ color: 'var(--ink2)', margin: '4px 0' }}>{tankLabel(b.tanks?.name)}</div>
-                  <span className={'pill pill-' + b.status}>{b.status}</span>
+                  <span className={'pill pill-' + b.status}>{statusLabel(b.status)}</span>
                   <div style={{ marginTop: 6, fontSize: '0.85rem', color: 'var(--ink2)' }}>
                     {t ? `Packaged so far: ${t.kegs} kegs · ${t.cubes} cubes · ${Math.round(t.litres).toLocaleString()} L` : 'Nothing packaged yet'}
                   </div>

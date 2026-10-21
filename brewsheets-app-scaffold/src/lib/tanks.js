@@ -5,7 +5,7 @@ export function tankLabel(name) {
 }
 
 // Batches in these statuses are still physically sitting in their tank.
-export const IN_TANK_STATUSES = ['planned', 'brewing', 'fermenting', 'conditioning']
+export const IN_TANK_STATUSES = ['planned', 'brewing', 'fermenting', 'chilling', 'conditioning']
 
 // Statuses are stored lower-case; show them capitalised.
-export const statusLabel = (s) => (s ? s[0].toUpperCase() + s.slice(1) : '')
+export const statusLabel = (s) => (s === 'chilling' ? 'On chill' : s ? s[0].toUpperCase() + s.slice(1) : '')

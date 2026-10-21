@@ -715,7 +715,7 @@ export async function listRepitchSources(excludeId) {
   const { data, error } = await supabase
     .from('batches')
     .select('id, batch_number, beer_style, status, yeast_generation, yeast_name, tanks(name, tank_type), brew_runs(brew_run_ingredients(section, item_name))')
-    .in('status', ['fermenting', 'conditioning'])
+    .in('status', ['fermenting', 'chilling', 'conditioning'])
     .neq('id', excludeId)
   if (error) throw error
   return data.filter((b) => b.tanks && b.tanks.tank_type !== 'BBT')

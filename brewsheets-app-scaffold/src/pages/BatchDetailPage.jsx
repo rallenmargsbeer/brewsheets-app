@@ -1388,7 +1388,7 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
           <Fact label="Batch #" value={batch.batch_number} from="Next number on Add Brew">
             {isAdmin && <BatchNumberOverride batch={batch} onChanged={onChanged} />}
           </Fact>
-          <Fact label="Status" value={statusLabel(batch.status)} from="Moves on with Brew Day, knockout and packaging" />
+          <Fact label="Status" value={statusLabel(batch.status)} from="Moves on with Brew Day, knockout, chill (ticked on the schedule) and packaging" />
           <Fact label="Beer" value={batch.recipes?.name} from={batch.recipes?.style} />
           <Fact label="Date brewed" value={fmtDate(batch.date_brewed)} from="Add Brew" />
           <Fact label="Tank" value={tank ? tankLabel(tank.name) : null} from="Brew Day tank step / Cellar transfer" />
