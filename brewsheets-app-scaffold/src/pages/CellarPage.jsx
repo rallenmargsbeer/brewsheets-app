@@ -44,7 +44,7 @@ function TankTile({ tank, batch, day, onClick }) {
         <>
           <span style={{ fontWeight: 600, fontSize: '1.05rem' }}><BeerDot name={batch.beer_style} />{batch.beer_style}</span>
           <span style={{ color: 'var(--ink2)' }}>#{batch.batch_number}{days != null ? ` · Day ${days}` : ''}</span>
-          <span className={'pill pill-' + batch.status} style={{ alignSelf: 'flex-start' }}>{batch.status}</span>
+          <span className={'pill pill-' + batch.status} style={{ alignSelf: 'flex-start' }}>{statusLabel(batch.status)}</span>
           <TileReading batch={batch} />
         </>
       ) : (
