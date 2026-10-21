@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { listTanks, listRecipes } from '../lib/api'
+import { useAuth } from '../auth.jsx'
+import BrewListPanel from '../components/BrewListPanel.jsx'
 import { tankLabel } from '../lib/tanks'
 import {
   todayIso,
@@ -318,6 +320,8 @@ export default function SchedulePage() {
   const [clip, setClip] = useState(null) // { mode: 'cut' | 'copy', r0, c0, h, w, items: [{ dr, dc, e }] }
   const [busy, setBusy] = useState(false)
   const [showPlan, setShowPlan] = useState(false)
+  const { isAdmin } = useAuth()
+  const [showBrewList, setShowBrewList] = useState(false)
   const [planKey, setPlanKey] = useState(0) // bumped after a booking so the brew plan reloads
 
   useEffect(() => {
@@ -769,6 +773,7 @@ export default function SchedulePage() {
           ) : null}
           <button className={packOnly ? '' : 'secondary'} onClick={() => setPackOnly((v) => !v)} aria-pressed={packOnly}>{packOnly ? 'Packaging only ✓' : 'Packaging only'}</button>
           <Link to="/schedule/materials"><button className="secondary">Packaging materials</button></Link>
+          {isAdmin && <button className={showBrewList ? '' : 'secondary'} onClick={() => setShowBrewList((v) => !v)}>{showBrewList ? 'Hide brews for Unleashed' : 'Brews for Unleashed'}</button>}
         </div>
       </div>
 
@@ -783,6 +788,7 @@ export default function SchedulePage() {
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {showPlan && editor && <SchedulePlanPanel refreshKey={planKey} />}
+      {showBrewList && isAdmin && <BrewListPanel />}
 
       {weekBeers.length > 0 && (
         <div className="sc-legend">
