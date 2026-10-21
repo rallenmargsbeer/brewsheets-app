@@ -19,7 +19,7 @@ const bySlot = (a, b) => slotRank(a.slot) - slotRank(b.slot)
 async function listCellarBatches() {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipes(name, target_fg, cellar_template_id, recipe_fermenter_additions(item_name, timing_notes)), fermentation_readings(reading_date, gravity_plato, created_at, notes), tank_additions(item_name)')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipes(name, target_fg, cellar_template_id, recipe_fermenter_additions(item_name, timing_notes)), fermentation_readings(reading_date, gravity_plato, created_at, notes), tank_additions(item_name, added_on)')
     .in('status', IN_TANK_STATUSES)
   if (error) throw error
   return data
@@ -83,7 +83,7 @@ export async function loadDay(date) {
     }
     // The beer in the tank: the batch, or the schedule's run for this half-day.
     const beer = batch?.beer_style ?? scheduled.find((s) => s.beer)?.beer ?? null
-    return { tank: t, batch, beer, scheduled, fromTemplate, advice: batch ? gravityAdvice(batch, date, { chilled: isChilled(batch, entries.filter((e) => e.lane === 'tank' && e.tank_id === t.id), date) }) : [] }
+    return { tank: t, batch, beer, scheduled, fromTemplate, advice: batch ? gravityAdvice(batch, date, jobState(batch, entries.filter((e) => e.lane === 'tank' && e.tank_id === t.id), date)) : [] }
   })
   return { date, brewhouse, packaging, other, tanks: tankDays }
 }
@@ -95,24 +95,31 @@ export async function setTaskDone(id, done) {
 }
 
 // The recipe's terminal dry hops (fermenter additions timed "Terminal") not yet in the tank:
-// none logged on the Cellar tab, and no reading note saying it was dry hopped (DH).
-function pendingDryHops(batch) {
-  const planned = (batch.recipes?.recipe_fermenter_additions ?? []).filter((a) => /terminal|dry ?hop|\bdh\b/i.test(a.timing_notes ?? '')).map((a) => a.item_name)
-  if (!planned.length) return []
+// not marked added on the Cellar tab, no Dry Hop job ticked off, and no reading note saying
+// it was dry hopped (DH).
+const plannedDryHops = (batch) => (batch.recipes?.recipe_fermenter_additions ?? []).filter((a) => /terminal|dry ?hop|\bdh\b/i.test(a.timing_notes ?? '')).map((a) => a.item_name)
+function pendingDryHops(batch, dryHopped) {
+  const planned = plannedDryHops(batch)
+  if (!planned.length || dryHopped) return []
   if ((batch.fermentation_readings ?? []).some((r) => /\bDH\b|dry ?hop/i.test(r.notes ?? ''))) return []
-  const added = new Set((batch.tank_additions ?? []).map((a) => a.item_name))
+  const added = new Set((batch.tank_additions ?? []).filter((a) => a.added_on).map((a) => a.item_name))
   return planned.filter((p) => !added.has(p))
 }
 
-// A chill / crash job ticked off on the schedule for this batch's tank since brew day.
+// A job ticked off on the schedule for this batch's tank since brew day (chill / crash, dry hop).
 export const CHILL_JOB = /chill|crash/i
-export const isChilled = (batch, jobs, date) => (jobs ?? []).some((e) =>
-  e.done && CHILL_JOB.test(e.text ?? '') && (!e.tank_id || e.tank_id === batch.tank_id) &&
+export const DRY_HOP_JOB = /dry ?hop|\bdh\b/i
+const jobDone = (re) => (batch, jobs, date) => (jobs ?? []).some((e) =>
+  e.done && re.test(e.text ?? '') && (!e.tank_id || e.tank_id === batch.tank_id) &&
   (!batch.date_brewed || e.entry_date >= batch.date_brewed) && e.entry_date <= date)
+export const isChilled = jobDone(CHILL_JOB)
+export const isDryHopped = jobDone(DRY_HOP_JOB)
+// Both, for gravityAdvice's options.
+export const jobState = (batch, jobs, date) => ({ chilled: isChilled(batch, jobs, date), dryHopped: isDryHopped(batch, jobs, date) })
 
 // Suggestions from the gravity readings of a fermenting batch (°P). Target FG from the recipe.
 // Once it's been chilled (chill job ticked off) there's nothing more: no readings after chill.
-export function gravityAdvice(batch, date, { chilled = false } = {}) {
+export function gravityAdvice(batch, date, { chilled = false, dryHopped = false } = {}) {
   if (batch.status !== 'fermenting' || chilled) return []
   const readings = (batch.fermentation_readings ?? [])
     .filter((r) => r.gravity_plato != null && r.reading_date <= date)
@@ -127,7 +134,8 @@ export function gravityAdvice(batch, date, { chilled = false } = {}) {
   // The latest reading at least a day before the last one, to see if it's still moving.
   const prev = [...readings].reverse().find((r) => r.reading_date < last.reading_date)
   const stable = prev && Math.abs(Number(prev.gravity_plato) - g) <= 0.1
-  const dh = pendingDryHops(batch)
+  const dh = pendingDryHops(batch, dryHopped)
+  const hopsDone = dryHopped || (plannedDryHops(batch).length > 0 && !dh.length)
   if (fg != null && g <= fg + 0.2) {
     out.push(dh.length
       ? { level: 'soon', label: 'Dry hop due', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: dry hop (${dh.join(', ')}) before VDK / diacetyl and chilling.` }
@@ -137,7 +145,7 @@ export function gravityAdvice(batch, date, { chilled = false } = {}) {
       ? { level: 'warn', text: `Gravity hasn't moved since ${prev.reading_date.slice(5)} (${fmt(g)}, target ${fmt(fg)}): check temperature, consider rousing.` }
       : { level: 'go', text: `Gravity stable at ${fmt(g)}: likely terminal, check VDK / diacetyl.` })
   } else if (fg != null && g <= fg + 1.5) {
-    out.push({ level: 'soon', text: `Nearing terminal (${fmt(g)}, target ${fmt(fg)}): get dry hops / spunding ready.` })
+    out.push({ level: 'soon', text: `Nearing terminal (${fmt(g)}, target ${fmt(fg)})${hopsDone ? '.' : ': get dry hops / spunding ready.'}` })
   }
   return out
 }
