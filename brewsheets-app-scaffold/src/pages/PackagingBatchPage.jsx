@@ -113,8 +113,11 @@ function DoChecks({ session, onChanged }) {
   )
 }
 
-function SessionCard({ number, session, batch, onChanged }) {
+function SessionCard({ number, session, batch, onChanged, startOpen }) {
   const [s, setS] = useState(session)
+  // Only today's latest session starts open; the rest fold up so nothing is typed into the wrong one.
+  const [open, setOpen] = useState(startOpen)
+  useEffect(() => setOpen(startOpen), [startOpen])
   // Only reset the form when it's a different session, so a refresh (e.g. after a DO check)
   // never wipes what's being typed.
   useEffect(() => setS(session), [session.id])
@@ -151,13 +154,23 @@ function SessionCard({ number, session, batch, onChanged }) {
   }
 
   return (
-    <div className="pk-session">
+    <div className={'pk-session' + (open ? '' : ' pk-closed')}>
       <div className="pk-session-head">
         <h3>Session {number}{s.package_date ? ` · ${s.package_date}` : ''}</h3>
-        <span className="pk-litres">{Math.round(t.litres).toLocaleString()} L</span>
+        <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span className="pk-litres">{Math.round(t.litres).toLocaleString()} L</span>
+          <button className="secondary pk-toggle" onClick={() => setOpen(!open)}>{open ? 'Close' : 'Open'}</button>
+        </span>
       </div>
 
-      <div className="pk-session-body">
+      {!open && (
+        <div className="pk-summary">
+          {[...KEG_SIZES.filter((k) => Number(s[`kegs_${k}`]) > 0).map((k) => `${s[`kegs_${k}`]} × ${k} L kegs`), ...(Number(s.cubes) > 0 ? [`${s.cubes} cubes`] : [])].join(' · ') || 'Nothing packed'}
+          {s.operator ? ` · ${s.operator}` : ''}{s.tank_empty ? ' · tank empty' : ''}
+        </div>
+      )}
+
+      {open && <div className="pk-session-body">
         <div className="pk-group pk-tank">
           <div className="pk-group-head"><h4>In tank</h4></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -190,10 +203,11 @@ function SessionCard({ number, session, batch, onChanged }) {
           </label>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <SaveStatus status={status} />
+            <button onClick={() => setOpen(false)}>Done</button>
             <button className="secondary" onClick={remove}>Delete</button>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }
@@ -347,7 +361,7 @@ export default function PackagingBatchPage() {
       <ScheduledPack batch={batch} packed={t} />
 
       {sessions.map((s, i) => (
-        <SessionCard key={s.id} number={i + 1} session={s} batch={batch} onChanged={refresh} />
+        <SessionCard key={s.id} number={i + 1} session={s} batch={batch} onChanged={refresh} startOpen={i === sessions.length - 1 && s.package_date === today()} />
       ))}
 
       {batch.status !== 'packaged' && (
