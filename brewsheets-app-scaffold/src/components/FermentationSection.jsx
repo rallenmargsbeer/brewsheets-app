@@ -3,7 +3,7 @@ import { deleteFermentationReading, updateFermentationReading } from '../lib/api
 import { useAutoSave, SaveStatus } from '../lib/useAutoSave.jsx'
 import AbvFlag from './AbvFlag.jsx'
 import { useBatchJobs, JobsCell } from './BatchJobs.jsx'
-import { gravityAdvice, isChilled } from '../lib/dayTasks'
+import { gravityAdvice, jobState } from '../lib/dayTasks'
 import { withinExcise, ABV_TOLERANCE } from '../lib/batchFigures'
 import { sgToPlato } from '../lib/dilution'
 
@@ -151,7 +151,7 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
   // Jobs (schedule or cellar template) sit in the readings table, on their date's row.
   const { rows: jobRows, refresh: refreshJobs } = useBatchJobs(batch)
   const todayIso = new Date().toLocaleDateString('en-CA')
-  const advice = gravityAdvice(batch, todayIso, { chilled: isChilled(batch, jobRows.map((j) => ({ ...j.task, entry_date: j.date })), todayIso) })
+  const advice = gravityAdvice(batch, todayIso, jobState(batch, jobRows.map((j) => ({ ...j.task, entry_date: j.date })), todayIso))
   const jobsByDate = jobRows.reduce((m, j) => m.set(j.date, [...(m.get(j.date) ?? []), j]), new Map())
   const dates = [...new Set([...readings.map((r) => r.reading_date), ...jobsByDate.keys()])].filter(Boolean).sort()
   const lines = dates.flatMap((d) => {
