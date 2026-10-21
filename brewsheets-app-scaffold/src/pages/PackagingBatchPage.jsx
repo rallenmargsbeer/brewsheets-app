@@ -13,7 +13,7 @@ import { tankLabel, statusLabel } from '../lib/tanks'
 import { KEG_SIZES, CANS_PER_CUBE, sumSessions } from '../lib/packaging'
 import BeerDot from '../components/BeerDot.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
-import { abvCheck, dawLitres, dawAim } from '../lib/batchFigures'
+import { abvCheck, dawLitres, dawAim, bbtLitres } from '../lib/batchFigures'
 import { useAutoSave, SaveStatus } from '../lib/useAutoSave.jsx'
 import { loadIncoming, beerMatch } from '../lib/incoming'
 import { addDays, todayIso } from '../lib/schedule'
@@ -338,7 +338,7 @@ export default function PackagingBatchPage() {
   if (!batch) return <p>Loading…</p>
 
   const t = sumSessions(sessions)
-  const target = Number(batch.fv_to_bbt_l) || null
+  const target = bbtLitres(batch) || null
   return (
     <div style={{ maxWidth: 820 }}>
       <p style={{ margin: 0 }}><Link to="/packaging">← Packaging</Link></p>
@@ -355,7 +355,7 @@ export default function PackagingBatchPage() {
           <div key={size}><div style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>{size} L kegs</div><strong style={{ fontSize: '1.3rem' }}>{t[`kegs_${size}`]}</strong></div>
         ))}
         <div><div style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Cubes</div><strong style={{ fontSize: '1.3rem' }}>{t.cubes}</strong> <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>({(t.cubes * CANS_PER_CUBE).toLocaleString()} cans)</span></div>
-        <div><div style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Packaged</div><strong style={{ fontSize: '1.3rem' }}>{Math.round(t.litres).toLocaleString()} L</strong>{target ? <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}> of {target.toLocaleString()} L to BBT</span> : null}</div>
+        <div><div style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}>Packaged</div><strong style={{ fontSize: '1.3rem' }}>{Math.round(t.litres).toLocaleString()} L</strong>{target ? <span style={{ color: 'var(--ink2)', fontSize: '0.85rem' }}> of {Math.round(target).toLocaleString()} L in the BBT{batch.daw_added_l > 0 ? ' (incl. DAW)' : ''}</span> : null}</div>
       </div>
 
       <ScheduledPack batch={batch} packed={t} />

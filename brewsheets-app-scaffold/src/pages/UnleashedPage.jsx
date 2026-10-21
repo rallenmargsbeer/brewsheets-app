@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import { tankLabel } from '../lib/tanks'
 import { KEG_SIZES, sumSessions } from '../lib/packaging'
 import { parseProduct, nameKey } from '../lib/packMaterials'
+import { bbtLitres } from '../lib/batchFigures'
 import BeerDot from '../components/BeerDot.jsx'
 
 const fmt = (d) => (d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '')
@@ -20,7 +21,7 @@ async function load() {
   for (const r of [withBbt, sessions, boms]) if (r.error) throw r.error
   const ids = [...new Set([...withBbt.data.map((b) => b.id), ...sessions.data.map((s) => s.batch_id)])]
   const batches = ids.length
-    ? await supabase.from('batches').select('id, batch_number, beer_style, bbt_transfer_date, fv_to_bbt_l, unl_bbt_done_at, tanks(name)').in('id', ids)
+    ? await supabase.from('batches').select('id, batch_number, beer_style, bbt_transfer_date, fv_to_bbt_l, daw_added_l, unl_bbt_done_at, tanks(name)').in('id', ids)
     : { data: [] }
   if (batches.error) throw batches.error
 
@@ -40,7 +41,7 @@ async function load() {
     const beer = nameKey(b.beer_style)
     if (b.bbt_transfer_date) {
       const fb = finished.get(beer)
-      rows.push({ key: 'b' + b.id, kind: 'bbt', id: b.id, date: b.bbt_transfer_date, batch: b, litres: b.fv_to_bbt_l == null ? null : Number(b.fv_to_bbt_l), products: fb ? [`${fb.code}${fb.description ? ` (${fb.description})` : ''}`] : [], done: b.unl_bbt_done_at })
+      rows.push({ key: 'b' + b.id, kind: 'bbt', id: b.id, date: b.bbt_transfer_date, batch: b, litres: bbtLitres(b), daw: Number(b.daw_added_l) || 0, products: fb ? [`${fb.code}${fb.description ? ` (${fb.description})` : ''}`] : [], done: b.unl_bbt_done_at })
     }
     for (const s of sessions.data.filter((x) => x.batch_id === b.id)) {
       const items = [
@@ -107,7 +108,7 @@ export default function UnleashedPage() {
                       ? <>Into brite tank {tankLabel(r.batch.tanks?.name)}</>
                       : <>Packed: {r.items.length ? r.items.map((i) => i.label).join(', ') : <span className="stock-muted">nothing counted yet</span>}{r.tankEmpty ? ' (tank empty)' : ''}</>}
                   </td>
-                  <td className="pm-num">{r.litres == null ? <span className="stock-muted">Not entered</span> : Math.round(r.litres).toLocaleString()}</td>
+                  <td className="pm-num">{r.litres == null ? <span className="stock-muted">Not entered</span> : Math.round(r.litres).toLocaleString()}{r.daw > 0 && <div className="stock-muted" style={{ fontSize: '0.75rem' }}>incl. {Math.round(r.daw).toLocaleString()} L DAW</div>}</td>
                   <td>
                     {r.kind === 'bbt'
                       ? (r.products[0] ?? <span className="stock-muted">No match</span>)
