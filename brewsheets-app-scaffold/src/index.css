@@ -851,3 +851,5 @@ tr.today td { background: #fbf6e9; }
 .save-status.ok { color: #11603f; font-weight: 600; }
 .save-status.bad { color: crimson; }
 .grab-hops { margin-top: 0.5rem; padding: 0.5rem 0.75rem; border-left: 4px solid #2f7a3e; background: #eef6ef; border-radius: 4px; font-size: 0.9rem; }
+.pk-toggle { padding: 0.2rem 0.7rem; font-size: 0.85rem; }
+.pk-summary { padding: 0.6rem 1rem; color: var(--ink2); font-size: 0.9rem; }
