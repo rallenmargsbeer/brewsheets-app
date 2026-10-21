@@ -56,6 +56,9 @@ export function abvCheck(batch) {
 }
 
 // DAW (de-aerated water) dilutes down to the top of the excise range: target + 0.2%.
+// Beer in the brite tank: what came over from the FV plus any DAW confirmed on Packaging.
+export const bbtLitres = (batch) => (batch?.fv_to_bbt_l == null ? null : Number(batch.fv_to_bbt_l) + (Number(batch.daw_added_l) || 0))
+
 export const dawAim = (target) => Number(target) + ABV_TOLERANCE
 export function dawLitres(beerL, abv, target) {
   const aim = dawAim(target)

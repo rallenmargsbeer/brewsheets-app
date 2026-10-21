@@ -26,7 +26,7 @@ import {
   addBrewRunIngredient,
   deleteBrewRunIngredient,
 } from '../lib/api'
-import { batchFigures, actualOg, batchIbuSrm, abvCheck } from '../lib/batchFigures'
+import { batchFigures, actualOg, batchIbuSrm, abvCheck, bbtLitres } from '../lib/batchFigures'
 import { useAuth } from '../auth.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
 import BlendSheet from '../components/BlendSheet.jsx'
@@ -1427,6 +1427,7 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
         <div className="bd-grid">
           <Fact label="Brewhouse yield" value={fx(f.yieldL, 0, ' L')} from={f.dilutionL ? `Knockout flowmeter + ${Math.round(f.dilutionL)} L dilution water` : 'Knockout flowmeter, all turns'} />
           <Fact label="FV to BBT" value={fx(batch.fv_to_bbt_l, 0, ' L')} from={batch.bbt_transfer_date ? `Cellar transfer, ${fmtDate(batch.bbt_transfer_date)}` : 'Cellar transfer'} />
+          <Fact label="In brite tank" value={fx(bbtLitres(batch), 0, ' L')} from={batch.daw_added_l > 0 ? `FV to BBT + ${Math.round(batch.daw_added_l).toLocaleString()} L DAW` : 'FV to BBT (no DAW added)'} />
           <Fact label="DAW added" value={batch.daw_added_l > 0 ? `${Math.round(batch.daw_added_l).toLocaleString()} L` : null} from={batch.daw_added_at ? `Confirmed on Packaging, ${fmtDate(batch.daw_added_at.slice(0, 10))}` : 'Confirmed on Packaging'} />
           <Fact label="Packaged" value={f.packedLitres ? `${f.packedLitres.toLocaleString()} L` : null} from={packedText || 'Packaging sessions'} />
           <Fact label="Package date" value={packDate} from="Packaging sessions" />
