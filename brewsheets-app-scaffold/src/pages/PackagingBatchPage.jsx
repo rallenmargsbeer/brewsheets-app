@@ -15,6 +15,7 @@ import BeerDot from '../components/BeerDot.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
 import { abvCheck, dawLitres, dawAim, bbtLitres } from '../lib/batchFigures'
 import { useAutoSave, SaveStatus } from '../lib/useAutoSave.jsx'
+import { useAuth } from '../auth.jsx'
 import { loadIncoming, beerMatch } from '../lib/incoming'
 import { addDays, todayIso } from '../lib/schedule'
 
@@ -115,6 +116,9 @@ function DoChecks({ session, onChanged }) {
 
 function SessionCard({ number, session, batch, onChanged, startOpen }) {
   const [s, setS] = useState(session)
+  // A session marked Done is locked: only an admin can open it again.
+  const { isAdmin } = useAuth()
+  const locked = !!session.closed_at && !isAdmin
   // Only today's latest session starts open; the rest fold up so nothing is typed into the wrong one.
   const [open, setOpen] = useState(startOpen)
   useEffect(() => setOpen(startOpen), [startOpen])
@@ -159,7 +163,9 @@ function SessionCard({ number, session, batch, onChanged, startOpen }) {
         <h3>Session {number}{s.package_date ? ` · ${s.package_date}` : ''}</h3>
         <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <span className="pk-litres">{Math.round(t.litres).toLocaleString()} L</span>
-          <button className="secondary pk-toggle" onClick={() => { setOpen(!open); if (open) saveNow('closed_at', new Date().toISOString()) }}>{open ? 'Close' : 'Open'}</button>
+          {locked && !open
+            ? <span className="pk-locked" title="Marked done. An admin can open it again.">🔒 Done</span>
+            : <button className="secondary pk-toggle" onClick={() => { setOpen(!open); if (open) saveNow('closed_at', new Date().toISOString()) }}>{open ? 'Close' : 'Open'}</button>}
         </span>
       </div>
 
