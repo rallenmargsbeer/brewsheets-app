@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { listTanks, listIngredients, listBatchesInTanks, upsertBatch, upsertFermentationReading } from '../lib/api'
+import { listTanks, listIngredients, listBatchesInTanks, upsertBatch, upsertFermentationReading, updateFermentationReading } from '../lib/api'
 import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import AddToTank from '../components/AddToTank.jsx'
 import TankDay from '../components/TankDay.jsx'
@@ -82,7 +82,18 @@ function ReadingForm({ batch, onSaved }) {
     setSaving(true)
     setError(null)
     try {
-      await upsertFermentationReading({
+      // Temperature is often taken separately from gravity and pH: if today's latest reading
+      // is blank in every field entered now, fill those in on it instead of starting a new row.
+      const entered = ['gravity_plato', 'temp_panel', 'ph'].filter((k) => r[k] !== '')
+      const latest = (batch.fermentation_readings ?? []).filter((x) => x.reading_date === today() && x.id)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
+      if (latest && entered.length && entered.every((k) => latest[k] == null)) {
+        await updateFermentationReading(latest.id, {
+          ...Object.fromEntries(entered.map((k) => [k, num(r[k])])),
+          ...(r.notes ? { notes: [latest.notes, r.notes].filter(Boolean).join('; ') } : {}),
+          ...(r.initials && !latest.initials ? { initials: r.initials } : {}),
+        })
+      } else await upsertFermentationReading({
         batch_id: batch.id,
         reading_date: today(),
         fermentation_day: daysSince(batch.date_brewed),
