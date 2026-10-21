@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { tankLabel } from '../lib/tanks'
+import { tankLabel, statusLabel } from '../lib/tanks'
 import { Link } from 'react-router-dom'
 import { listBatches, deleteBatch } from '../lib/api'
 import { isScheduleEditor } from '../lib/schedule'
@@ -90,7 +90,7 @@ export default function BatchesPage() {
                   <Link to={`/batches/${b.id}`}>{b.batch_number}</Link>
                 </td>
                 <td><BeerDot name={b.beer_style || b.recipes?.name} />{b.beer_style || b.recipes?.name}</td>
-                <td><span className={'pill pill-' + b.status}>{b.status}</span></td>
+                <td><span className={'pill pill-' + b.status}>{statusLabel(b.status)}</span></td>
                 <td>{tankLabel(b.tanks?.name)}</td>
                 <td>{b.date_brewed ?? '—'}</td>
                 <td>{b.package_date ?? '—'}</td>
