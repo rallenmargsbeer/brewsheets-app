@@ -39,3 +39,6 @@ insert into public.hop_contracts (supplier, agreement, contract_year, hop, remai
   ('Bintani', '11391', 2026, 'US Columbus (CTZ)', 20, '2027-02-28', '2026-10-15'),
   ('Bintani', '11391', 2026, 'El Dorado - Bintani', 160, '2027-02-28', '2026-10-15'),
   ('Bintani', '11391', 2026, 'Strata - Bintani', 180, '2027-02-28', '2026-10-15');
+
+-- Table privileges for signed-in users (RLS policies above still decide who can do what).
+grant select, insert, update, delete on public.hop_contracts to authenticated;
