@@ -10,6 +10,9 @@ import {
   upsertBatch,
   batchNumberTaken,
   listRepitchSources,
+  listYeastBank,
+  takeFromYeastBank,
+  undoRepitch,
   yeastName,
   yeastGen,
   MAX_YEAST_GEN,
@@ -437,7 +440,7 @@ function IngredientRow({ item, ingredients, onSaved, removable }) {
               if (!window.confirm(`Remove ${item.item_name} from this ${item.section === 'fermenter' ? 'batch' : 'turn'}?`)) return
               await deleteBrewRunIngredient(item.id)
               // No longer a repitch: back to a fresh pitch (gen 0).
-              if (/^repitch/i.test(item.item_name) && sheet?.batchId) await upsertBatch({ id: sheet.batchId, yeast_generation: null, yeast_source_batch_id: null, yeast_name: null })
+              if (/^repitch/i.test(item.item_name) && sheet?.batchId) await undoRepitch(sheet.batchId)
               onSaved()
             }}>✕</button>
         )}
@@ -446,35 +449,53 @@ function IngredientRow({ item, ingredients, onSaved, removable }) {
   )
 }
 
-// Repitching yeast from another tank instead of a fresh pitch: pick the tank, and this batch
-// becomes that batch's yeast generation + 1 (fresh pitch is gen 0, max gen 5).
+// Repitching instead of a fresh pitch: from a keg in the yeast bank (taking some of its kegs)
+// or straight from another tank. This batch becomes that yeast's next gen.
+const fmtDay = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
 function RepitchLine({ runId, batchId, count, ingredients, onSaved }) {
   const [sources, setSources] = useState(null)
+  const [bank, setBank] = useState([])
   const [from, setFrom] = useState('')
   const [kg, setKg] = useState('')
+  const [kegs, setKegs] = useState('1')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const open = sources != null
   async function start() {
     setError(null)
-    try { setSources(await listRepitchSources(batchId)) } catch (e) { setError(e.message) }
+    try {
+      const [s, b] = await Promise.all([listRepitchSources(batchId), listYeastBank()])
+      setBank(b); setSources(s)
+    } catch (e) { setError(e.message) }
   }
-  const src = sources?.find((b) => b.id === from)
+  const [kind, id] = from.split(':')
+  const src = kind === 'tank' ? sources?.find((b) => b.id === id) : null
+  const keg = kind === 'bank' ? bank.find((b) => b.id === id) : null
+  const gen = keg ? keg.generation : src ? yeastGen(src) + 1 : null
+  const kegsN = Number(kegs)
+  const kegsOk = !keg || (kegsN > 0 && kegsN <= Number(keg.kegs_left))
   async function add() {
     setBusy(true); setError(null)
     try {
-      const gen = yeastGen(src) + 1
-      const yeast = yeastName(src, ingredients)
       const g = kg === '' ? null : Number(kg) * 1000
-      await addBrewRunIngredient({ brew_run_id: runId, section: 'fermenter', item_name: `Repitch${yeast ? ` ${yeast}` : ''} from ${tankLabel(src.tanks.name)} #${src.batch_number} (gen ${gen})`, planned_qty: g, actual_qty: g, sort_order: count, extra_notes: 'Repitched yeast (added on the brew sheet)' })
-      await upsertBatch({ id: batchId, yeast_generation: gen, yeast_source_batch_id: src.id, yeast_name: yeast })
-      setSources(null); setFrom(''); setKg('')
+      if (keg) {
+        const yeast = keg.yeast_name
+        const at = keg.batches ? ` from #${keg.batches.batch_number}` : ''
+        await addBrewRunIngredient({ brew_run_id: runId, section: 'fermenter', item_name: `Repitch${yeast ? ` ${yeast}` : ''} from yeast bank${at}, harvested ${fmtDay(keg.harvested_on)} (gen ${gen}, ${kegsN} keg${kegsN === 1 ? '' : 's'})`, planned_qty: g, actual_qty: g, sort_order: count, extra_notes: 'Repitched yeast (added on the brew sheet)' })
+        await takeFromYeastBank(keg.id, kegsN)
+        await upsertBatch({ id: batchId, yeast_generation: gen, yeast_source_batch_id: keg.source_batch_id, yeast_name: yeast, yeast_bank_id: keg.id, yeast_bank_kegs: kegsN })
+      } else {
+        const yeast = yeastName(src, ingredients)
+        await addBrewRunIngredient({ brew_run_id: runId, section: 'fermenter', item_name: `Repitch${yeast ? ` ${yeast}` : ''} from ${tankLabel(src.tanks.name)} #${src.batch_number} (gen ${gen})`, planned_qty: g, actual_qty: g, sort_order: count, extra_notes: 'Repitched yeast (added on the brew sheet)' })
+        await upsertBatch({ id: batchId, yeast_generation: gen, yeast_source_batch_id: src.id, yeast_name: yeast, yeast_bank_id: null, yeast_bank_kegs: null })
+      }
+      setSources(null); setFrom(''); setKg(''); setKegs('1')
       onSaved()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
   if (!open) return (
     <>
-      <button className="secondary ing-addtoggle" onClick={start} disabled={!runId}>+ Repitch from another tank</button>
+      <button className="secondary ing-addtoggle" onClick={start} disabled={!runId}>+ Repitch yeast</button>
       {error && <span style={{ color: 'crimson', marginLeft: 6 }}>{error}</span>}
     </>
   )
@@ -482,22 +503,33 @@ function RepitchLine({ runId, batchId, count, ingredients, onSaved }) {
     <div className="ing-addline">
       <label>From
         <select value={from} onChange={(e) => setFrom(e.target.value)} autoFocus>
-          <option value="">Pick a tank…</option>
-          {[...sources].sort((a, b) => a.tanks.name.localeCompare(b.tanks.name, undefined, { numeric: true })).map((b) => {
-            const gen = yeastGen(b)
-            const yeast = yeastName(b, ingredients)
-            return (
-              <option key={b.id} value={b.id} disabled={gen >= MAX_YEAST_GEN}>
-                {tankLabel(b.tanks.name)} · {b.beer_style} #{b.batch_number}{yeast ? ` · ${yeast}` : ''} · gen {gen}{gen >= MAX_YEAST_GEN ? ' (max, can’t repitch)' : ''}
+          <option value="">Pick yeast…</option>
+          <optgroup label="Yeast bank">
+            {bank.map((b) => (
+              <option key={b.id} value={`bank:${b.id}`}>
+                {b.yeast_name ?? 'Yeast'} · gen {b.generation} · harvested {fmtDay(b.harvested_on)}{b.batches ? ` from #${b.batches.batch_number}` : ''} · {Number(b.kegs_left)} keg{Number(b.kegs_left) === 1 ? '' : 's'}
               </option>
-            )
-          })}
+            ))}
+            {!bank.length && <option disabled>Nothing in the bank</option>}
+          </optgroup>
+          <optgroup label="Straight from a tank">
+            {[...sources].sort((a, b) => a.tanks.name.localeCompare(b.tanks.name, undefined, { numeric: true })).map((b) => {
+              const g = yeastGen(b)
+              const yeast = yeastName(b, ingredients)
+              return (
+                <option key={b.id} value={`tank:${b.id}`} disabled={g >= MAX_YEAST_GEN}>
+                  {tankLabel(b.tanks.name)} · {b.beer_style} #{b.batch_number}{yeast ? ` · ${yeast}` : ''} · gen {g}{g >= MAX_YEAST_GEN ? ' (max, can’t repitch)' : ''}
+                </option>
+              )
+            })}
+          </optgroup>
         </select>
       </label>
+      {keg && <label>Kegs <input type="number" inputMode="decimal" min="0.5" step="0.5" max={Number(keg.kegs_left)} value={kegs} onChange={(e) => setKegs(e.target.value)} style={{ width: 70 }} /></label>}
       <label>Slurry <input type="number" inputMode="decimal" step="0.1" value={kg} onChange={(e) => setKg(e.target.value)} style={{ width: 80 }} /> kg</label>
-      <button onClick={add} disabled={busy || !src}>{src ? `+ Add repitch (gen ${yeastGen(src) + 1})` : '+ Add repitch'}</button>
+      <button onClick={add} disabled={busy || !(src || keg) || !kegsOk}>{gen != null ? `+ Add repitch (gen ${gen})` : '+ Add repitch'}</button>
       <button className="secondary" onClick={() => setSources(null)}>Cancel</button>
-      {!sources.length && <span className="stock-muted">No other fermenters with beer in them.</span>}
+      {keg && !kegsOk && <span style={{ color: 'crimson' }}>Only {Number(keg.kegs_left)} left in that entry.</span>}
       {error && <span style={{ color: 'crimson' }}>{error}</span>}
     </div>
   )
