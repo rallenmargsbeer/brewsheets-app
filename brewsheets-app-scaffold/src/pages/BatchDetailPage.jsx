@@ -1683,9 +1683,34 @@ function KoPhPrompt({ runNumber, turnCount, otherRuns, volumeL, turnVolumeL, ph,
 const SECTION_NAMES = { grist: 'Grist', kettle: 'Kettle', whirlpool: 'Whirlpool', fermenter: 'Fermenter' }
 const sectionName = (i) => (i.section === 'water' ? `Water (${i.addition_stage ?? 'brew'})` : SECTION_NAMES[i.section] ?? i.section)
 
+// What's out of spec for the whole batch at the end of brew day: the batch OG (turns blended,
+// after dilution) more than OG_TOLERANCE off the recipe's target, or the batch KO pH (turns
+// blended by volume) outside the recipe's range.
+const OG_TOLERANCE = 0.2
+function outOfSpec(batch) {
+  const recipe = batch.recipes ?? {}
+  const out = []
+  const og = actualOg(batch)
+  const target = Number(recipe.target_og) || null
+  if (og != null && target != null && Math.abs(og - target) > OG_TOLERANCE + 1e-9) {
+    out.push(`Gravity: batch OG is ${og.toFixed(2)} °P, target ${target} °P (${og > target ? '+' : ''}${(og - target).toFixed(2)}; allowed ±${OG_TOLERANCE}).`)
+  }
+  const turns = (batch.brew_runs ?? []).filter((r) => Number(r.whirlpool_ph) > 0)
+  const lo = recipe.target_ko_ph_min != null ? Number(recipe.target_ko_ph_min) : null
+  const hi = recipe.target_ko_ph_max != null ? Number(recipe.target_ko_ph_max) : null
+  if (turns.length && (lo != null || hi != null)) {
+    const w = (r) => Number(r.ko_flowmeter_l) > 0 ? Number(r.ko_flowmeter_l) : 1
+    const ph = turns.reduce((a, r) => a + Number(r.whirlpool_ph) * w(r), 0) / turns.reduce((a, r) => a + w(r), 0)
+    if ((lo != null && ph < lo - 1e-9) || (hi != null && ph > hi + 1e-9)) out.push(`pH: batch KO pH is ${ph.toFixed(2)}, recipe range ${lo ?? '?'} to ${hi ?? '?'}.`)
+  }
+  return out
+}
+
 function CompleteBrew({ batch, allKnockedOut, onDone }) {
   const [checking, setChecking] = useState(null) // ingredients not yet added, while asking
+  const [warning, setWarning] = useState(false)
   const [busy, setBusy] = useState(false)
+  const spec = allKnockedOut ? outOfSpec(batch) : []
   const done = batch.status !== 'planned' && batch.status !== 'brewing'
   const missing = (batch.brew_runs ?? [])
     .flatMap((r) => (r.brew_run_ingredients ?? []).filter((i) => !i.added_at).map((i) => ({ ...i, turn: r.run_number })))
@@ -1706,13 +1731,34 @@ function CompleteBrew({ batch, allKnockedOut, onDone }) {
     }
   }
 
+  const proceed = () => (missing.length ? setChecking(missing) : complete([]))
   if (done) return <p className="brew-complete-done">✓ Brew complete · now {statusLabel(batch.status)}</p>
   return (
     <div className="brew-complete">
-      <button onClick={() => (missing.length ? setChecking(missing) : complete([]))} disabled={!allKnockedOut || busy}>
+      {spec.length > 0 && (
+        <div className="spec-warn">
+          <strong>⚠ Out of spec</strong>
+          <ul>{spec.map((t) => <li key={t}>{t}</li>)}</ul>
+        </div>
+      )}
+      <button onClick={() => (spec.length ? setWarning(true) : proceed())} disabled={!allKnockedOut || busy}>
         {busy ? 'Completing…' : 'Complete brew'}
       </button>
       {!allKnockedOut && <span className="stock-muted">Available once every turn's Knockout is confirmed.</span>}
+
+      {warning && (
+        <div className="sc-overlay" onClick={() => setWarning(false)}>
+          <div className="sc-dialog spec-dialog" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>⚠ This batch is out of spec</h2>
+            <ul className="spec-list">{spec.map((t) => <li key={t}>{t}</li>)}</ul>
+            <p>Fix it now if you can (dilution water, acid) or let the head brewer know before completing.</p>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button className="secondary" onClick={() => setWarning(false)}>Go back and fix</button>
+              <button className="danger" onClick={() => { setWarning(false); proceed() }}>Complete anyway</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {checking && (
         <div className="sc-overlay" onClick={() => setChecking(null)}>
