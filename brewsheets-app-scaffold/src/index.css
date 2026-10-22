@@ -582,6 +582,12 @@ tr.ing-added td { background: #f3faf5; }
 .brew-complete { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin: 0.5rem 0 2rem; padding-top: 1rem; border-top: 2px solid var(--line); }
 .brew-complete > button { font-size: 1.05rem; padding: 0.6rem 1.4rem; }
 .brew-complete-done { margin: 0.5rem 0 2rem; padding-top: 1rem; border-top: 2px solid var(--line); color: #1b6e2e; font-weight: 700; }
+.spec-warn { flex-basis: 100%; background: #fdecea; border: 2px solid #b00020; color: #7a0015; border-radius: 8px; padding: 0.6rem 0.9rem; font-size: 1.05rem; }
+.spec-warn ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.spec-dialog { border: 4px solid #b00020; }
+.spec-dialog h2 { color: #b00020; }
+.spec-list { font-size: 1.1rem; font-weight: 600; color: #7a0015; }
+button.danger { background: #b00020; border-color: #b00020; color: #fff; }
 .brew-missing { margin: 0 0 1rem; padding-left: 1.1rem; max-height: 50vh; overflow-y: auto; }
 .brew-missing li { margin: 0.2rem 0; }
 .brew-missing span { color: var(--ink2); font-size: 0.85rem; margin-left: 0.3rem; }
