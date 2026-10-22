@@ -7,7 +7,7 @@ import { loadForecast, forecastIndex, suggestPackSplit, profileOf, YIELD } from 
 import { listStock, stockByBeer } from '../lib/stock'
 import { loadSkuEfficiency } from '../lib/efficiency'
 
-const TURN_SIZES = [1000, 1500, 2500]
+const TURN_SIZES = [500, 1000, 1500, 2500]
 const fmt = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
 
 export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templates, initial, onClose, onBooked }) {
