@@ -685,6 +685,19 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
     delete pending.current[key]
     saveField(key, value)
   }
+  // "Confirm pH adjustment": log the lactic acid as added on this turn and record the pH it
+  // was taken to (the reading before goes in the line's note).
+  async function confirmAcid({ field, section, stage, ml, fromPh, toPh }) {
+    if (!form.id) return
+    setError(null)
+    try {
+      const n = ingredients.filter((i) => i.section === section).length
+      await addBrewRunIngredient({ brew_run_id: form.id, section, addition_stage: stage ?? null, item_name: 'Lactic Acid', planned_qty: Math.round(ml), actual_qty: Math.round(ml), added_at: new Date().toISOString(), sort_order: n, extra_notes: `pH adjustment: ${fromPh} to ${toPh}` })
+      const v = String(toPh)
+      set(field, v); saveNow(field, v)
+      onSaved()
+    } catch (e) { setError(`Not saved: ${e.message}`) }
+  }
   // Leaving the page (or turn) mid-typing still saves what was typed.
   const flushRef = useRef(null)
   flushRef.current = () => { for (const [k, p] of Object.entries(pending.current)) saveNow(k, p.value) }
@@ -876,6 +889,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                     ph={Number(form.mash_ph) || null}
                     target={Number(recipe?.target_mash_ph) || null}
                     perHl={buffer.mash}
+                    onConfirm={form.id ? (ml, fromPh, toPh) => confirmAcid({ field: 'mash_ph', section: 'water', stage: 'mash', ml, fromPh, toPh }) : null}
                   />
                   <div style={{ marginTop: '0.5rem' }}>
                     <TimeButton
@@ -1040,6 +1054,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                     ph={Number(form.whirlpool_ph) || null}
                     recipe={recipe}
                     perHl={buffer.wort}
+                    onConfirm={form.id ? (ml, fromPh, toPh) => confirmAcid({ field: 'whirlpool_ph', section: 'kettle', stage: null, ml, fromPh, toPh }) : null}
                   />
                   {isLastTurn && (
                     <DilutionPrompt
@@ -1602,7 +1617,18 @@ function DilutionPrompt({ turns, targetPlato, water, onWater, onCommit, locked }
 }
 
 // Lactic acid (88%) suggestion for one reading against its target.
-function AcidHint({ label, volumeL, ph, target, perHl }) {
+function ConfirmAcid({ ml, fromPh, toPh, onConfirm }) {
+  const [busy, setBusy] = useState(false)
+  if (!onConfirm || !(ml > 0)) return null
+  return (
+    <button className="secondary" style={{ marginLeft: '0.5rem' }} disabled={busy}
+      onClick={async () => { setBusy(true); try { await onConfirm(ml, fromPh, toPh) } finally { setBusy(false) } }}>
+      {busy ? '…' : 'Confirm pH adjustment'}
+    </button>
+  )
+}
+
+function AcidHint({ label, volumeL, ph, target, perHl, onConfirm }) {
   if (!target || !ph) return null
   const ml = lacticMl(volumeL, ph, target, perHl)
   if (ph <= target) return <p className="acid-hint ok">Mash pH {ph} is at or under the target {target}: no acid needed.</p>
@@ -1610,14 +1636,14 @@ function AcidHint({ label, volumeL, ph, target, perHl }) {
     <p className="acid-hint">
       {ml == null
         ? `Enter the ${label} volume to see the lactic acid needed to reach pH ${target}.`
-        : <>Add about <strong>{Math.round(ml)} mL</strong> lactic acid (88%) to bring the {label} from {ph} to {target} ({Math.round(volumeL).toLocaleString()} L).</>}
+        : <>Add about <strong>{Math.round(ml)} mL</strong> lactic acid (88%) to bring the {label} from {ph} to {target} ({Math.round(volumeL).toLocaleString()} L).<ConfirmAcid ml={ml} fromPh={ph} toPh={target} onConfirm={onConfirm} /></>}
     </p>
   )
 }
 
 // Knockout pH: what this turn should land on so the whole batch hits the recipe's KO pH,
 // given the turns already knocked out, and the lactic acid to get there.
-function KoPhPrompt({ runNumber, turnCount, otherRuns, volumeL, turnVolumeL, ph, recipe, perHl }) {
+function KoPhPrompt({ runNumber, turnCount, otherRuns, volumeL, turnVolumeL, ph, recipe, perHl, onConfirm }) {
   const lo = recipe?.target_ko_ph_min != null ? Number(recipe.target_ko_ph_min) : null
   const hi = recipe?.target_ko_ph_max != null ? Number(recipe.target_ko_ph_max) : null
   if (lo == null && hi == null) return null
@@ -1644,7 +1670,7 @@ function KoPhPrompt({ runNumber, turnCount, otherRuns, volumeL, turnVolumeL, ph,
       {ph ? (
         ph <= turnTarget
           ? <p className="acid-hint ok">KO pH {ph} is at or under {turnTarget.toFixed(2)}: no acid needed.</p>
-          : <p className="acid-hint">Add about <strong>{ml != null ? Math.round(ml) : '?'} mL</strong> lactic acid (88%) to bring this turn from {ph} to {turnTarget.toFixed(2)}{volumeL ? ` (${Math.round(volumeL).toLocaleString()} L)` : ''}.</p>
+          : <p className="acid-hint">Add about <strong>{ml != null ? Math.round(ml) : '?'} mL</strong> lactic acid (88%) to bring this turn from {ph} to {turnTarget.toFixed(2)}{volumeL ? ` (${Math.round(volumeL).toLocaleString()} L)` : ''}.<ConfirmAcid ml={ml} fromPh={ph} toPh={Number(turnTarget.toFixed(2))} onConfirm={onConfirm} /></p>
       ) : (
         <p className="stock-muted" style={{ fontSize: '0.85rem' }}>Enter the KO pH to see how much lactic acid to add.</p>
       )}
