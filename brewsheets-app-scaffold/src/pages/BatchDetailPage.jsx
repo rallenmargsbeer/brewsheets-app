@@ -1452,6 +1452,11 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
           <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={batch.og_override != null ? 'Overridden by an admin' : (turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day') + (f.dilutionL ? ', after dilution' : '')}>
             {isAdmin && <OgOverride batch={batch} onChanged={onChanged} />}
           </Fact>
+          <Fact label="Average KO pH" value={fx(batchKoPh(batch), 2)} from={(() => {
+            const lo = batch.recipes?.target_ko_ph_min, hi = batch.recipes?.target_ko_ph_max
+            const range = lo != null || hi != null ? `Recipe ${lo ?? '?'} to ${hi ?? '?'}` : null
+            return [turns > 1 ? 'KO pH, turns weighted by volume' : 'KO pH on Brew Day', range].filter(Boolean).join(' · ')
+          })()} />
           <Fact label="Actual FG" value={fx(f.fg?.plato, 1, ' °P')} from={f.fg ? `Latest fermentation reading, ${fmtDate(f.fg.date)}` : 'Fermentation readings'} />
           <Fact label="ABV" value={fx(abvCheck(batch).abv, 2, '%')} from={batch.daw_added_l > 0 && batch.fv_to_bbt_l > 0 ? `From actual OG and FG (${fx(abvCheck(batch).rawAbv, 2, '%')}), after ${Math.round(batch.daw_added_l).toLocaleString()} L DAW` : 'From actual OG and FG'} />
           <Fact label="IBU (est.)" value={fx(est.ibu, 0)} from={target(batch.recipes?.target_ibu)} />
@@ -1688,6 +1693,13 @@ const sectionName = (i) => (i.section === 'water' ? `Water (${i.addition_stage ?
 // after dilution) more than OG_TOLERANCE off the recipe's target, or the batch KO pH (turns
 // blended by volume) outside the recipe's range.
 const OG_TOLERANCE = 0.2
+// The batch's KO pH: each turn's KO pH weighted by its KO volume (equal if any volume's missing).
+function batchKoPh(batch) {
+  const turns = (batch.brew_runs ?? []).filter((r) => Number(r.whirlpool_ph) > 0)
+  if (!turns.length) return null
+  const w = (r) => (turns.every((t) => Number(t.ko_flowmeter_l) > 0) ? Number(r.ko_flowmeter_l) : 1)
+  return turns.reduce((a, r) => a + Number(r.whirlpool_ph) * w(r), 0) / turns.reduce((a, r) => a + w(r), 0)
+}
 function outOfSpec(batch) {
   const recipe = batch.recipes ?? {}
   const out = []
@@ -1696,12 +1708,10 @@ function outOfSpec(batch) {
   if (og != null && target != null && Math.abs(og - target) > OG_TOLERANCE + 1e-9) {
     out.push(`Gravity: batch OG is ${og.toFixed(2)} °P, target ${target} °P (${og > target ? '+' : ''}${(og - target).toFixed(2)}; allowed ±${OG_TOLERANCE}).`)
   }
-  const turns = (batch.brew_runs ?? []).filter((r) => Number(r.whirlpool_ph) > 0)
+  const ph = batchKoPh(batch)
   const lo = recipe.target_ko_ph_min != null ? Number(recipe.target_ko_ph_min) : null
   const hi = recipe.target_ko_ph_max != null ? Number(recipe.target_ko_ph_max) : null
-  if (turns.length && (lo != null || hi != null)) {
-    const w = (r) => Number(r.ko_flowmeter_l) > 0 ? Number(r.ko_flowmeter_l) : 1
-    const ph = turns.reduce((a, r) => a + Number(r.whirlpool_ph) * w(r), 0) / turns.reduce((a, r) => a + w(r), 0)
+  if (ph != null && (lo != null || hi != null)) {
     if ((lo != null && ph < lo - 1e-9) || (hi != null && ph > hi + 1e-9)) out.push(`pH: batch KO pH is ${ph.toFixed(2)}, recipe range ${lo ?? '?'} to ${hi ?? '?'}.`)
   }
   return out
