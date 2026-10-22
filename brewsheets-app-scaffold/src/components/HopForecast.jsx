@@ -99,8 +99,11 @@ export default function HopForecast() {
     const position = posHops.map((hop) => {
       const row = byHop.get(hop) ?? new Map()
       const have = (onHand.get(hop) ?? 0) * 1000 + (contracted.get(hop) ?? 0)
+      // A contract line only counts from its "available from" month (e.g. next crop's release).
+      const lines = src.contracts.filter((c) => c.hop === hop)
+      const haveBy = (m) => (onHand.get(hop) ?? 0) * 1000 + lines.filter((c) => !c.available_from || c.available_from.slice(0, 7) <= m.slice(0, 7)).reduce((a, c) => a + Number(c.remaining_kg) * 1000, 0)
       let cum = 0, runsOut = null
-      for (const m of months) { cum += row.get(m) ?? 0; if (!runsOut && cum > have) runsOut = m }
+      for (const m of months) { cum += row.get(m) ?? 0; if (!runsOut && cum > haveBy(m)) runsOut = m }
       const need = (y) => months.slice(y * 12, y * 12 + 12).reduce((a, m) => a + (row.get(m) ?? 0), 0)
       return { hop, onHand: (onHand.get(hop) ?? 0) * 1000, contracted: contracted.get(hop) ?? 0, need1: need(0), need2: need(1), have, runsOut, total: [...row.values()].reduce((a, g) => a + g, 0) }
     }).sort((a, b) => b.total - a.total || b.contracted - a.contracted)
@@ -241,7 +244,7 @@ function HopContracts({ contracts, hops, onChanged }) {
       <datalist id="hop-names">{hops.map((h) => <option key={h} value={h} />)}</datalist>
       <div className="stock-scroll">
         <table className="stock-table">
-          <thead><tr><th>Supplier</th><th>Agreement</th><th>Year</th><th className="stock-beer">Hop</th><th>Remaining kg</th><th>Order by</th><th>Statement date</th><th></th></tr></thead>
+          <thead><tr><th>Supplier</th><th>Agreement</th><th>Year</th><th className="stock-beer">Hop</th><th>Remaining kg</th><th>Available from</th><th>Order by</th><th>Statement date</th><th></th></tr></thead>
           <tbody>
             {contracts.map((c) => (
               <tr key={c.id}>
@@ -250,6 +253,7 @@ function HopContracts({ contracts, hops, onChanged }) {
                 <td>{cell(c, 'contract_year', { type: 'number', style: { width: 65 } })}</td>
                 <td className="stock-beer">{cell(c, 'hop', { list: 'hop-names', style: { width: 240 } })}</td>
                 <td>{cell(c, 'remaining_kg', { type: 'number', step: '0.1', style: { width: 80 } })}</td>
+                <td>{cell(c, 'available_from', { type: 'date' })}</td>
                 <td>{cell(c, 'order_by', { type: 'date' })}</td>
                 <td>{cell(c, 'as_of', { type: 'date' })}</td>
                 <td><button className="secondary" onClick={() => remove(c)} aria-label="Remove contract line" style={{ padding: '0.2rem 0.5rem' }}>✕</button></td>
