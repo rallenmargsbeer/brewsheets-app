@@ -8,6 +8,7 @@ import { loadDay } from '../lib/dayTasks'
 import { isScheduleEditor } from '../lib/schedule'
 import BeerDot, { useBeerColour } from '../components/BeerDot.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
+import YeastBank, { HarvestForm } from '../components/YeastBank.jsx'
 import { abvCheck, actualFg, dawLitres, dawAim, koLitres } from '../lib/batchFigures'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
@@ -249,6 +250,13 @@ function TankPanel({ tank, batch, day, editor, emptyBbts, ingredients, onClose, 
               <AddToTank batch={batch} ingredients={ingredients} />
             </div>
 
+            {tank.tank_type !== 'BBT' && ['fermenting', 'chilling', 'conditioning'].includes(batch.status) && (
+              <div style={section}>
+                <h4 style={{ margin: '0 0 0.5rem' }}>Harvest yeast</h4>
+                <HarvestForm batch={batch} ingredients={ingredients} onSaved={done} />
+              </div>
+            )}
+
             {tank.tank_type !== 'BBT' && (
               <div style={section}>
                 <h4 style={{ margin: '0 0 0.5rem' }}>Transfer to BBT</h4>
@@ -274,12 +282,14 @@ export default function CellarPage() {
   const [ingredients, setIngredients] = useState([])
   const [days, setDays] = useState(null)
   const [editor, setEditor] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
   useEffect(() => { isScheduleEditor().then(setEditor) }, [])
   useEffect(() => {
     listIngredients().then(setIngredients).catch((e) => setError(e.message))
   }, [])
 
   function refresh() {
+    setRefreshKey((k) => k + 1)
     Promise.all([listTanks(), listBatchesInTanks(IN_TANK_STATUSES)])
       .then(([t, b]) => {
         setTanks(t)
@@ -322,6 +332,7 @@ export default function CellarPage() {
               </div>
             </>
           )}
+          <YeastBank refreshKey={refreshKey} />
         </>
       )}
 

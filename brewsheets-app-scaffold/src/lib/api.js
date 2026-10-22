@@ -232,7 +232,7 @@ export async function listBatches() {
 export async function listBatchesInTanks(statuses) {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipe_id, target_volume_l, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(id, gravity_plato, temp_panel, ph, notes, initials, reading_date, created_at)')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipe_id, target_volume_l, brewhouse_yield_l, fv_to_bbt_l, daw_added_l, og_override, target_abv, tanks(name, tank_type), recipes(target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l, brew_run_ingredients(section, item_name)), fermentation_readings(id, gravity_plato, temp_panel, ph, notes, initials, reading_date, created_at), yeast_generation, yeast_name')
     .not('tank_id', 'is', null)
     .in('status', statuses)
     .order('date_brewed', { ascending: false })
@@ -725,4 +725,47 @@ export async function listRepitchSources(excludeId) {
     .neq('id', excludeId)
   if (error) throw error
   return data.filter((b) => b.tanks && b.tanks.tank_type !== 'BBT')
+}
+
+// Yeast bank: harvested kegs still holding yeast, oldest first.
+export async function listYeastBank() {
+  const { data, error } = await supabase
+    .from('yeast_bank')
+    .select('*, batches!yeast_bank_source_batch_id_fkey(batch_number, beer_style, tanks(name))')
+    .is('emptied_on', null)
+    .gt('kegs_left', 0)
+    .order('harvested_on')
+  if (error) throw error
+  return data
+}
+
+// Harvest from a batch into kegs: banked at the gen it will pitch as (the batch's gen + 1).
+export async function harvestYeast(batch, { kegs, harvestedOn, notes, yeast }) {
+  const { error } = await supabase.from('yeast_bank').insert({
+    source_batch_id: batch.id, yeast_name: yeast ?? null, generation: yeastGen(batch) + 1,
+    harvested_on: harvestedOn, kegs, kegs_left: kegs, notes: notes || null,
+  })
+  if (error) throw error
+}
+
+// Take kegs from (or, with a negative count, give them back to) a bank entry.
+export async function takeFromYeastBank(id, kegs) {
+  const { data: e, error } = await supabase.from('yeast_bank').select('kegs, kegs_left').eq('id', id).single()
+  if (error) throw error
+  const left = Math.min(Number(e.kegs), Math.max(0, Number(e.kegs_left) - kegs))
+  const { error: e2 } = await supabase.from('yeast_bank').update({ kegs_left: left, emptied_on: left > 0 ? null : new Date().toLocaleDateString('en-CA') }).eq('id', id)
+  if (e2) throw e2
+}
+
+// A repitch line removed on the brew sheet: give any bank kegs back, back to a fresh pitch.
+export async function undoRepitch(batchId) {
+  const { data: b, error } = await supabase.from('batches').select('yeast_bank_id, yeast_bank_kegs').eq('id', batchId).single()
+  if (error) throw error
+  if (b.yeast_bank_id && Number(b.yeast_bank_kegs) > 0) await takeFromYeastBank(b.yeast_bank_id, -Number(b.yeast_bank_kegs))
+  await upsertBatch({ id: batchId, yeast_generation: null, yeast_source_batch_id: null, yeast_name: null, yeast_bank_id: null, yeast_bank_kegs: null })
+}
+
+export async function tipYeast(id) {
+  const { error } = await supabase.from('yeast_bank').update({ kegs_left: 0, emptied_on: new Date().toLocaleDateString('en-CA') }).eq('id', id)
+  if (error) throw error
 }
