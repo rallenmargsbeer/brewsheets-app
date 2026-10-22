@@ -20,6 +20,7 @@ import ForecastPage from './pages/ForecastPage.jsx'
 import TodayPage from './pages/TodayPage.jsx'
 import IngredientReviewBanner from './components/IngredientReviewBanner.jsx'
 import PendingUsersBanner, { usePendingUsers } from './components/PendingUsersBanner.jsx'
+import AdminAlertsBanner from './components/AdminAlertsBanner.jsx'
 import NavTabs, { useNavConfig } from './components/NavTabs.jsx'
 import DilutionPage from './pages/DilutionPage.jsx'
 import SignupPage from './pages/SignupPage.jsx'
@@ -77,6 +78,7 @@ function Shell() {
         )}
       </header>
       <main style={{ padding: '1.5rem', maxWidth: wide ? 'none' : 1100, margin: '0 auto' }}>
+        {isAdmin && <AdminAlertsBanner />}
         {isAdmin && <PendingUsersBanner users={pendingUsers} />}
         {isAdmin && <IngredientReviewBanner />}
         {isAccounts ? (

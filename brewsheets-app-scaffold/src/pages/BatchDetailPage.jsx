@@ -38,6 +38,7 @@ import { useBuffer, lacticMl, remainingTurnsPh } from '../lib/acid'
 import { batchEfficiency } from '../lib/brewhouseEff'
 import { tinsethIbu, toSg } from '../lib/beerCalcs'
 import BeerDot from '../components/BeerDot.jsx'
+import { raiseAdminAlert } from '../components/AdminAlertsBanner.jsx'
 
 function toLocalInput(iso) {
   if (!iso) return ''
@@ -1710,6 +1711,7 @@ function CompleteBrew({ batch, allKnockedOut, onDone }) {
   const [checking, setChecking] = useState(null) // ingredients not yet added, while asking
   const [warning, setWarning] = useState(false)
   const [busy, setBusy] = useState(false)
+  const { appUser } = useAuth()
   const spec = allKnockedOut ? outOfSpec(batch) : []
   const done = batch.status !== 'planned' && batch.status !== 'brewing'
   const missing = (batch.brew_runs ?? [])
@@ -1754,7 +1756,11 @@ function CompleteBrew({ batch, allKnockedOut, onDone }) {
             <p>Fix it now if you can (dilution water, acid) or let the head brewer know before completing.</p>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <button className="secondary" onClick={() => setWarning(false)}>Go back and fix</button>
-              <button className="danger" onClick={() => { setWarning(false); proceed() }}>Complete anyway</button>
+              <button className="danger" disabled={busy} onClick={async () => {
+                // Admins get told whenever a batch is completed out of spec.
+                try { await raiseAdminAlert({ kind: 'out_of_spec', batchId: batch.id, by: appUser?.name, message: `#${batch.batch_number} ${batch.beer_style ?? ''} completed out of spec. ${spec.join(' ')}` }) } catch { /* don't block brew day */ }
+                setWarning(false); proceed()
+              }}>Complete anyway</button>
             </div>
           </div>
         </div>
