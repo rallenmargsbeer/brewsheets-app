@@ -4,13 +4,16 @@ import { useBrewPlan, BrewPlanTable, CapacityTable, PlanSettings, planNote } fro
 import { saveForecast, addMonths, monthOf } from '../lib/forecast'
 import { isScheduleEditor, todayIso } from '../lib/schedule'
 import BeerDot from '../components/BeerDot.jsx'
+import HopForecast from '../components/HopForecast.jsx'
+import { useAuth } from '../auth.jsx'
 
 const fmtMonth = (m) => new Date(`${m}T00:00:00`).toLocaleDateString('en-AU', { month: 'short', year: '2-digit' })
 const FORMATS = [['cube', 'Cubes'], ['keg', 'Kegs (50 L)']]
 
 export default function ForecastPage() {
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') === 'demand' ? 'demand' : 'plan'
+  const { isAdmin } = useAuth()
+  const tab = params.get('tab') === 'demand' ? 'demand' : params.get('tab') === 'hops' && isAdmin ? 'hops' : 'plan'
   const [months, setMonths] = useState(3)
   const { plan, capacity, fc, forecast, error, reload } = useBrewPlan(months)
   return (
@@ -20,10 +23,12 @@ export default function ForecastPage() {
         <div className="calc-tabs">
           <button className={tab === 'plan' ? '' : 'secondary'} onClick={() => setParams({})}>Brew plan</button>
           <button className={tab === 'demand' ? '' : 'secondary'} onClick={() => setParams({ tab: 'demand' })}>Forecast demand</button>
+          {isAdmin && <button className={tab === 'hops' ? '' : 'secondary'} onClick={() => setParams({ tab: 'hops' })}>Hop forecast</button>}
         </div>
       </div>
       {error && <p style={{ color: '#b00020' }}>{error}</p>}
-      {!forecast && !error && <p>Loading…</p>}
+      {tab === 'hops' && <HopForecast />}
+      {!forecast && !error && tab !== 'hops' && <p>Loading…</p>}
       {tab === 'plan' && plan && (
         <>
           <div className="stock-controls">
