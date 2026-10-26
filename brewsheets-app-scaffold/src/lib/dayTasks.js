@@ -138,7 +138,7 @@ export function gravityAdvice(batch, date, { chilled = false, dryHopped = false 
   const hopsDone = dryHopped || (plannedDryHops(batch).length > 0 && !dh.length)
   if (fg != null && g <= fg + 0.2) {
     out.push(dh.length
-      ? { level: 'soon', label: 'Dry hop due', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: dry hop (${dh.join(', ')}) before VDK / diacetyl and chilling.` }
+      ? { level: 'soon', label: 'Dry hop due', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: dry hop before VDK / diacetyl and chilling. Refer to the Cellar tab for ingredients to add.` }
       : { level: 'go', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: check VDK / diacetyl, then chill.` })
   } else if (stable) {
     out.push(fg != null
