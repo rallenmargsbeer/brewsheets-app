@@ -2,12 +2,13 @@
 //   signup {email, name, pin}  -> confirmation email; an admin then approves
 //   signin {pin}               -> session tokens (active, confirmed users only)
 //   setpin {pin}               -> change your own PIN (needs a session, e.g. from a "forgot PIN" email link)
+//   adminsetpin {userId, pin}  -> an admin (or the cron secret) resets someone's PIN and confirms their email
 // PINs are stored only as an HMAC. Failed attempts lock an IP out for 15 minutes.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 const json = (body: unknown, status = 200) =>
@@ -113,6 +114,30 @@ Deno.serve(async (req: Request) => {
     const { data: me } = await admin.from('app_users').update({ pin_hmac: h }).eq('id', who.user.id).select('status').maybeSingle()
     if (!me) return json({ error: 'No account for this email. Sign up first.' }, 404)
     return json({ ok: true, status: me.status })
+  }
+
+  if (action === 'adminsetpin') {
+    const cron = req.headers.get('x-cron-secret')
+    if (cron) {
+      const { data: secret } = await admin.rpc('get_sync_cron_secret')
+      if (!secret || cron !== secret) return json({ error: 'forbidden' }, 403)
+    } else {
+      const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
+      const { data: who } = await admin.auth.getUser(token)
+      if (!who?.user) return json({ error: 'Sign in first.' }, 401)
+      const { data: me } = await admin.from('app_users').select('role, status').eq('id', who.user.id).maybeSingle()
+      if (me?.role !== 'admin' || me?.status !== 'active') return json({ error: 'admins only' }, 403)
+    }
+    const userId = String(body?.userId ?? '')
+    if (!PIN.test(pin)) return json({ error: 'The PIN must be 4 digits.' }, 400)
+    const h = await pinHmac(pin)
+    const { data: taken } = await admin.from('app_users').select('id').eq('pin_hmac', h).neq('id', userId).maybeSingle()
+    if (taken) return json({ error: "That PIN isn't available, pick another." }, 409)
+    const { data: u } = await admin.from('app_users').update({ pin_hmac: h }).eq('id', userId).select('id').maybeSingle()
+    if (!u) return json({ error: 'No such user.' }, 404)
+    const { error: ce } = await admin.auth.admin.updateUserById(userId, { email_confirm: true })
+    if (ce) return json({ error: ce.message }, 500)
+    return json({ ok: true })
   }
 
   return json({ error: 'unknown action' }, 400)
