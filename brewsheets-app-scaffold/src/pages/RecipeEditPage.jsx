@@ -162,6 +162,7 @@ function LineItemsEditor({ title, subtitle, items, setItems, fields, defaults, i
 // Amounts are stored per litre (g/L). New recipes are written as amounts for a 25 HL brew
 // (kg, or g for water salts); existing recipes open in g/L. A switch flips between the two.
 const BATCH_HL = 25
+const ZINC = 'Yeast Nutrient - Liquid ZnSO4 x 1L'
 const SCALE = { grist: 2.5, water: 2500, kettle: 2.5, whirlpool: 2.5, fermenter: 2.5 } // g/L -> amount per 25 HL
 const factor = (sec, mode) => (mode === 'batch' ? SCALE[sec] : 1)
 const toBatch = (items, sec, mode = 'batch') => items.map((i) => ({ ...i, qty_25: i.qty_g_per_l == null || i.qty_g_per_l === '' ? '' : +(Number(i.qty_g_per_l) * factor(sec, mode)).toFixed(6) }))
@@ -179,7 +180,8 @@ export default function RecipeEditPage() {
   // Every new recipe starts with antifoam: 400 ml per 25 HL turn at 60 min (0.4 in kg-per-25 HL terms).
   const [kettle, setKettle] = useState(() => (isNew ? [{ item_name: 'Bintani AAFA Anti Foam Agent', boil_time_min: 60, qty_25: 0.4 }] : []))
   const [whirlpool, setWhirlpool] = useState([])
-  const [fermenter, setFermenter] = useState([])
+  // And zinc yeast nutrient in the fermenter at KO: 25 ml per 25 HL turn (0.025 in kg-per-25 HL terms).
+  const [fermenter, setFermenter] = useState(() => (isNew ? [{ item_name: ZINC, timing_notes: 'KO', qty_25: 0.025 }] : []))
   const [blend, setBlend] = useState([])
   // How amounts are typed: 'batch' (per 25 HL, new recipes) or 'gl' (g/L, existing recipes).
   const [mode, setMode] = useState(isNew ? 'batch' : 'gl')
@@ -313,7 +315,7 @@ export default function RecipeEditPage() {
       await replaceFermenterAdditions(
         saved.id,
         toPerL(fermenter, 'fermenter', mode)
-          .filter((f) => f.item_name)
+          .filter((f) => f.item_name && !(recipe.is_rtd && isNew && f.item_name === ZINC)) // no default zinc in RTDs
           .map(({ id: _i, recipe_id: _r, ...f }) => cleanBlanks(f))
       )
       navigate('/recipes')
