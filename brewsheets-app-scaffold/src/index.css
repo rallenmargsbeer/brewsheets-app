@@ -863,3 +863,4 @@ tr.today td { background: #fbf6e9; }
 .admin-alerts { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
 .admin-alert { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; background: #fdecea; border: 2px solid #b00020; color: #7a0015; border-radius: 8px; padding: 0.6rem 0.9rem; }
 .admin-alert-meta { font-size: 0.85rem; margin-top: 2px; }
+.stock-table .hop-period { border-left: 2px solid var(--line); }
