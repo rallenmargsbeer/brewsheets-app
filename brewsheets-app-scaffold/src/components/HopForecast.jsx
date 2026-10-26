@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { listIngredients } from '../lib/api'
 import { loadForecast, addMonths, monthOf, CUBE_L, KEG_L, YIELD } from '../lib/forecast'
@@ -19,6 +19,9 @@ export default function HopForecast() {
   const [start, setStart] = useState(addMonths(monthOf(todayIso()), 1))
   const [count, setCount] = useState(24)
   const [growth, setGrowth] = useState(10)
+  // The month the new crop is released (US: February; NZ: around June). The position table
+  // runs in periods starting that month.
+  const [release, setRelease] = useState('02')
   const [copied, setCopied] = useState(false)
   const [version, setVersion] = useState(0)
   const reload = () => setVersion((v) => v + 1)
@@ -96,19 +99,39 @@ export default function HopForecast() {
     const contracted = new Map()
     for (const c of src.contracts) contracted.set(c.hop, (contracted.get(c.hop) ?? 0) + Number(c.remaining_kg) * 1000)
     const posHops = [...new Set([...byHop.keys(), ...contracted.keys()])]
+    // The new crop is released each year (the release month), so the position runs in periods
+    // from that month to the month before it: each period's contract lots land in it, and
+    // what's left carries into the next. The first period runs from the From month.
+    const periods = []
+    for (const m of months) {
+      if (!periods.length || m.slice(5, 7) === release) periods.push({ from: m, months: [] })
+      periods[periods.length - 1].months.push(m)
+    }
+    for (const p of periods) p.to = p.months[p.months.length - 1]
+    const lands = (c) => {
+      const at = c.available_from ? `${c.available_from.slice(0, 7)}-01` : start
+      return periods.findIndex((p, i) => (i === 0 ? at <= p.to : at >= p.from && at <= p.to))
+    }
     const position = posHops.map((hop) => {
       const row = byHop.get(hop) ?? new Map()
-      const have = (onHand.get(hop) ?? 0) * 1000 + (contracted.get(hop) ?? 0)
-      // A contract line only counts from its "available from" month (e.g. next crop's release).
       const lines = src.contracts.filter((c) => c.hop === hop)
-      const haveBy = (m) => (onHand.get(hop) ?? 0) * 1000 + lines.filter((c) => !c.available_from || c.available_from.slice(0, 7) <= m.slice(0, 7)).reduce((a, c) => a + Number(c.remaining_kg) * 1000, 0)
+      const onHandG = (onHand.get(hop) ?? 0) * 1000
+      let carry = onHandG
+      const per = periods.map((p, i) => {
+        const arrives = lines.filter((c) => lands(c) === i).reduce((a, c) => a + Number(c.remaining_kg) * 1000, 0)
+        const need = p.months.reduce((a, m) => a + (row.get(m) ?? 0), 0)
+        const left = carry + arrives - need
+        carry = left
+        return { arrives, need, left }
+      })
+      // The month it runs out: stock plus the lots landed so far, against need so far.
+      const haveBy = (m) => onHandG + lines.filter((c) => !c.available_from || c.available_from.slice(0, 7) <= m.slice(0, 7)).reduce((a, c) => a + Number(c.remaining_kg) * 1000, 0)
       let cum = 0, runsOut = null
       for (const m of months) { cum += row.get(m) ?? 0; if (!runsOut && cum > haveBy(m)) runsOut = m }
-      const need = (y) => months.slice(y * 12, y * 12 + 12).reduce((a, m) => a + (row.get(m) ?? 0), 0)
-      return { hop, onHand: (onHand.get(hop) ?? 0) * 1000, contracted: contracted.get(hop) ?? 0, need1: need(0), need2: need(1), have, runsOut, total: [...row.values()].reduce((a, g) => a + g, 0) }
+      return { hop, onHand: onHandG, contracted: contracted.get(hop) ?? 0, per, runsOut, total: [...row.values()].reduce((a, g) => a + g, 0) }
     }).sort((a, b) => b.total - a.total || b.contracted - a.contracted)
-    return { months, hopRows, position, byBeer: byBeer.sort((a, b) => b.brewed - a.brewed), noRecipe, last, years: Math.ceil(count / 12) }
-  }, [src, start, count, growth])
+    return { months, periods, hopRows, position, byBeer: byBeer.sort((a, b) => b.brewed - a.brewed), noRecipe, last, years: Math.ceil(count / 12) }
+  }, [src, start, count, growth, release])
 
   const [pulling, setPulling] = useState(false)
   const [pullError, setPullError] = useState(null)
@@ -139,11 +162,18 @@ export default function HopForecast() {
             {[6, 12, 18, 24].map((n) => <option key={n} value={n}>{n} months</option>)}
           </select>
         </label>
+        <label>New crop from
+          <select value={release} onChange={(e) => setRelease(e.target.value)}>
+            {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((mm) => (
+              <option key={mm} value={mm}>{new Date(`2026-${mm}-01T00:00:00`).toLocaleDateString('en-AU', { month: 'long' })}</option>
+            ))}
+          </select>
+        </label>
         <label>Growth after {fmtMonth(out.last)} <input type="number" value={growth} onChange={(e) => setGrowth(Number(e.target.value) || 0)} style={{ width: 60 }} /> % a year</label>
         <button className="secondary" onClick={copy} disabled={!out.hopRows.length}>{copied ? '✓ Copied' : 'Copy table'}</button>
       </div>
       <section className="stock-card">
-        <h2>Hop position <span>kg: on hand + still on contract, against forecast need</span></h2>
+        <h2>Hop position <span>kg, by crop year (new crop from the month picked above): on hand, plus each period's contract lots, against forecast need; shortfalls carry forward</span></h2>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
           <span className="stock-muted" style={{ fontSize: '0.85rem' }}>On hand from Unleashed{src.stock?.pulled ? `, ${new Date(src.stock.pulled).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ': not pulled yet'}</span>
           <button className="secondary" onClick={refreshStock} disabled={pulling}>{pulling ? 'Pulling…' : 'Refresh stock'}</button>
@@ -153,26 +183,31 @@ export default function HopForecast() {
           <table className="stock-table">
             <thead>
               <tr>
-                <th className="stock-beer">Hop</th><th>On hand</th><th>On contract</th>
-                <th>Need {yearLabel(0)}</th>{out.years > 1 && <th>Need {yearLabel(1)}</th>}
-                <th>Left after {out.years > 1 ? 'year 2' : 'year 1'}</th><th>Runs out</th>
+                <th className="stock-beer" rowSpan={2}>Hop</th><th rowSpan={2}>On hand</th>
+                {out.periods.map((p) => <th key={p.from} colSpan={3} className="hop-period">{fmtMonth(p.from)} to {fmtMonth(p.to)}</th>)}
+                <th rowSpan={2}>Runs out</th>
+              </tr>
+              <tr>
+                {out.periods.map((p) => (
+                  <Fragment key={p.from}><th className="hop-period">Contract in</th><th>Need</th><th>Left end {fmtMonth(p.to)}</th></Fragment>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {out.position.map((h) => {
-                const left = h.have - h.need1 - (out.years > 1 ? h.need2 : 0)
-                return (
-                  <tr key={h.hop}>
-                    <td className="stock-beer">{h.hop}</td>
-                    <td>{kg(h.onHand)}</td>
-                    <td>{h.contracted ? kg(h.contracted) : '—'}</td>
-                    <td>{kg(h.need1)}</td>
-                    {out.years > 1 && <td>{kg(h.need2)}</td>}
-                    <td className={left < 0 ? 'stock-neg' : ''}><strong>{left < 0 ? `short ${kg(-left)}` : kg(left)}</strong></td>
-                    <td>{h.runsOut ? <span className="stock-pill low">{fmtMonth(h.runsOut)}</span> : <span className="stock-muted">covered</span>}</td>
-                  </tr>
-                )
-              })}
+              {out.position.map((h) => (
+                <tr key={h.hop}>
+                  <td className="stock-beer">{h.hop}</td>
+                  <td>{kg(h.onHand)}</td>
+                  {h.per.map((x, i) => (
+                    <Fragment key={i}>
+                      <td className="hop-period">{x.arrives ? kg(x.arrives) : '—'}</td>
+                      <td>{kg(x.need)}</td>
+                      <td className={x.left < 0 ? 'stock-neg' : ''}><strong>{x.left < 0 ? `short ${kg(-x.left)}` : kg(x.left)}</strong></td>
+                    </Fragment>
+                  ))}
+                  <td>{h.runsOut ? <span className="stock-pill low">{fmtMonth(h.runsOut)}</span> : <span className="stock-muted">covered</span>}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
