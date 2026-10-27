@@ -47,7 +47,7 @@ function PlannedRow({ a, unit, initials, ingredients, onChanged }) {
           <input type="number" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 80 }} />
           {unit}
         </label>
-        <button onClick={added} disabled={saving || qty === ''}>{saving ? '…' : '✓ Added'}</button>
+        <button onClick={added} disabled={saving || qty === ''}>{saving ? '…' : 'Add'}</button>
         <button className="secondary" onClick={remove} aria-label={`Remove ${a.item_name}`} style={{ padding: '0.4rem 0.6rem' }}>✕</button>
       </div>
     </div>
