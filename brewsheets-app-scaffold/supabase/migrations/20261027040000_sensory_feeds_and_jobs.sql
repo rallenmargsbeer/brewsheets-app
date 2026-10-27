@@ -49,10 +49,8 @@ begin perform sensory_sync_production_batch(new.id); return new; end $$;
 create or replace function public.sensory_on_packaging() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin perform sensory_sync_production_batch(new.batch_id); return new; end $$;
-drop trigger if exists sensory_batch_feed on public.batches;
 create trigger sensory_batch_feed after insert or update of bbt_transfer_date, status on public.batches
   for each row execute function public.sensory_on_batch();
-drop trigger if exists sensory_packaging_feed on public.packaging_sessions;
 create trigger sensory_packaging_feed after insert or update of package_date on public.packaging_sessions
   for each row execute function public.sensory_on_packaging();
 
