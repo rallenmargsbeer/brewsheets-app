@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import RecipesPage from './pages/RecipesPage.jsx'
 import RecipeEditPage from './pages/RecipeEditPage.jsx'
@@ -29,6 +30,8 @@ import UsersPage from './pages/UsersPage.jsx'
 import PackagingMaterialsPage from './pages/PackagingMaterialsPage.jsx'
 import UnleashedPage from './pages/UnleashedPage.jsx'
 import ExcisePage from './pages/ExcisePage.jsx'
+// The sensory app (tastings, panels, QC) is big, so it loads only when its tab is opened.
+const SensoryApp = lazy(() => import('./sensory/SensoryApp.jsx'))
 import StartBlendPage from './pages/StartBlendPage.jsx'
 import MillInPage from './pages/MillInPage.jsx'
 import { AuthProvider, RequireAuth, RequireAdmin, useAuth, signOut } from './auth.jsx'
@@ -53,7 +56,7 @@ function Shell() {
   const { pathname } = useLocation()
   // The schedule grid (every tank is a column) and the stock and forecast tables (every location is a column)
   // get the full screen width.
-  const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast' || pathname === '/ingredients'
+  const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast' || pathname === '/ingredients' || pathname === '/sensory'
   const user = (el) => <RequireAuth>{el}</RequireAuth>
   const admin = (el) => <RequireAdmin>{el}</RequireAdmin>
   // A tab's pages follow its setting: admins only, or everyone signed in.
@@ -117,6 +120,7 @@ function Shell() {
           <Route path="/dilution" element={<Navigate to="/calculators" replace />} />
           <Route path="/stock" element={gate('/stock', <StockPage />)} />
           <Route path="/forecast" element={gate('/forecast', <ForecastPage />)} />
+          <Route path="/sensory" element={gate('/sensory', <Suspense fallback={<p>Loading…</p>}><SensoryApp /></Suspense>)} />
           <Route path="/unleashed" element={gate('/unleashed', <UnleashedPage />)} />
           <Route path="/excise" element={gate('/excise', <ExcisePage />)} />
           <Route path="/reports" element={gate('/reports', <ReportsPage />)} />

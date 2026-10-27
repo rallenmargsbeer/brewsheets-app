@@ -37,7 +37,7 @@ export default function UsersPage() {
     <div>
       <h1>Users</h1>
       <p className="stock-muted">
-        Staff sign up with their @margaretriverbeer.co email and a 4-digit PIN, confirm their email, then you approve them here.
+        Staff sign up with their @margaretriverbeer.co (or @mrbeergroup.com) email and a 4-digit PIN, confirm their email, then you approve them here.
         Users run brew day, cellar and packaging; admins can also edit the schedule, recipes, ingredients and forecast, see reports, and manage users.
       </p>
       {pending > 0 && <p className="auth-ok">{pending} waiting for approval.</p>}

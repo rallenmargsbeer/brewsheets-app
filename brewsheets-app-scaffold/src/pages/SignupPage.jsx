@@ -13,7 +13,7 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const emailOk = /^[^@\s]+@margaretriverbeer\.co$/i.test(email.trim())
+  const emailOk = /^[^@\s]+@(margaretriverbeer\.co|mrbeergroup\.com)$/i.test(email.trim())
 
   async function submit(p2) {
     if (p2 !== pin) { setError("Those PINs don't match. Try again."); setPin(''); setConfirm(''); setStep('pin'); return }
@@ -47,7 +47,7 @@ export default function SignupPage() {
         <form onSubmit={(e) => { e.preventDefault(); setError(''); setStep('pin') }} style={{ display: 'grid', gap: '0.75rem' }}>
           <input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
           <input type="email" placeholder="you@margaretriverbeer.co" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-          {email && !emailOk && <p className="auth-error">Use your @margaretriverbeer.co email.</p>}
+          {email && !emailOk && <p className="auth-error">Use your @margaretriverbeer.co or @mrbeergroup.com email.</p>}
           <button type="submit" disabled={!name.trim() || !emailOk}>Next: choose a PIN</button>
         </form>
       )}

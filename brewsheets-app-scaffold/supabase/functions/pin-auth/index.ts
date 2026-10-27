@@ -1,4 +1,4 @@
-// Staff PIN sign-in. Accounts are @margaretriverbeer.co emails with a unique 4-digit PIN.
+// Staff PIN sign-in. Accounts are @margaretriverbeer.co (or @mrbeergroup.com) emails with a unique 4-digit PIN.
 //   signup {email, name, pin}  -> confirmation email; an admin then approves
 //   signin {pin}               -> session tokens (active, confirmed users only)
 //   setpin {pin}               -> change your own PIN (needs a session, e.g. from a "forgot PIN" email link)
@@ -17,7 +17,7 @@ const json = (body: unknown, status = 200) =>
 const URL_ = Deno.env.get('SUPABASE_URL')!
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ANON = Deno.env.get('SUPABASE_ANON_KEY')!
-const DOMAIN = /^[^@\s]+@margaretriverbeer\.co$/i
+const DOMAIN = /^[^@\s]+@(margaretriverbeer\.co|mrbeergroup\.com)$/i
 const PIN = /^\d{4}$/
 const WINDOW_MIN = 15, IP_FAILS = 5, ALL_FAILS = 40
 
@@ -40,7 +40,7 @@ Deno.serve(async (req: Request) => {
   if (action === 'signup') {
     const email = String(body.email ?? '').trim().toLowerCase()
     const name = String(body.name ?? '').trim()
-    if (!DOMAIN.test(email)) return json({ error: 'Use your @margaretriverbeer.co email.' }, 400)
+    if (!DOMAIN.test(email)) return json({ error: 'Use your @margaretriverbeer.co or @mrbeergroup.com email.' }, 400)
     if (!name) return json({ error: 'Enter your name.' }, 400)
     if (!PIN.test(pin)) return json({ error: 'Your PIN must be 4 digits.' }, 400)
     const h = await pinHmac(pin)
