@@ -2044,8 +2044,10 @@ function PackagingSignOffView({ store, currentProfile }) {
   const briteBatches = useMemo(() =>
     store.batches
       .filter(b => inBrite && (inBrite.ids.has(b.production_batch_id) || inBrite.numbers.has(String(b.batch_number))))
+      // Green-lit batches drop off; red or untasted ones stay.
+      .filter(b => [...store.briteChecks].filter(c => c.batch_id === b.id).sort((x, y) => y.created_at.localeCompare(x.created_at))[0]?.decision !== 'green')
       .sort((a, b) => Number(b.batch_number) - Number(a.batch_number)),
-    [store.batches, inBrite]
+    [store.batches, store.briteChecks, inBrite]
   );
 
   return (

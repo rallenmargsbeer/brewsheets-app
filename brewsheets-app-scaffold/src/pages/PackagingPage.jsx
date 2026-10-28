@@ -4,6 +4,7 @@ import { listBatchesInTanks, listPackagingTotals } from '../lib/api'
 import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import { sumSessions } from '../lib/packaging'
 import BeerDot from '../components/BeerDot.jsx'
+import { loadSignOffs, signOffWarning } from '../lib/signoff'
 
 // Conditioning first, then anything else still sitting in a BBT.
 const ORDER = { conditioning: 0, chilling: 1, fermenting: 2, brewing: 3, planned: 4 }
@@ -14,6 +15,7 @@ const SignOff = lazy(() => import('../sensory/SensoryApp.jsx'))
 export default function PackagingPage() {
   const [batches, setBatches] = useState([])
   const [totals, setTotals] = useState({})
+  const [signOffs, setSignOffs] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -27,6 +29,7 @@ export default function PackagingPage() {
         const byBatch = {}
         for (const r of rows) (byBatch[r.batch_id] ??= []).push(r)
         setTotals(Object.fromEntries(Object.entries(byBatch).map(([id, s]) => [id, sumSessions(s)])))
+        loadSignOffs(inBbt).then(setSignOffs).catch(() => {})
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -55,6 +58,9 @@ export default function PackagingPage() {
                   </div>
                   <div style={{ color: 'var(--ink2)', margin: '4px 0' }}>{tankLabel(b.tanks?.name)}</div>
                   <span className={'pill pill-' + b.status}>{statusLabel(b.status)}</span>
+                  {signOffs.has(b.id) && (signOffWarning(signOffs.get(b.id))
+                    ? <div className="signoff-warn">⚠ {signOffs.get(b.id)?.decision === 'red' ? 'Red light' : 'Not signed off'}</div>
+                    : <div style={{ marginTop: 6, fontSize: '0.85rem', color: '#1b6e2e', fontWeight: 600 }}>✓ Green light</div>)}
                   <div style={{ marginTop: 6, fontSize: '0.85rem', color: 'var(--ink2)' }}>
                     {t ? `Packaged so far: ${t.kegs} kegs · ${t.cubes} cubes · ${Math.round(t.litres).toLocaleString()} L` : 'Nothing packaged yet'}
                   </div>

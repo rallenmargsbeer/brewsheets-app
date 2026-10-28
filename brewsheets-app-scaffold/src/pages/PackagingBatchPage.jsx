@@ -12,6 +12,7 @@ import {
 import { tankLabel, statusLabel } from '../lib/tanks'
 import { KEG_SIZES, CANS_PER_CUBE, sumSessions } from '../lib/packaging'
 import BeerDot from '../components/BeerDot.jsx'
+import { loadSignOffs, signOffWarning } from '../lib/signoff'
 import AbvFlag from '../components/AbvFlag.jsx'
 import { abvCheck, dawLitres, dawAim, bbtLitres } from '../lib/batchFigures'
 import { useAutoSave, SaveStatus } from '../lib/useAutoSave.jsx'
@@ -316,6 +317,7 @@ export default function PackagingBatchPage() {
   const [sessions, setSessions] = useState([])
   const [error, setError] = useState(null)
   const [starting, setStarting] = useState(false)
+  const [signOff, setSignOff] = useState(undefined) // undefined while loading
 
   function refresh() {
     Promise.all([getBatch(id), listPackagingSessions(id)])
@@ -327,8 +329,13 @@ export default function PackagingBatchPage() {
   }
 
   useEffect(refresh, [id])
+  useEffect(() => {
+    if (batch?.id) loadSignOffs([batch]).then((m) => setSignOff(m.get(batch.id))).catch(() => setSignOff(undefined))
+  }, [batch?.id])
+  const warning = signOff === undefined ? null : signOffWarning(signOff)
 
   async function startSession() {
+    if (warning && !window.confirm(`${warning}\n\nStart packaging anyway?`)) return
     setStarting(true)
     try {
       await upsertPackagingSession({ batch_id: id, tank_id: batch.tank_id, package_date: today() })
@@ -353,6 +360,8 @@ export default function PackagingBatchPage() {
         {tankLabel(batch.tanks?.name)} · <span className={'pill pill-' + batch.status}>{statusLabel(batch.status)}</span> ·{' '}
         <Link to={`/batches/${batch.id}`}>Batch sheet</Link>
       </p>
+
+      {warning && <div className="signoff-banner">⚠ {warning}</div>}
 
       <DawConfirm batch={batch} onChanged={refresh} />
 
