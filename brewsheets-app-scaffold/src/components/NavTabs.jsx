@@ -20,6 +20,7 @@ export const TABS = [
   { path: '/stock', label: 'Stock' },
   { path: '/forecast', label: 'Forecast' },
   { path: '/sensory', label: 'Sensory' },
+  { path: '/qc', label: 'QC Log', admin: true },
   { path: '/reports', label: 'Reports', admin: true },
   { path: '/unleashed', label: 'Unleashed', admin: true },
   { path: '/excise', label: 'Excise', admin: true },
