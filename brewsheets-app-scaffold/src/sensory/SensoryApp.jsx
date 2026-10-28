@@ -2034,19 +2034,19 @@ function TeamManagement({ store, currentProfile }) {
 }
 
 function PackagingSignOffView({ store, currentProfile }) {
+  // Only beer sitting in a brite tank right now (from the production app), not yet packaged.
+  const [inBrite, setInBrite] = useState(null);
+  useEffect(() => {
+    supabase.from('batches').select('id, batch_number, tanks!inner(tank_type)').eq('tanks.tank_type', 'BBT')
+      .in('status', ['planned', 'brewing', 'fermenting', 'chilling', 'conditioning'])
+      .then(({ data }) => setInBrite({ ids: new Set((data || []).map(b => b.id)), numbers: new Set((data || []).map(b => String(b.batch_number))) }));
+  }, []);
   const briteBatches = useMemo(() =>
     store.batches
-      .filter(b => !b.package_date)
+      .filter(b => inBrite && (inBrite.ids.has(b.production_batch_id) || inBrite.numbers.has(String(b.batch_number))))
       .sort((a, b) => Number(b.batch_number) - Number(a.batch_number)),
-    [store.batches]
+    [store.batches, inBrite]
   );
-
-  const historyBatches = useMemo(() => {
-    const batchIdsWithChecks = new Set(store.briteChecks.map(c => c.batch_id));
-    return store.batches
-      .filter(b => b.package_date && batchIdsWithChecks.has(b.id))
-      .sort((a, b) => Number(b.batch_number) - Number(a.batch_number));
-  }, [store.batches, store.briteChecks]);
 
   return (
     <div>
@@ -2063,17 +2063,6 @@ function PackagingSignOffView({ store, currentProfile }) {
         </div>
       )}
 
-      {historyBatches.length > 0 && (
-        <div style={{ marginTop: 32 }}>
-          <p style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', margin: '0 0 4px' }}>History — already packaged</p>
-          <p style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '0 0 14px' }}>Past sign-off checks for batches that have since gone through packaging.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {historyBatches.map(b => (
-              <BriteHistoryCard key={b.id} batch={b} store={store} />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
