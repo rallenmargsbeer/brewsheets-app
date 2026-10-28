@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { tankLabel } from '../lib/tanks'
 import { KEG_SIZES, sumSessions } from '../lib/packaging'
-import { parseProduct, nameKey } from '../lib/packMaterials'
+import { parseProduct, nameKey, directName } from '../lib/packMaterials'
 import { bbtLitres } from '../lib/batchFigures'
 import BeerDot from '../components/BeerDot.jsx'
 
@@ -13,10 +13,11 @@ const doneOn = (ts) => new Date(ts).toLocaleDateString('en-AU', { day: 'numeric'
 // What has gone into the brite tanks and into kegs and cubes, so the matching assemblies can be
 // entered in Unleashed by hand, then ticked off here. Nothing is sent to Unleashed.
 async function load() {
-  const [withBbt, sessions, boms] = await Promise.all([
+  const [withBbt, sessions, boms, products] = await Promise.all([
     supabase.from('batches').select('id').not('bbt_transfer_date', 'is', null),
     supabase.from('packaging_sessions').select('id, batch_id, package_date, kegs_20, kegs_30, kegs_50, cubes, tank_empty, unl_done_at'),
     supabase.from('unl_dataset').select('data').eq('key', 'pack_boms').maybeSingle(),
+    supabase.from('unl_dataset').select('data').eq('key', 'products').maybeSingle(),
   ])
   for (const r of [withBbt, sessions, boms]) if (r.error) throw r.error
   const ids = [...new Set([...withBbt.data.map((b) => b.id), ...sessions.data.map((s) => s.batch_id)])]
@@ -26,12 +27,21 @@ async function load() {
   if (batches.error) throw batches.error
 
   // Unleashed product per (format, size, beer), and the beer's Finished Beer code.
+  // Products come from the full product list (so ones without a bill of materials, like the Margs
+  // Draught kegs, still match); a product named for the beer beats one reached through an alias.
   const product = new Map()
   const finished = new Map()
+  for (const { code } of [...(products.data?.data ?? []), ...(boms.data?.data ?? [])]) {
+    const p = parseProduct(code)
+    if (!p) continue
+    const k = `${p.fmt}|${p.size}|${p.beer}`
+    const rank = directName(code.replace(/^.*?(cube|keg)\s*-\s*/i, '')) ? 2 : 1
+    if (!product.has(k) || product.get(k).rank < rank) product.set(k, { code, rank })
+  }
+  for (const [k, v] of product) product.set(k, v.code)
   for (const b of boms.data?.data ?? []) {
     const p = parseProduct(b.code)
     if (!p) continue
-    product.set(`${p.fmt}|${p.size}|${p.beer}`, b.code)
     const fb = b.lines?.find((l) => /finished beer/i.test(l.group ?? '') || /^FB[- ]/i.test(l.code ?? ''))
     if (fb && !finished.has(p.beer)) finished.set(p.beer, fb)
   }

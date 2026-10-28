@@ -7,9 +7,13 @@ import { addDays, listScheduleEntries, listCellarTemplates, listBookings, PACK_L
 import { assignBeers, packBeer, looseKey } from './beerColours'
 import { CUBES_PER_PALLET } from './packaging'
 
-// Product names that differ from the schedule's ("Lager" products are the Draught).
-const ALIASES = { lager: 'draught' }
+// Product names that differ from the schedule's: the Draught is "Margs Draught" in Unleashed,
+// and its older "Lager" products (which carry its bills of materials) stand in where there's no
+// Margs Draught one.
+const ALIASES = { lager: 'draught', margsdraught: 'draught' }
 export const nameKey = (s) => { const k = looseKey(s); return ALIASES[k] ?? k }
+// True when a product's own name is the beer's (not reached through an alias like Lager).
+export const directName = (s) => !(looseKey(s) in ALIASES) || looseKey(s) === 'margsdraught'
 
 // "Cube-ITP" -> { fmt: 'cube', size: null, beer: 'itp' }; "30l Keg-Megsy" -> keg 30.
 export function parseProduct(code) {
