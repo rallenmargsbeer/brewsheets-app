@@ -56,7 +56,7 @@ function Shell() {
   const { pathname } = useLocation()
   // The schedule grid (every tank is a column) and the stock and forecast tables (every location is a column)
   // get the full screen width.
-  const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast' || pathname === '/ingredients' || pathname === '/sensory'
+  const wide = pathname === '/schedule' || pathname === '/stock' || pathname === '/forecast' || pathname === '/ingredients' || pathname === '/sensory' || pathname === '/qc'
   const user = (el) => <RequireAuth>{el}</RequireAuth>
   const admin = (el) => <RequireAdmin>{el}</RequireAdmin>
   // A tab's pages follow its setting: admins only, or everyone signed in.
@@ -121,6 +121,7 @@ function Shell() {
           <Route path="/stock" element={gate('/stock', <StockPage />)} />
           <Route path="/forecast" element={gate('/forecast', <ForecastPage />)} />
           <Route path="/sensory" element={gate('/sensory', <Suspense fallback={<p>Loading…</p>}><SensoryApp /></Suspense>)} />
+          <Route path="/qc" element={gate('/qc', <Suspense fallback={<p>Loading…</p>}><SensoryApp mode="qc" /></Suspense>)} />
           <Route path="/unleashed" element={gate('/unleashed', <UnleashedPage />)} />
           <Route path="/excise" element={gate('/excise', <ExcisePage />)} />
           <Route path="/reports" element={gate('/reports', <ReportsPage />)} />

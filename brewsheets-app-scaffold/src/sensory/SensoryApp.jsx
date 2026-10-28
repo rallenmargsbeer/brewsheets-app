@@ -3091,18 +3091,19 @@ function Dashboard({ store, onEditSession }) {
   );
 }
 
-// The sensory app, moved in from its own project. Sign-in is the production app's (PIN); the
+// The sensory app, moved in from its own project. mode: 'sensory' (Sensory tab), 'qc' (QC Log
+// tab) or 'signoff' (just the brite tank sign-off, shown on the Packaging tab). Sign-in is the production app's (PIN); the
 // signed-in person's sensory profile (taster, lead or staff) comes from sensory_me(), which links
 // their old sensory profile by email or makes a new one.
-export default function SensoryApp() {
+export default function SensoryApp({ mode = 'sensory' }) {
   const [profile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState(null);
-  const [tab, setTab] = useState('sessions');
+  const [tab, setTab] = useState(mode === 'qc' ? 'qc' : 'sessions');
   const [presetBatchId, setPresetBatchId] = useState(null);
   const [presetTastingType, setPresetTastingType] = useState(null);
   const [activePanelId, setActivePanelId] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [appMode, setAppMode] = useState('sensory'); // 'sensory' | 'qc'
+  const appMode = mode;
   const [editingSession, setEditingSession] = useState(null);
 
   useEffect(() => {
@@ -3117,7 +3118,6 @@ export default function SensoryApp() {
     { id: 'sessions', label: 'Sessions', icon: Calendar, allowed: true },
     { id: 'panels', label: 'Panels', icon: Users, allowed: true },
     { id: 'submit', label: 'Submit tasting', icon: ClipboardList, allowed: true },
-    { id: 'brite', label: 'Packaging sign off', icon: Droplet, allowed: true },
     { id: 'retention', label: 'Retention queue', icon: Archive, allowed: isLead },
     { id: 'batches', label: 'Batches', icon: Beaker, allowed: isLead },
     { id: 'skus', label: 'TTT profiles', icon: Settings, allowed: true },
@@ -3134,7 +3134,7 @@ export default function SensoryApp() {
   ];
   const tabs = (appMode === 'qc' ? qcTabs : sensoryTabs).filter(t => t.allowed);
 
-  useEffect(() => { if (!tabs.find(t => t.id === tab)) setTab(appMode === 'qc' ? 'qc' : 'panels'); }, [isLead, appMode]);
+  useEffect(() => { if (tabs.length && !tabs.find(t => t.id === tab)) setTab(tabs[0].id); }, [isLead, appMode]);
 
   const themeVars = {
     '--bg': '#F2EDE2', '--surface': '#FFFFFF', '--surface-2': '#ECE3D1', '--line': '#DDD2BA',
@@ -3193,29 +3193,12 @@ export default function SensoryApp() {
         }
       `}</style>
 
+      {appMode === 'signoff' ? (
+        <div style={{ padding: '20px 24px' }}><PackagingSignOffView store={store} currentProfile={profile} /></div>
+      ) : (<>
       <header className="app-header" style={{ background: 'var(--navy)', padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {isLead ? (
-            <select
-              value={appMode}
-              onChange={e => {
-                const m = e.target.value;
-                setAppMode(m);
-                setTab(m === 'qc' ? 'qc' : 'sessions');
-                setPresetBatchId(null); setPresetTastingType(null); setActivePanelId(null); setEditingSession(null);
-              }}
-              style={{
-                background: 'transparent', border: 'none', color: 'rgba(242,237,226,0.85)',
-                fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: 0.8, textTransform: 'uppercase',
-                cursor: 'pointer', outline: 'none',
-              }}
-            >
-              <option value="sensory" style={{ color: '#141A24' }}>Sensory Log</option>
-              <option value="qc" style={{ color: '#141A24' }}>QC Log</option>
-            </select>
-          ) : (
-            <p style={{ margin: 0, fontSize: 11, color: 'rgba(242,237,226,0.6)', fontFamily: 'var(--font-mono)', letterSpacing: 0.8, textTransform: 'uppercase' }}>Sensory Log</p>
-          )}
+          <p style={{ margin: 0, fontSize: 11, color: 'rgba(242,237,226,0.6)', fontFamily: 'var(--font-mono)', letterSpacing: 0.8, textTransform: 'uppercase' }}>{appMode === 'qc' ? 'QC Log' : 'Sensory Log'}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <User size={15} color="rgba(242,237,226,0.6)" />
@@ -3254,7 +3237,6 @@ export default function SensoryApp() {
           {tab === 'sessions' && <SessionsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId) => { setPresetBatchId(bid); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setEditingSession(s); setTab('submit'); }} />}
           {tab === 'panels' && <PanelsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId) => { setPresetBatchId(bid); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setEditingSession(s); setTab('submit'); }} />}
           {tab === 'submit' && <TastingForm store={store} currentProfile={profile} onDone={() => { setEditingSession(null); setActivePanelId(null); setTab(editingSession && isLead ? 'dashboard' : 'sessions'); }} presetBatchId={presetBatchId} presetTastingType={presetTastingType} activePanelId={editingSession ? null : activePanelId} editSession={editingSession} />}
-          {tab === 'brite' && <PackagingSignOffView store={store} currentProfile={profile} />}
           {tab === 'retention' && isLead && <RetentionQueue store={store} onLogTasting={(bid, type) => { setPresetBatchId(bid); setPresetTastingType(type || null); setActivePanelId(null); setTab('submit'); }} />}
           {tab === 'qc' && isLead && <QcView store={store} />}
           {tab === 'incubating' && isLead && <IncubatingView store={store} />}
@@ -3266,8 +3248,10 @@ export default function SensoryApp() {
           {tab === 'trends' && isLead && <TrendsView store={store} />}
           {tab === 'dashboard' && isLead && <Dashboard store={store} onEditSession={(s) => { setEditingSession(s); setTab('submit'); }} />}
           {tab === 'team' && isLead && <TeamManagement store={store} currentProfile={profile} />}
+          {appMode === 'qc' && !isLead && <p style={{ color: 'var(--text-muted)' }}>The QC Log is for QA leads. Ask a lead to make you one on the Sensory tab (Team).</p>}
         </main>
       </div>
+      </>)}
     </div>
   );
 }

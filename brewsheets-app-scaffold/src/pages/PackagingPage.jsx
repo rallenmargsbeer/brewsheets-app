@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listBatchesInTanks, listPackagingTotals } from '../lib/api'
 import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
@@ -7,6 +7,9 @@ import BeerDot from '../components/BeerDot.jsx'
 
 // Conditioning first, then anything else still sitting in a BBT.
 const ORDER = { conditioning: 0, chilling: 1, fermenting: 2, brewing: 3, planned: 4 }
+
+// The brite tank sensory sign-off (moved from the sensory app); loads only when opened.
+const SignOff = lazy(() => import('../sensory/SensoryApp.jsx'))
 
 export default function PackagingPage() {
   const [batches, setBatches] = useState([])
@@ -33,6 +36,7 @@ export default function PackagingPage() {
     <div>
       <h1>Packaging</h1>
       <p style={{ color: 'var(--ink2)', marginTop: '-0.5rem' }}>Pick the batch you're packaging.</p>
+
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {loading ? (
         <p>Loading…</p>
@@ -60,6 +64,7 @@ export default function PackagingPage() {
           })}
         </div>
       )}
+      <div style={{ marginTop: '2rem' }}><Suspense fallback={<p>Loading…</p>}><SignOff mode="signoff" /></Suspense></div>
     </div>
   )
 }
