@@ -13,11 +13,12 @@ const doneOn = (ts) => new Date(ts).toLocaleDateString('en-AU', { day: 'numeric'
 // What has gone into the brite tanks and into kegs and cubes, so the matching assemblies can be
 // entered in Unleashed by hand, then ticked off here. Nothing is sent to Unleashed.
 async function load() {
-  const [withBbt, sessions, boms, products] = await Promise.all([
+  const [withBbt, sessions, boms, products, fbBoms] = await Promise.all([
     supabase.from('batches').select('id').not('bbt_transfer_date', 'is', null),
     supabase.from('packaging_sessions').select('id, batch_id, package_date, kegs_20, kegs_30, kegs_50, cubes, tank_empty, unl_done_at'),
     supabase.from('unl_dataset').select('data').eq('key', 'pack_boms').maybeSingle(),
     supabase.from('unl_dataset').select('data').eq('key', 'products').maybeSingle(),
+    supabase.from('unl_dataset').select('data').eq('key', 'boms').maybeSingle(),
   ])
   for (const r of [withBbt, sessions, boms]) if (r.error) throw r.error
   const ids = [...new Set([...withBbt.data.map((b) => b.id), ...sessions.data.map((s) => s.batch_id)])]
@@ -39,6 +40,12 @@ async function load() {
     if (!product.has(k) || product.get(k).rank < rank) product.set(k, { code, rank })
   }
   for (const [k, v] of product) product.set(k, v.code)
+  // The beer's own Finished Beer product (e.g. FB-Draught) first, else the one in its keg or cube
+  // bill of materials (which for the Draught is the old FB-Lager).
+  for (const f of fbBoms.data?.data ?? []) {
+    const name = String(f.code ?? '').match(/^FB[- ]\s*(.+)$/i)?.[1]
+    if (name && directName(name) && !finished.has(nameKey(name))) finished.set(nameKey(name), { code: f.code })
+  }
   for (const b of boms.data?.data ?? []) {
     const p = parseProduct(b.code)
     if (!p) continue
