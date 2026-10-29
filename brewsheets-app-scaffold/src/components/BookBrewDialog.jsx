@@ -227,7 +227,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     const pallets = Math.floor(sp.cubesL / LITRES_PER_PALLET + 0.25) // whole pallets, rounding down unless nearly full
     const kegs = Math.max(0, Math.floor((packagedL - pallets * LITRES_PER_PALLET) / 50))
     return { ...sp, pallets, kegs, packagedL, packDate, eff: useEff ? eff : null }
-  }, [demand, beerName, recipeName, brewDate, turnVolume, turns, packWhen?.date])
+  }, [demand, beerName, recipeName, brewDate, batchL, packWhen?.date])
 
   return (
     <div className="sc-overlay" onClick={onClose}>
