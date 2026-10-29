@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
-import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, MAX_TURNS_PER_DAY, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, addWorkdays, saveBeerColour, freePackLane, freePackSlots, createMixBooking } from '../lib/schedule'
+import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, saveScheduleEntry, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, MAX_TURNS_PER_DAY, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, addWorkdays, saveBeerColour, freePackLane, freePackSlots, createMixBooking } from '../lib/schedule'
 import { beerStyle, savedBeerStyle, looseKey } from '../lib/beerColours'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 import { loadForecast, forecastIndex, suggestPackSplit, profileOf, YIELD } from '../lib/forecast'
@@ -92,11 +92,20 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
 
   // Brewhouse turns: which slots each goes in. Suggested = the first free ones from the brew
   // day (or from the cell double-clicked); the brewer can pick others.
+  // Turns already booked can be dragged (or tapped, then tapped again on a free slot) to
+  // another slot to make room; those moves are saved when this brew is booked.
+  const [moves, setMoves] = useState({}) // entry id -> { date, slot, lane }
+  const [held, setHeld] = useState(null) // { own: index } | { entry: id } while moving one by tapping
+  const brewEntries = useMemo(() => windowEntries.filter((e) => BREW_LANES.includes(e.lane) && e.text?.trim()).map((e) => {
+    const m = moves[e.id]
+    return m ? { ...e, entry_date: m.date, slot: m.slot, lane: m.lane, moved: true } : e
+  }), [windowEntries, moves])
   const takenTurns = useMemo(() => {
     const m = new Map()
-    for (const e of windowEntries) if (BREW_LANES.includes(e.lane) && e.text?.trim()) m.set(`${e.entry_date}|${e.slot}|${e.lane}`, e.text)
+    for (const e of brewEntries) m.set(`${e.entry_date}|${e.slot}|${e.lane}`, e.text)
     return m
-  }, [windowEntries])
+  }, [brewEntries])
+  const takenEntry = (k) => brewEntries.find((e) => `${e.entry_date}|${e.slot}|${e.lane}` === k)
   const suggestedTurns = useMemo(() => {
     const free = defaultTurnSlots(brewDate, 40, new Set(takenTurns.keys()))
     const first = initial?.firstTurn && initial.firstTurn.date === brewDate ? free.findIndex((t) => t.date === initial.firstTurn.date && t.slot === initial.firstTurn.slot && t.lane === initial.firstTurn.lane) : -1
@@ -109,10 +118,29 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     const days = [brewDate]
     while (days.length < 3) days.push(nextWorkday(addDays(days[days.length - 1], 1)))
     for (const t of turnSlots) if (!days.includes(t.date)) days.push(t.date)
+    for (const m of Object.values(moves)) if (!days.includes(m.date)) days.push(m.date)
     return days.sort()
-  }, [brewDate, turnSlots])
+  }, [brewDate, turnSlots, moves])
   // At most MAX_TURNS_PER_DAY turns a day, this brew's and ones already booked together.
   const dayFull = (date) => [...takenTurns.keys()].filter((k) => k.startsWith(`${date}|`)).length + turnSlots.filter((x) => x.date === date).length >= MAX_TURNS_PER_DAY
+  // Move this brew's turn or a booked turn to a free slot (the day must have room once it's gone).
+  function moveTo(item, t) {
+    const k = turnKey(t)
+    if (takenTurns.has(k) || turnSlots.some((x) => turnKey(x) === k)) return
+    const leaving = item.own != null ? turnSlots[item.own] : (() => { const e = brewEntries.find((x) => x.id === item.entry); return e && { date: e.entry_date } })()
+    if (!leaving) return
+    if (leaving.date !== t.date && dayFull(t.date)) return
+    if (item.own != null) setPicked(turnSlots.map((x, i) => (i === item.own ? t : x)).sort((a, b) => turnKey(a).localeCompare(turnKey(b))))
+    else setMoves((m) => ({ ...m, [item.entry]: t }))
+    setHeld(null)
+  }
+  const dragStart = (item) => (e) => { e.dataTransfer.setData('text/plain', JSON.stringify(item)); e.dataTransfer.effectAllowed = 'move' }
+  const dropOn = (t) => (e) => { e.preventDefault(); try { moveTo(JSON.parse(e.dataTransfer.getData('text/plain')), t) } catch { /* not ours */ } }
+  const moveList = brewEntries.filter((e) => e.moved).map((e) => {
+    const from = windowEntries.find((x) => x.id === e.id)
+    return { id: e.id, text: e.text, from: `${fmt(from.entry_date)} ${from.slot} ${LANE_LABEL[from.lane]}`, to: `${fmt(e.entry_date)} ${e.slot} ${LANE_LABEL[e.lane]}` }
+  })
+
   function toggleTurn(t) {
     const cur = turnSlots
     const k = turnKey(t)
@@ -164,6 +192,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     setError(null)
     try {
       if (newBeer) await saveBeerColour(beerName.trim(), shown.bg, shown.fg)
+      for (const [id, t] of Object.entries(moves)) await saveScheduleEntry({ id, entry_date: t.date, slot: t.slot, lane: t.lane })
       const b = isMix
         ? await createMixBooking({ date: brewDate, beerName: beerName.trim(), brightTank: mixTank, litres: batchL, pack, packSlots, notes })
         : await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, turnSlots, packSlots, notes, pack })
@@ -300,13 +329,24 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
                       const taken = takenTurns.get(k)
                       const n = turnSlots.findIndex((x) => turnKey(x) === k)
                       return (
-                        <td key={k}>
-                          {taken ? (
-                            <span className="turn-taken" title="Already booked">{taken}</span>
-                          ) : (
-                            <button type="button" className={n >= 0 ? 'turn-on' : 'secondary'} onClick={() => toggleTurn(t)} disabled={n < 0 && (turnSlots.length >= turns || dayFull(d))}>
-                              {n >= 0 ? `Turn ${n + 1}` : '+'}
+                        <td key={k} onDragOver={(e) => !taken && n < 0 && e.preventDefault()} onDrop={dropOn(t)}>
+                          {taken ? (() => {
+                            const e = takenEntry(k)
+                            const isHeld = held?.entry === e.id
+                            return (
+                              <span className={'turn-taken' + (e.moved ? ' turn-moved' : '') + (isHeld ? ' turn-held' : '')} title="Booked: drag, or tap then tap a free slot, to move it"
+                                draggable onDragStart={dragStart({ entry: e.id })} onClick={() => setHeld(isHeld ? null : { entry: e.id })}>{taken}</span>
+                            )
+                          })() : n >= 0 ? (
+                            <button type="button" className={'turn-on' + (held?.own === n ? ' turn-held' : '')} draggable onDragStart={dragStart({ own: n })}
+                              onClick={() => (held?.own === n ? toggleTurn(t) : setHeld({ own: n }))} title="Drag, or tap then tap a free slot, to move it. Tap twice to remove.">
+                              Turn {n + 1}
                             </button>
+                          ) : held ? (
+                            <button type="button" className="secondary turn-target" onClick={() => moveTo(held, t)}
+                              disabled={dayFull(d) && (held.own != null ? turnSlots[held.own]?.date : brewEntries.find((x) => x.id === held.entry)?.entry_date) !== d}>Move here</button>
+                          ) : (
+                            <button type="button" className="secondary" onClick={() => toggleTurn(t)} disabled={turnSlots.length >= turns || dayFull(d)}>+</button>
                           )}
                         </td>
                       )
@@ -315,6 +355,13 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
                 ))}
               </tbody>
             </table>
+            <div className="stock-muted" style={{ fontSize: '0.8rem', marginTop: 4 }}>Clash? Drag a turn (or tap it, then tap a free slot) to move it, booked ones too. Tap one of this brew's turns twice to remove it.</div>
+            {moveList.length > 0 && (
+              <div className="turn-moves">
+                Will also move: {moveList.map((m) => `${m.text} ${m.from} → ${m.to}`).join('; ')}{' '}
+                <button type="button" className="secondary" style={{ padding: '1px 8px', fontSize: '0.75rem' }} onClick={() => setMoves({})}>Undo moves</button>
+              </div>
+            )}
             {turnSlots.length < turns && <div className="sc-warn" style={{ margin: '4px 0 0' }}>Pick {turns - turnSlots.length} more slot{turns - turnSlots.length === 1 ? '' : 's'}.</div>}
             {isWeekend(brewDate) && <div className="sc-warn" style={{ margin: '4px 0 0' }}>{fmt(brewDate)} is a weekend.</div>}
           </div>
