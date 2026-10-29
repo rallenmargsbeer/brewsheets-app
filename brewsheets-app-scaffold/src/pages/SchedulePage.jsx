@@ -253,6 +253,16 @@ export default function SchedulePage() {
   const [range, setRange] = useState(liveRange)
   const [archive, setArchive] = useState('') // 'YYYY-MM' when viewing a past month
   const scrollRef = useRef(null)
+  // The grid scrolls inside its own box, sized to end at the bottom of the screen, so its header
+  // row (the tank names) stays in view instead of the page scrolling it away.
+  const [boxHeight, setBoxHeight] = useState(null)
+  useEffect(() => {
+    const fit = () => { const el = scrollRef.current; if (el) setBoxHeight(Math.max(320, window.innerHeight - el.getBoundingClientRect().top - window.scrollY - 12)) }
+    fit()
+    window.addEventListener('resize', fit)
+    const t = setTimeout(fit, 500) // after the legend and banners settle
+    return () => { window.removeEventListener('resize', fit); clearTimeout(t) }
+  })
   const gridRef = useRef(null)
   // Zoom out to see more of the grid (phones especially); remembered on this device.
   const ZOOMS = [1, 0.85, 0.7, 0.55, 0.4, 0.3]
@@ -344,9 +354,18 @@ export default function SchedulePage() {
   useEffect(refresh, [range.from, range.to])
 
   // Endless scroll: near the bottom, add the next four weeks.
+  // Re-apply the frozen-row offsets when the zoom changes.
+  useEffect(() => { if (scrollRef.current) onScroll({ currentTarget: scrollRef.current }) }, [zoom])
   function onScroll(e) {
-    if (archive) return
     const el = e.currentTarget
+    // When zoom is done by scaling (iPad), sticky offsets are in unscaled pixels: shift the frozen
+    // header row and day column by the difference so they stay at the edge of the box.
+    if (gridRef.current) {
+      const f = zoom !== 1 && !CSS_ZOOM ? 1 / zoom - 1 : 0
+      gridRef.current.style.setProperty('--sc-stick-y', `${el.scrollTop * f}px`)
+      gridRef.current.style.setProperty('--sc-stick-x', `${el.scrollLeft * f}px`)
+    }
+    if (archive) return
     if (el.scrollTop + el.clientHeight > el.scrollHeight - 600) {
       setRange((r) => (r.loadingMore ? r : { ...r, to: addDays(r.to, CHUNK_DAYS), loadingMore: true }))
     }
@@ -812,8 +831,8 @@ export default function SchedulePage() {
         <button className="secondary" onClick={() => zoomStep(1)} disabled={zoom >= 1} aria-label="Zoom in">+</button>
         <button className="secondary" onClick={zoomFit} title="Fit every column on screen">Fit width</button>
       </div>
-      <div className="sc-scroll" ref={scrollRef} onScroll={onScroll}>
-        <div className="sc-zoomwrap" style={zoom !== 1 && !CSS_ZOOM && gridSize.w ? { width: gridSize.w * zoom, height: gridSize.h * zoom, overflow: 'hidden' } : undefined}>
+      <div className="sc-scroll" ref={scrollRef} onScroll={onScroll} style={boxHeight ? { maxHeight: boxHeight } : undefined}>
+        <div className="sc-zoomwrap" style={zoom !== 1 && !CSS_ZOOM && gridSize.w ? { width: gridSize.w * zoom, height: gridSize.h * zoom, overflow: 'clip' } : undefined}>
         <table className={'sc-grid' + (zoom !== 1 ? ' sc-zoomed' : '')} ref={gridRef} style={zoom === 1 ? undefined : CSS_ZOOM ? { zoom } : { transform: `scale(${zoom})`, transformOrigin: '0 0' }}>
           <thead>
             <tr>

@@ -378,8 +378,8 @@ tbody tr:hover td {
 .sc-scroll { overflow: auto; max-height: 75vh; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .sc-grid { border: 0; border-radius: 0; overflow: visible; width: max-content; min-width: 100%; font-size: 0.8rem; }
 .sc-grid th, .sc-grid td { padding: 0.3rem 0.45rem; border-right: 1px solid var(--line); white-space: nowrap; }
-.sc-grid thead th { position: sticky; top: 0; z-index: 2; font-size: 0.72rem; }
-.sc-grid .sc-day { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 108px; }
+.sc-grid thead th { position: sticky; top: var(--sc-stick-y, 0px); z-index: 2; font-size: 0.72rem; }
+.sc-grid .sc-day { position: sticky; left: var(--sc-stick-x, 0px); z-index: 1; background: var(--surface); min-width: 108px; }
 .sc-grid thead .sc-day { z-index: 3; }
 .sc-grid tbody tr.sc-pm td { border-bottom: 2px solid var(--line); }
 .sc-grid tbody tr:not(.sc-pm) td { border-bottom: 1px dashed var(--line); }
