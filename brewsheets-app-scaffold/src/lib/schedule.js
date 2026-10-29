@@ -558,17 +558,11 @@ export async function deleteBeerColour(beerName) {
 export async function syncBookingDates(bookingIds) {
   const prev = []
   for (const id of new Set(bookingIds)) {
-    const { data: b, error } = await supabase.from('brew_bookings').select('id, brew_date').eq('id', id).single()
+    const { data: b, error } = await supabase.from('brew_bookings').select('id, brew_date, tank_id').eq('id', id).single()
     if (error) throw error
-    const { data: first, error: e2 } = await supabase
-      .from('schedule_entries')
-      .select('entry_date')
-      .eq('booking_id', id)
-      .in('lane', BREW_LANES)
-      .order('entry_date')
-      .limit(1)
+    const { data: rows, error: e2 } = await supabase.from('schedule_entries').select('entry_date, lane, tank_id, text').eq('booking_id', id)
     if (e2) throw e2
-    const date = first?.[0]?.entry_date
+    const date = bookingBrewDay(b, rows ?? [])
     if (date && date !== b.brew_date) {
       const { error: e3 } = await supabase.from('brew_bookings').update({ brew_date: date }).eq('id', id)
       if (e3) throw e3
@@ -578,11 +572,26 @@ export async function syncBookingDates(bookingIds) {
   return prev
 }
 
+export async function getBookingDates(ids) {
+  const { data, error } = await supabase.from('brew_bookings').select('id, brew_date').in('id', ids)
+  if (error) throw error
+  return data
+}
+
 export async function setBookingDates(rows) {
   for (const { id, brew_date } of rows) {
     const { error } = await supabase.from('brew_bookings').update({ brew_date }).eq('id', id)
     if (error) throw error
   }
+}
+
+// A booking's real brew day, from its own cells: the "Brew" cell in its FV, else its first
+// brewhouse turn, else the date saved on the booking (which can drift when cells are moved by hand).
+export function bookingBrewDay(booking, rows) {
+  const first = (list) => list.map((r) => r.entry_date).sort()[0]
+  return first(rows.filter((r) => r.lane === 'tank' && r.tank_id === booking.tank_id && /^\s*brew(\s*day)?\s*$/i.test(r.text ?? '')))
+    ?? first(rows.filter((r) => BREW_LANES.includes(r.lane)))
+    ?? booking.brew_date
 }
 
 export async function listBookingEntries(bookingId) {
