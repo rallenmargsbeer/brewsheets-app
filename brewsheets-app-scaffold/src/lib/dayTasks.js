@@ -83,7 +83,7 @@ export async function loadDay(date) {
     }
     // The beer in the tank: the batch, or the schedule's run for this half-day.
     const beer = batch?.beer_style ?? scheduled.find((s) => s.beer)?.beer ?? null
-    return { tank: t, batch, beer, scheduled, fromTemplate, advice: batch ? gravityAdvice(batch, date, jobState(batch, entries.filter((e) => e.lane === 'tank' && e.tank_id === t.id), date)) : [] }
+    return { tank: t, batch, beer, scheduled, fromTemplate, advice: batch ? [...gravityAdvice(batch, date, jobState(batch, entries.filter((e) => e.lane === 'tank' && e.tank_id === t.id), date)), ...biofineAdvice(batch, t)] : [] }
   })
   return { date, brewhouse, packaging, other, tanks: tankDays }
 }
@@ -119,6 +119,14 @@ export const jobState = (batch, jobs, date) => ({ chilled: isChilled(batch, jobs
 
 // Suggestions from the gravity readings of a fermenting batch (°P). Target FG from the recipe.
 // Once it's been chilled (chill job ticked off) there's nothing more: no readings after chill.
+// Biofine goes into the FV before transfer: once the beer is on chill (or conditioning in the FV)
+// and the planned Biofine isn't ticked off, remind the cellar.
+function biofineAdvice(batch, tank) {
+  if (tank.tank_type === 'BBT' || !['chilling', 'conditioning'].includes(batch.status)) return []
+  const due = (batch.tank_additions ?? []).some((a) => /biofine/i.test(a.item_name ?? '') && !a.added_on)
+  return due ? [{ level: 'soon', label: 'Biofine due', text: 'Add Biofine before transfer to the BBT. Refer to the Cellar tab for the amount.' }] : []
+}
+
 export function gravityAdvice(batch, date, { chilled = false, dryHopped = false } = {}) {
   if (batch.status !== 'fermenting' || chilled) return []
   const readings = (batch.fermentation_readings ?? [])
