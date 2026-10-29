@@ -130,7 +130,10 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     if (!leaving) return
     if (leaving.date !== t.date && dayFull(t.date)) return
     if (item.own != null) setPicked(turnSlots.map((x, i) => (i === item.own ? t : x)).sort((a, b) => turnKey(a).localeCompare(turnKey(b))))
-    else setMoves((m) => ({ ...m, [item.entry]: t }))
+    else {
+      setPicked(turnSlots) // keep this brew's turns where they are; don't re-suggest into the gap
+      setMoves((m) => ({ ...m, [item.entry]: t }))
+    }
   }
   const dragStart = (item) => (e) => { e.dataTransfer.setData('text/plain', JSON.stringify(item)); e.dataTransfer.effectAllowed = 'move' }
   const dropOn = (t) => (e) => { e.preventDefault(); try { moveTo(JSON.parse(e.dataTransfer.getData('text/plain')), t) } catch { /* not ours */ } }
