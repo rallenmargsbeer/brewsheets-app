@@ -877,3 +877,7 @@ button.dt-cup.on { border-color: var(--accent); background: var(--accent-soft); 
 .turn-taken.turn-moved { background: #fff4d6; color: #7a5300; }
 .turn-moves { margin-top: 4px; font-size: 0.8rem; background: #fff4d6; border-radius: 6px; padding: 4px 8px; }
 .turn-picker button.turn-off { opacity: 0.45; cursor: default; }
+.sub-tabs { display: flex; gap: 0.4rem; margin: 0 0 0.75rem; flex-wrap: wrap; }
+.ferm-graphs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 1rem; }
+.ferm-graph { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 0.9rem; }
+.ferm-graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
