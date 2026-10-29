@@ -92,10 +92,9 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
 
   // Brewhouse turns: which slots each goes in. Suggested = the first free ones from the brew
   // day (or from the cell double-clicked); the brewer can pick others.
-  // Turns already booked can be dragged (or tapped, then tapped again on a free slot) to
-  // another slot to make room; those moves are saved when this brew is booked.
+  // Turns already booked can be dragged to another slot to make room; those moves are saved
+  // when this brew is booked.
   const [moves, setMoves] = useState({}) // entry id -> { date, slot, lane }
-  const [held, setHeld] = useState(null) // { own: index } | { entry: id } while moving one by tapping
   const brewEntries = useMemo(() => windowEntries.filter((e) => BREW_LANES.includes(e.lane) && e.text?.trim()).map((e) => {
     const m = moves[e.id]
     return m ? { ...e, entry_date: m.date, slot: m.slot, lane: m.lane, moved: true } : e
@@ -132,7 +131,6 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
     if (leaving.date !== t.date && dayFull(t.date)) return
     if (item.own != null) setPicked(turnSlots.map((x, i) => (i === item.own ? t : x)).sort((a, b) => turnKey(a).localeCompare(turnKey(b))))
     else setMoves((m) => ({ ...m, [item.entry]: t }))
-    setHeld(null)
   }
   const dragStart = (item) => (e) => { e.dataTransfer.setData('text/plain', JSON.stringify(item)); e.dataTransfer.effectAllowed = 'move' }
   const dropOn = (t) => (e) => { e.preventDefault(); try { moveTo(JSON.parse(e.dataTransfer.getData('text/plain')), t) } catch { /* not ours */ } }
@@ -332,21 +330,15 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
                         <td key={k} onDragOver={(e) => !taken && n < 0 && e.preventDefault()} onDrop={dropOn(t)}>
                           {taken ? (() => {
                             const e = takenEntry(k)
-                            const isHeld = held?.entry === e.id
                             return (
-                              <span className={'turn-taken' + (e.moved ? ' turn-moved' : '') + (isHeld ? ' turn-held' : '')} title="Booked: drag, or tap then tap a free slot, to move it"
-                                draggable onDragStart={dragStart({ entry: e.id })} onClick={() => setHeld(isHeld ? null : { entry: e.id })}>{taken}</span>
+                              <span className={'turn-taken' + (e.moved ? ' turn-moved' : '')} title="Booked: drag it to a free slot to move it"
+                                draggable onDragStart={dragStart({ entry: e.id })}>{taken}</span>
                             )
-                          })() : n >= 0 ? (
-                            <button type="button" className={'turn-on' + (held?.own === n ? ' turn-held' : '')} draggable onDragStart={dragStart({ own: n })}
-                              onClick={() => (held?.own === n ? toggleTurn(t) : setHeld({ own: n }))} title="Drag, or tap then tap a free slot, to move it. Tap twice to remove.">
-                              Turn {n + 1}
+                          })() : (
+                            <button type="button" className={n >= 0 ? 'turn-on' : 'secondary' + (turnSlots.length >= turns || dayFull(d) ? ' turn-off' : '')} onClick={() => toggleTurn(t)}
+                              draggable={n >= 0} onDragStart={n >= 0 ? dragStart({ own: n }) : undefined} title={n >= 0 ? 'Drag to move, click to remove' : undefined}>
+                              {n >= 0 ? `Turn ${n + 1}` : '+'}
                             </button>
-                          ) : held ? (
-                            <button type="button" className="secondary turn-target" onClick={() => moveTo(held, t)}
-                              disabled={dayFull(d) && (held.own != null ? turnSlots[held.own]?.date : brewEntries.find((x) => x.id === held.entry)?.entry_date) !== d}>Move here</button>
-                          ) : (
-                            <button type="button" className="secondary" onClick={() => toggleTurn(t)} disabled={turnSlots.length >= turns || dayFull(d)}>+</button>
                           )}
                         </td>
                       )
@@ -355,7 +347,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
                 ))}
               </tbody>
             </table>
-            <div className="stock-muted" style={{ fontSize: '0.8rem', marginTop: 4 }}>Clash? Drag a turn (or tap it, then tap a free slot) to move it, booked ones too. Tap one of this brew's turns twice to remove it.</div>
+            <div className="stock-muted" style={{ fontSize: '0.8rem', marginTop: 4 }}>Clash? Drag a turn onto a free slot to move it, booked ones too.</div>
             {moveList.length > 0 && (
               <div className="turn-moves">
                 Will also move: {moveList.map((m) => `${m.text} ${m.from} → ${m.to}`).join('; ')}{' '}

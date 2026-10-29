@@ -875,6 +875,5 @@ button.dt-cup.on { border-color: var(--accent); background: var(--accent-soft); 
 .dt-card .stock-table th, .dt-card .stock-table td { text-align: left; }
 .turn-taken[draggable] { cursor: grab; }
 .turn-taken.turn-moved { background: #fff4d6; color: #7a5300; }
-.turn-picker .turn-held, .turn-taken.turn-held { outline: 3px solid var(--orange); outline-offset: 1px; }
-.turn-picker button.turn-target { border-style: dashed; border-color: var(--accent); color: var(--accent); }
 .turn-moves { margin-top: 4px; font-size: 0.8rem; background: #fff4d6; border-radius: 6px; padding: 4px 8px; }
+.turn-picker button.turn-off { opacity: 0.45; cursor: default; }
