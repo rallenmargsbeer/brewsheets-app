@@ -866,3 +866,10 @@ tr.today td { background: #fbf6e9; }
 .stock-table .hop-period { border-left: 2px solid var(--line); }
 .signoff-banner { background: #fdecea; border: 2px solid #b00020; color: #7a0015; border-radius: 8px; padding: 0.7rem 0.9rem; margin: 0.5rem 0 1rem; font-weight: 600; }
 .signoff-warn { margin-top: 6px; font-size: 0.85rem; color: #b00020; font-weight: 700; }
+.dt-result { margin: 0.5rem 0; padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--hl); border: 1px solid var(--line); }
+.dt-result.dt-sig { background: #fdecea; border-color: #b00020; color: #7a0015; }
+.dt-answer { padding: 0.75rem; border: 1px solid var(--accent); border-radius: 8px; background: var(--hl); margin-bottom: 0.75rem; }
+button.dt-cup { background: var(--surface); color: var(--ink); border: 2px solid var(--line); font-family: var(--mono); font-size: 1.2rem; padding: 0.6rem 1.1rem; }
+button.dt-cup.on { border-color: var(--accent); background: var(--accent-soft); }
+.dt-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.1rem; }
+.dt-card .stock-table th, .dt-card .stock-table td { text-align: left; }

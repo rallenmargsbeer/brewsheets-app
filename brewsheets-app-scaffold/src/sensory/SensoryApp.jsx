@@ -3,6 +3,7 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Responsi
 import { Beaker, ClipboardList, Archive, Settings, LayoutDashboard, Plus, X, Check, User, Upload, Users, ChevronRight, ChevronDown, LogOut, TrendingUp, Droplet, Calendar, UserCog, Search, FlaskConical, MapPin, LayoutGrid } from 'lucide-react';
 import Papa from 'papaparse';
 import { supabase } from '../supabaseClient';
+import DifferenceTests from './DifferenceTests.jsx';
 
 const INTENSITY_LEVELS = [
   { label: 'Absent', score: 1 },
@@ -3101,6 +3102,7 @@ export default function SensoryApp({ mode = 'sensory' }) {
     { id: 'sessions', label: 'Sessions', icon: Calendar, allowed: true },
     { id: 'panels', label: 'Panels', icon: Users, allowed: true },
     { id: 'submit', label: 'Submit tasting', icon: ClipboardList, allowed: true },
+    { id: 'difference', label: 'Difference tests', icon: LayoutGrid, allowed: true },
     { id: 'retention', label: 'Retention queue', icon: Archive, allowed: isLead },
     { id: 'batches', label: 'Batches', icon: Beaker, allowed: isLead },
     { id: 'skus', label: 'TTT profiles', icon: Settings, allowed: true },
@@ -3226,6 +3228,7 @@ export default function SensoryApp({ mode = 'sensory' }) {
           {tab === 'qcDashboard' && isLead && <QcDashboard store={store} />}
           {tab === 'qcLocations' && isLead && <QcLocationsTab store={store} />}
           {tab === 'batches' && isLead && <BatchesView store={store} isLead={isLead} />}
+          {tab === 'difference' && <DifferenceTests store={store} currentProfile={profile} isLead={isLead} />}
           {tab === 'skus' && <SkuProfiles store={store} isLead={isLead} />}
           {tab === 'search' && <SearchView store={store} />}
           {tab === 'trends' && isLead && <TrendsView store={store} />}
