@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { listTanks, listIngredients, listBatchesInTanks, upsertBatch, upsertFermentationReading, updateFermentationReading } from '../lib/api'
 import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import AddToTank from '../components/AddToTank.jsx'
@@ -9,7 +9,8 @@ import { isScheduleEditor } from '../lib/schedule'
 import BeerDot, { useBeerColour } from '../components/BeerDot.jsx'
 import AbvFlag from '../components/AbvFlag.jsx'
 import YeastBank, { HarvestForm } from '../components/YeastBank.jsx'
-import { abvCheck, actualFg, dawLitres, dawAim, koLitres } from '../lib/batchFigures'
+import { abvCheck, actualFg, actualOg, dawLitres, dawAim, koLitres } from '../lib/batchFigures'
+import { BatchGravityChart } from '../components/FermentationSection.jsx'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
 
@@ -273,7 +274,42 @@ function TankPanel({ tank, batch, day, editor, emptyBbts, ingredients, onClose, 
 // Natural order so FV2 sorts before FV10 and "BT 1" before "BT 2".
 const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })
 
+// Every actively fermenting beer's gravity chart at once, oldest brew first.
+function FermentationGraphs({ batches, tanks }) {
+  const fermenting = batches
+    .filter((b) => b.status === 'fermenting' && tanks.find((t) => t.id === b.tank_id)?.tank_type !== 'BBT')
+    .sort((a, b) => (a.date_brewed ?? '').localeCompare(b.date_brewed ?? ''))
+  if (!fermenting.length) return <p className="stock-muted">Nothing fermenting right now.</p>
+  return (
+    <div className="ferm-graphs">
+      {fermenting.map((b) => {
+        const tank = tanks.find((t) => t.id === b.tank_id)
+        const last = [...(b.fermentation_readings ?? [])].filter((r) => r.gravity_plato != null)
+          .sort((x, y) => (x.reading_date ?? '').localeCompare(y.reading_date ?? '') || (x.created_at ?? '').localeCompare(y.created_at ?? '')).pop()
+        const fg = b.recipes?.target_fg != null ? Number(b.recipes.target_fg) : null
+        return (
+          <div key={b.id} className="ferm-graph">
+            <div className="ferm-graph-head">
+              <div>
+                <strong><BeerDot name={b.beer_style} />{b.beer_style} #{b.batch_number}</strong>
+                <span className="stock-muted"> · {tankLabel(tank?.name)} · day {daysInTank(b, tank)}</span>
+              </div>
+              <Link to={`/batches/${b.id}?view=fermentation`} style={{ fontSize: '0.85rem' }}>Batch sheet →</Link>
+            </div>
+            <div className="stock-muted" style={{ fontSize: '0.85rem' }}>
+              {last ? `Latest ${Number(last.gravity_plato).toFixed(1)} °P (${new Date(`${last.reading_date}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })})` : 'No readings yet'}{fg != null ? ` · target FG ${fg} °P` : ''}
+            </div>
+            <BatchGravityChart batch={b} og={actualOg(b)} />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function CellarPage() {
+  const [params, setParams] = useSearchParams()
+  const view = params.get('view') === 'graphs' ? 'graphs' : 'tanks'
   const [tanks, setTanks] = useState([])
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
@@ -314,10 +350,16 @@ export default function CellarPage() {
   return (
     <div>
       <h1>Cellar</h1>
-      <p style={{ color: 'var(--ink2)', marginTop: '-0.5rem' }}>Tap a tank for today’s tasks, to log a reading, add dry hops or transfer to a BBT. <Link to="/today">Everything on today →</Link></p>
+      <div className="sub-tabs">
+        <button className={view === 'tanks' ? '' : 'secondary'} onClick={() => setParams({}, { replace: true })}>Tanks</button>
+        <button className={view === 'graphs' ? '' : 'secondary'} onClick={() => setParams({ view: 'graphs' }, { replace: true })}>Fermentation graphs</button>
+      </div>
+      {view === 'tanks' && <p style={{ color: 'var(--ink2)' }}>Tap a tank for today’s tasks, to log a reading, add dry hops or transfer to a BBT. <Link to="/today">Everything on today →</Link></p>}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {loading ? (
         <p>Loading…</p>
+      ) : view === 'graphs' ? (
+        <FermentationGraphs batches={batches} tanks={tanks} />
       ) : (
         <>
           <h3>Fermenters</h3>

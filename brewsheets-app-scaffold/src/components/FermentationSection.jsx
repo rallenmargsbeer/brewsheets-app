@@ -124,14 +124,15 @@ function EditRow({ r, onDone, onChanged }) {
   )
 }
 
-export default function FermentationSection({ batch, og = batch.actual_og, check, onChanged }) {
+// The chart's inputs for a batch: gravity by fermentation day, tank additions by day, and the
+// FG band that gives the target ABV (within the excise tolerance) from its OG.
+function chartData(batch, og) {
   const readings = [...(batch.fermentation_readings ?? [])].sort(
     (a, b) => (a.reading_date ?? '').localeCompare(b.reading_date ?? '') || (a.created_at ?? '').localeCompare(b.created_at ?? '')
   )
   const points = readings
     .filter((r) => r.gravity_plato != null && dayOf(r, batch.date_brewed) != null)
     .map((r) => ({ day: dayOf(r, batch.date_brewed), plato: Number(r.gravity_plato), date: r.reading_date }))
-
   // Tank additions logged on the Cellar tab, grouped by day for the chart.
   const added = (batch.tank_additions ?? [])
     .filter((a) => a.added_on)
@@ -140,6 +141,23 @@ export default function FermentationSection({ batch, og = batch.actual_og, check
   const byDay = new Map()
   for (const a of added) if (a.day != null) byDay.set(a.day, [...(byDay.get(a.day) ?? []), a.item_name])
   const events = [...byDay].map(([day, names]) => ({ day, label: names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0] }))
+  const target = batch.recipes?.target_abv != null ? Number(batch.recipes.target_abv) : null
+  const band = og != null && target != null ? (() => {
+    const abvLo = target - ABV_TOLERANCE, abvHi = target + ABV_TOLERANCE
+    return { lo: fgForAbv(og, abvHi), hi: fgForAbv(og, abvLo), abvLo, abvHi }
+  })() : null
+  return { readings, points, added, events, target, band }
+}
+
+// Just the gravity chart, for the Cellar's side-by-side view.
+export function BatchGravityChart({ batch, og }) {
+  const { points, events, band } = chartData(batch, og)
+  if (points.length < 2) return <p className="stock-muted" style={{ margin: '1rem 0' }}>{points.length ? 'One reading so far.' : 'No gravity readings yet.'}</p>
+  return <GravityChart points={points} events={events} band={band} />
+}
+
+export default function FermentationSection({ batch, og = batch.actual_og, check, onChanged }) {
+  const { readings, points, added, events } = chartData(batch, og)
 
   const [editing, setEditing] = useState(null)
   async function remove(r) {
