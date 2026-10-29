@@ -502,6 +502,15 @@ function IntensityPicker({ value, onChange, target, tolerance }) {
   );
 }
 
+// Spider diagram look: polygon rings at 3, 6 and 9, the TTT target in brand orange, batches bold.
+const TARGET_STYLE = { stroke: 'var(--orange)', fill: 'var(--orange)', strokeWidth: 2, dot: { r: 2.5, fill: 'var(--orange)', strokeWidth: 0 } };
+// Called inline (not as <SpiderGrid />): Recharts only finds its own components among a chart's children.
+const spiderGrid = () => [
+  <PolarGrid key="grid" gridType="polygon" stroke="var(--line)" />,
+  <PolarAngleAxis key="angle" dataKey="trait" tick={{ fill: 'var(--text)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-body)' }} />,
+  <PolarRadiusAxis key="radius" domain={[0, 9]} tickCount={4} tick={false} axisLine={false} />,
+];
+
 function TraitSpiderChart({ section, target, actual, height = 420 }) {
   const labels = traitLabelsFor(section);
   const chartData = TRAIT_TAXONOMY[section].flatMap(g => g.traits.map(t => {
@@ -511,12 +520,10 @@ function TraitSpiderChart({ section, target, actual, height = 420 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <RadarChart data={chartData} outerRadius="78%">
-        <PolarGrid stroke="var(--line)" />
-        <PolarAngleAxis dataKey="trait" tick={{ fill: 'var(--text-muted)', fontSize: 10.5, fontFamily: 'var(--font-mono)' }} />
-        <PolarRadiusAxis domain={[0, 9]} tick={false} axisLine={false} />
-        {target && <Radar name="TTT Target" dataKey="Target" stroke="var(--text-faint)" strokeDasharray="4 3" fill="var(--text-faint)" fillOpacity={0.05} />}
-        {actual && <Radar name="This Batch" dataKey="Batch" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.28} />}
-        <Legend wrapperStyle={{ fontSize: 12, fontFamily: 'var(--font-body)' }} />
+        {spiderGrid()}
+        {target && <Radar name="TTT Target" dataKey="Target" {...TARGET_STYLE} fillOpacity={actual ? 0.1 : 0.2} />}
+        {actual && <Radar name="This Batch" dataKey="Batch" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.3} strokeWidth={2.5} dot={{ r: 3, fill: 'var(--accent)', strokeWidth: 0 }} />}
+        <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12.5, fontFamily: 'var(--font-body)', paddingTop: 6 }} />
       </RadarChart>
     </ResponsiveContainer>
   );
@@ -535,14 +542,12 @@ function MultiBatchSpiderChart({ section, target, series, height = 420 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <RadarChart data={chartData} outerRadius="78%">
-        <PolarGrid stroke="var(--line)" />
-        <PolarAngleAxis dataKey="trait" tick={{ fill: 'var(--text-muted)', fontSize: 10.5, fontFamily: 'var(--font-mono)' }} />
-        <PolarRadiusAxis domain={[0, 9]} tick={false} axisLine={false} />
-        {target && <Radar name="TTT Target" dataKey="Target" stroke="var(--text-faint)" strokeDasharray="4 3" fill="var(--text-faint)" fillOpacity={0.04} />}
+        {spiderGrid()}
+        {target && <Radar name="TTT Target" dataKey="Target" {...TARGET_STYLE} fillOpacity={0.08} />}
         {series.map((s, i) => (
-          <Radar key={s.label} name={s.label} dataKey={s.label} stroke={COMPARE_COLORS[i % COMPARE_COLORS.length]} fill={COMPARE_COLORS[i % COMPARE_COLORS.length]} fillOpacity={0.15} strokeWidth={2} />
+          <Radar key={s.label} name={s.label} dataKey={s.label} stroke={COMPARE_COLORS[i % COMPARE_COLORS.length]} fill={COMPARE_COLORS[i % COMPARE_COLORS.length]} fillOpacity={0.14} strokeWidth={2.5} dot={{ r: 2.5, fill: COMPARE_COLORS[i % COMPARE_COLORS.length], strokeWidth: 0 }} />
         ))}
-        <Legend wrapperStyle={{ fontSize: 12, fontFamily: 'var(--font-body)' }} />
+        <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12.5, fontFamily: 'var(--font-body)', paddingTop: 6 }} />
       </RadarChart>
     </ResponsiveContainer>
   );
@@ -2778,7 +2783,7 @@ function TrendsView({ store }) {
               <XAxis dataKey="batch" tick={{ fill: 'var(--text-muted)', fontSize: 11, fontFamily: 'var(--font-mono)' }} />
               <YAxis domain={[0, 8]} tick={{ fill: 'var(--text-muted)', fontSize: 11, fontFamily: 'var(--font-mono)' }} />
               <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line)', fontSize: 12.5 }} />
-              <Legend wrapperStyle={{ fontSize: 12, fontFamily: 'var(--font-body)' }} />
+              <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: 12.5, fontFamily: 'var(--font-body)', paddingTop: 6 }} />
               <Line type="monotone" dataKey="Aroma deviation" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="Flavour & Body deviation" stroke="var(--bad)" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
