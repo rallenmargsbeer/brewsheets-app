@@ -40,7 +40,9 @@ import {
   listBeerColours,
   syncBookingDates,
   listBookingEntries,
+  bookingBrewDay,
   setBookingDates,
+  getBookingDates,
   saveBeerColour,
   deleteBeerColour,
 } from '../lib/schedule'
@@ -103,7 +105,12 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
   const chosenBt = btId ? brightTanks.find((t) => t.id === btId) : suggestedBt
 
   useEffect(() => {
-    if (bookingId) getBooking(bookingId).then((b) => { setBooking(b); setMoveTo(b.brew_date) }).catch(() => {})
+    if (bookingId) getBooking(bookingId).then(async (b) => {
+      // Show (and move from) the brew day its cells are actually on.
+      const day = bookingBrewDay(b, await listBookingEntries(b.id).catch(() => []))
+      setBooking({ ...b, brew_date: day })
+      setMoveTo(day)
+    }).catch(() => {})
   }, [bookingId])
 
   async function run(fn) {
@@ -659,14 +666,20 @@ export default function SchedulePage() {
     if (del.length || upd.length) applyCells(`Clear ${rectLabel(q)}`, { del, upd })
   }
   // One undo step for deletes, moves and inserts; booked brews' dates follow their brew cells.
-  function applyCells(label, { del = [], upd = [], ins = [] }) {
+  function applyCells(label, { del = [], upd = [], ins = [], bookingDate = null }) {
     perform(async () => {
       const before = await getEntriesByIds([...del.map((e) => e.id), ...upd.map((u) => u.id)])
       await deleteEntries(del.map((e) => e.id))
       if (upd.length) await updateEntries(upd)
       const created = ins.length ? await insertEntries(ins) : []
-      const bookingIds = before.filter((b) => b.booking_id && upd.some((u) => u.id === b.id)).map((b) => b.booking_id)
+      const bookingIds = before.filter((b) => b.booking_id && upd.some((u) => u.id === b.id) && b.booking_id !== bookingDate?.id).map((b) => b.booking_id)
       const prevDates = bookingIds.length ? await syncBookingDates(bookingIds) : []
+      // A whole-brew move sets that booking's date to the day picked.
+      if (bookingDate) {
+        const [old] = await getBookingDates([bookingDate.id])
+        await setBookingDates([{ id: bookingDate.id, brew_date: bookingDate.to }])
+        if (old) prevDates.push(old)
+      }
       pushUndo(label, async () => {
         await restoreEntries(before, created)
         if (prevDates.length) await setBookingDates(prevDates)
@@ -693,14 +706,27 @@ export default function SchedulePage() {
     } else editCell(r, ci)
   }
 
-  // All of a booked brew's cells, even ones beyond the loaded weeks, move together.
+  // All of a booked brew's cells, even ones beyond the loaded weeks, move together, measured from
+  // the brew day its cells are on. Anything already in the cells it lands on is listed first.
   async function moveBookingTo(booking, newDate) {
-    const days = daysBetween(booking.brew_date, newDate)
-    if (!days) return
     const rows = await listBookingEntries(booking.id)
     if (!rows.length) return
+    const from = bookingBrewDay(booking, rows)
+    const days = daysBetween(from, newDate)
+    if (!days) return
+    const moved = rows.map((r) => ({ ...r, entry_date: addDays(r.entry_date, days) }))
+    const dates = moved.map((r) => r.entry_date).sort()
+    const there = await listScheduleEntries(dates[0], dates[dates.length - 1])
+    const at = (r) => `${r.entry_date}|${r.slot}|${r.lane}|${r.tank_id ?? ''}`
+    const targets = new Set(moved.map(at))
+    const clashes = there.filter((e) => e.booking_id !== booking.id && (e.text ?? '').trim() && targets.has(at(e)))
+    if (clashes.length) {
+      const list = clashes.slice(0, 8).map((e) => `${fmtDay(e.entry_date)} ${e.slot} ${e.tank_id ? tankLabel(tanks.find((t) => t.id === e.tank_id)?.name) : e.lane}: ${e.text}`).join('\n')
+      if (!window.confirm(`Moving ${booking.beer_name} to ${fmtDay(newDate)} lands on ${clashes.length} cell${clashes.length === 1 ? '' : 's'} already in use:\n\n${list}${clashes.length > 8 ? '\n…' : ''}\n\nMove it anyway?`)) return
+    }
     applyCells(`Move ${booking.beer_name} brew ${days > 0 ? '+' : ''}${days} day${Math.abs(days) === 1 ? '' : 's'}`, {
-      upd: rows.map((r) => ({ id: r.id, entry_date: addDays(r.entry_date, days) })),
+      upd: moved.map((r) => ({ id: r.id, entry_date: r.entry_date })),
+      bookingDate: { id: booking.id, to: newDate },
     })
   }
   function openArchive(ym) {
