@@ -581,6 +581,8 @@ export async function deleteDoCheck(id) {
 
 // ---- Tank additions (dry hops etc., added in the cellar) ----
 
+export const BIOFINE = 'Biofine Clear A3'
+
 // Seeds a batch's tank checklist from the recipe's non-yeast fermenter additions,
 // sized for the whole batch.
 async function createTankAdditions(batchId, recipe, batchVolumeL) {
@@ -594,6 +596,11 @@ async function createTankAdditions(batchId, recipe, batchVolumeL) {
       timing_note: f.timing_notes ?? null,
       sort_order: f.sort_order ?? i,
     }))
+  // Biofine is a recipe field (mL per litre), dosed in the FV before transfer to the BBT.
+  // mL is logged as grams (Unleashed counts it in kg, about 1 g/mL).
+  if (Number(recipe.biofine_ml_per_l) > 0) {
+    rows.push({ batch_id: batchId, item_name: BIOFINE, planned_qty: Number(recipe.biofine_ml_per_l) * batchVolumeL, timing_note: 'Before transfer', sort_order: 900 })
+  }
   if (rows.length === 0) return
   const { error } = await supabase.from('tank_additions').insert(rows)
   if (error) throw error
