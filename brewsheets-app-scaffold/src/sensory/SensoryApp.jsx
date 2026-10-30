@@ -508,7 +508,8 @@ function IntensityPicker({ value, onChange, target, tolerance }) {
     <div style={{ display: 'flex', gap: 4 }}>
       {INTENSITY_LEVELS.map(lvl => {
         const active = value === lvl.score;
-        const isTarget = target === lvl.score;
+        // Targets can be panel averages between levels: outline the nearest level (both when halfway).
+        const isTarget = target != null && Math.abs(target - lvl.score) <= 1;
         return (
           <button key={lvl.score} type="button" onClick={() => onChange(lvl.score)} title={lvl.label} style={{
             flex: 1, padding: '6px 2px', fontSize: 10.5, borderRadius: 5, cursor: 'pointer', fontFamily: 'var(--font-mono)',
