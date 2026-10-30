@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { abvCheck } from '../lib/batchFigures'
+import { abvCheck, withinExcise } from '../lib/batchFigures'
 
 const fmt = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 
@@ -15,20 +15,27 @@ export default function ExcisePage() {
   useEffect(() => {
     supabase
       .from('batches')
-      .select('id, batch_number, beer_style, package_date, abv, fv_to_bbt_l, daw_added_l, og_override, recipes(name, target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brewhouse_yield_l, brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
+      .select('id, batch_number, beer_style, package_date, abv, target_abv, fv_to_bbt_l, daw_added_l, og_override, recipes(name, target_abv, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brewhouse_yield_l, brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
       .eq('status', 'packaged')
       .not('package_date', 'is', null)
       .order('package_date', { ascending: false })
       .then(({ data, error }) => {
         if (error) return setError(error.message)
-        setRows(data.map((b) => ({
-          id: b.id,
-          num: b.batch_number,
-          sku: b.beer_style || b.recipes?.name || '',
-          date: b.package_date,
-          abv: abvCheck(b).abv ?? (b.abv != null ? Number(b.abv) : null),
-          type: b.recipes?.is_rtd ? 'RTD' : 'Beer',
-        })))
+        setRows(data.map((b) => {
+          const check = abvCheck(b)
+          const abv = check.abv ?? (b.abv != null ? Number(b.abv) : null)
+          return {
+            id: b.id,
+            num: b.batch_number,
+            sku: b.beer_style || b.recipes?.name || '',
+            date: b.package_date,
+            abv,
+            target: check.target,
+            // Green within excise range of the target ABV, red outside; no colour without a target.
+            ok: abv == null || check.target == null ? null : withinExcise(abv, check.target),
+            type: b.recipes?.is_rtd ? 'RTD' : 'Beer',
+          }
+        }))
       })
   }, [])
 
@@ -63,7 +70,7 @@ export default function ExcisePage() {
                 <td>{r.num}</td>
                 <td>{r.sku}</td>
                 <td>{fmt(r.date)}</td>
-                <td style={{ textAlign: 'right' }}>{r.abv == null ? '—' : `${r.abv.toFixed(2)}%`}</td>
+                <td className={r.ok == null ? '' : r.ok ? 'abv-cell ok' : 'abv-cell bad'} style={{ textAlign: 'right' }} title={r.target != null ? `Target ${r.target}%` : undefined}>{r.abv == null ? '—' : `${r.abv.toFixed(2)}%`}</td>
                 <td>{r.type}</td>
               </tr>
             ))}
