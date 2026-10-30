@@ -514,8 +514,8 @@ function IntensityPicker({ value, onChange, target, tolerance }) {
           <button key={lvl.score} type="button" onClick={() => onChange(lvl.score)} title={lvl.label} style={{
             flex: 1, padding: '6px 2px', fontSize: 10.5, borderRadius: 5, cursor: 'pointer', fontFamily: 'var(--font-mono)',
             border: `1px solid ${isTarget ? 'var(--accent)' : 'var(--line)'}`,
-            background: active ? (offTarget ? '#fdecea' : '#e3f1e5') : 'transparent',
-            color: active ? (offTarget ? 'var(--bad)' : 'var(--good)') : 'var(--text-muted)',
+            background: active ? (target == null ? '#e1f0f3' : offTarget ? '#fdecea' : '#e3f1e5') : 'transparent',
+            color: active ? (target == null ? 'var(--accent)' : offTarget ? 'var(--bad)' : 'var(--good)') : 'var(--text-muted)',
             fontWeight: active ? 700 : 400,
           }}>{lvl.label.split(' ').map(w => w[0]).join('')}</button>
         );
@@ -723,13 +723,14 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
           {Object.keys(SECTION_LABELS).map(sec => (
             <div key={sec}>
               <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', textAlign: 'center' }}>{SECTION_LABELS[sec]}</p>
-              <TraitSpiderChart section={sec} target={sku ? sku.target[sec] : null} actual={scores[sec]} height={440} />
+              <TraitSpiderChart section={sec} target={null} actual={scores[sec]} height={440} />
             </div>
           ))}
         </div>
       </Card>}
 
-      <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 24 }}>
+      {/* Blind: no TTT target, reference notes or watch-outs while tasting. */}
+      <div style={{ maxWidth: 760 }}>
         <Card>
           <h3 style={{ margin: '0 0 4px', fontFamily: 'var(--font-display)', fontSize: 20 }}>{editSession ? 'Edit tasting' : 'Log a tasting'}</h3>
           <p style={{ margin: '0 0 20px', color: 'var(--text-muted)', fontSize: 13 }}>Tasting as <strong style={{ color: 'var(--text)' }}>{currentProfile.name}</strong></p>
@@ -791,7 +792,7 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
           {showGlossary && <TraitGlossaryModal onClose={() => setShowGlossary(false)} />}
 
           <TraitSectionEditor section={activeSection} scores={scores[activeSection]} onChange={(id, v) => setTraitScore(activeSection, id, v)}
-            target={sku ? sku.target[activeSection] : null} tolerance={sku ? sku.tolerance : 2} />
+            target={null} />
           </>)}
 
           <Field label="Off-flavors detected">
@@ -853,15 +854,6 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
             <Check size={15} /> {submitting ? 'Saving…' : editSession ? 'Save changes' : 'Submit tasting'}
           </Button>
         </Card>
-
-        {sku && (
-          <Card style={{ alignSelf: 'start' }}>
-            <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>True-to-type reference</p>
-            <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5 }}>{sku.notes}</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>{sku.descriptors.map(d => <Pill key={d}>{d}</Pill>)}</div>
-            {sku.watchouts.length > 0 && <p style={{ margin: 0, fontSize: 12, color: 'var(--bad)' }}>Watch for: {sku.watchouts.join(', ')}</p>}
-          </Card>
-        )}
       </div>
     </div>
   );
