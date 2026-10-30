@@ -4,7 +4,7 @@ import { abvCheck, withinExcise } from '../lib/batchFigures'
 
 const fmt = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 
-// Fully packaged batches for the accounts team: batch #, SKU, packaged date, ABV, beer or RTD.
+// Fully packaged batches for the accounts team: batch #, SKU, packaged date, ABV, expected ABV, beer or RTD.
 // A batch shows once it's packaged (Tank empty ticked on its last pack-off).
 export default function ExcisePage() {
   const [rows, setRows] = useState(null)
@@ -43,7 +43,7 @@ export default function ExcisePage() {
 
   function downloadCsv() {
     const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`
-    const lines = [['Batch #', 'SKU', 'Packaged', 'ABV %', 'Type'], ...shown.map((r) => [r.num, r.sku, r.date, r.abv == null ? '' : r.abv.toFixed(2), r.type])]
+    const lines = [['Batch #', 'SKU', 'Packaged', 'ABV %', 'Expected ABV %', 'Type'], ...shown.map((r) => [r.num, r.sku, r.date, r.abv == null ? '' : r.abv.toFixed(2), r.target ?? '', r.type])]
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([lines.map((l) => l.map(q).join(',')).join('\n')], { type: 'text/csv' }))
     a.download = `excise${from ? `-from-${from}` : ''}${to ? `-to-${to}` : ''}.csv`
@@ -63,7 +63,7 @@ export default function ExcisePage() {
       {!rows && !error && <p>Loading…</p>}
       {rows && (
         <table className="batches-table">
-          <thead><tr><th>Batch #</th><th>SKU</th><th>Packaged</th><th style={{ textAlign: 'right' }}>ABV</th><th>Beer / RTD</th></tr></thead>
+          <thead><tr><th>Batch #</th><th>SKU</th><th>Packaged</th><th style={{ textAlign: 'right' }}>ABV</th><th style={{ textAlign: 'right' }}>Expected ABV</th><th>Beer / RTD</th></tr></thead>
           <tbody>
             {shown.map((r) => (
               <tr key={r.id}>
@@ -71,10 +71,11 @@ export default function ExcisePage() {
                 <td>{r.sku}</td>
                 <td>{fmt(r.date)}</td>
                 <td className={r.ok == null ? '' : r.ok ? 'abv-cell ok' : 'abv-cell bad'} style={{ textAlign: 'right' }} title={r.target != null ? `Target ${r.target}%` : undefined}>{r.abv == null ? '—' : `${r.abv.toFixed(2)}%`}</td>
+                <td style={{ textAlign: 'right' }}>{r.target == null ? '—' : `${Number(r.target).toFixed(2)}%`}</td>
                 <td>{r.type}</td>
               </tr>
             ))}
-            {!shown.length && <tr><td colSpan={5} className="stock-muted">No packaged batches{from || to ? ' in these dates' : ' yet'}.</td></tr>}
+            {!shown.length && <tr><td colSpan={6} className="stock-muted">No packaged batches{from || to ? ' in these dates' : ' yet'}.</td></tr>}
           </tbody>
         </table>
       )}
