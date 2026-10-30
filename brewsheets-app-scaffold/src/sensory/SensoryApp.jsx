@@ -668,6 +668,8 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
 
   const batch = store.batches.find(b => b.id === batchId);
   const sku = batch ? store.skus.find(s => s.id === batch.sku_id) : null;
+  // Retention is off-flavours, notes and an overall call: no trait scores or spider charts.
+  const isRetention = !spike && tastingType === 'retention';
   const dueCheckpoints = batch ? store.retention.filter(r => r.batch_id === batch.id && (!r.assessed || r.id === retentionCheckpointId)) : [];
 
   const toggleOff = (f) => setOffFlavors(prev =>
@@ -682,13 +684,13 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
 
   const submit = async () => {
     if (!batchId) return;
-    if (!hasAnyScoreChanged() && offFlavors.length === 0 && !notes.trim()) {
+    if (!isRetention && !hasAnyScoreChanged() && offFlavors.length === 0 && !notes.trim()) {
       if (!window.confirm("This tasting doesn't have any scores, off-flavors, or notes filled in — submit anyway?")) return;
     }
     setSubmitting(true); setError('');
     try {
       const payload = {
-        batchId, date: editSession ? editSession.date : todayISO(), scores, overall, offFlavors, notes,
+        batchId, date: editSession ? editSession.date : todayISO(), scores: isRetention ? { aroma: {}, flavor: {} } : scores, overall, offFlavors, notes,
         retentionCheckpointId: tastingType === 'retention' ? (retentionCheckpointId || null) : null,
         tastingType: spike ? 'ttt' : tastingType,
         spikeId: spike ? spike.id : null,
@@ -713,7 +715,7 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
 
   return (
     <div>
-      <Card style={{ marginBottom: 20 }}>
+      {!isRetention && <Card style={{ marginBottom: 20 }}>
         <h4 style={{ margin: '0 0 2px', fontFamily: 'var(--font-display)', fontSize: 18 }}>{sku ? sku.name : 'No SKU selected'}</h4>
         <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-muted)' }}>{sku ? `${sku.style} · ${sku.abv}% ABV` : ''}</p>
         <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -724,7 +726,7 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
             </div>
           ))}
         </div>
-      </Card>
+      </Card>}
 
       <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 24 }}>
         <Card>
@@ -771,6 +773,7 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
             </Field>
           )}
 
+          {!isRetention && (<>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             {Object.keys(SECTION_LABELS).map(sec => (
               <button key={sec} type="button" onClick={() => setActiveSection(sec)} style={{
@@ -788,6 +791,7 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
 
           <TraitSectionEditor section={activeSection} scores={scores[activeSection]} onChange={(id, v) => setTraitScore(activeSection, id, v)}
             target={sku ? sku.target[activeSection] : null} tolerance={sku ? sku.tolerance : 2} />
+          </>)}
 
           <Field label="Off-flavors detected">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: offFlavors.length > 0 ? 10 : 0 }}>
@@ -1006,7 +1010,7 @@ function SessionResultBatch({ be, store, relevantTastings }) {
           <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>{batch ? batch.batch_number : '—'} — {sku ? sku.name : 'Unknown SKU'}</h3>
           <Pill tone={be.panelType === 'retention' ? 'warn' : 'neutral'}>{be.panelType === 'retention' ? 'Retention' : 'TTT'}</Pill>
         </div>
-        {tastings.length > 1 && (
+        {tastings.length > 1 && be.panelType !== 'retention' && (
           <div className="no-print" style={{ display: 'flex', gap: 6 }}>
             <button type="button" onClick={() => setMode('averaged')} style={{
               fontSize: 12, padding: '6px 12px', borderRadius: 20, cursor: 'pointer',
@@ -1024,7 +1028,7 @@ function SessionResultBatch({ be, store, relevantTastings }) {
         )}
       </div>
 
-      <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 18 }}>
+      {be.panelType !== 'retention' && <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 18 }}>
         {mode === 'averaged' ? (
           <>
             <TraitSpiderChart section="aroma" target={target ? target.aroma : null} actual={avgScoresBySection.aroma} height={420} />
@@ -1036,7 +1040,7 @@ function SessionResultBatch({ be, store, relevantTastings }) {
             <MultiBatchSpiderChart section="flavor" target={target ? target.flavor : null} series={seriesBySection.flavor} height={420} />
           </>
         )}
-      </div>
+      </div>}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
         {tastings.map(t => (
