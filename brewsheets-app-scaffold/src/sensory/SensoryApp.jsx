@@ -149,6 +149,8 @@ function useSupabaseData(session) {
   const [qcLocations, setQcLocations] = useState([]);
   const [qcSamples, setQcSamples] = useState([]);
   const [qcTests, setQcTests] = useState([]);
+  const [spikes, setSpikes] = useState([]);
+  const [spikeTastings, setSpikeTastings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [error, setError] = useState(null);
@@ -156,7 +158,7 @@ function useSupabaseData(session) {
   const loadAll = async () => {
     setLoading(true); setError(null);
     try {
-      const [s, b, r, se, p, pb, bc, ss, ssp, sspt, pr, ql, qs, qt] = await Promise.all([
+      const [s, b, r, se, p, pb, bc, ss, ssp, sspt, pr, ql, qs, qt, sk] = await Promise.all([
         supabase.from('sensory_skus').select('*'),
         supabase.from('sensory_batches').select('*'),
         supabase.from('sensory_retention_checkpoints').select('*'),
@@ -171,12 +173,16 @@ function useSupabaseData(session) {
         supabase.from('sensory_qc_locations').select('*'),
         supabase.from('sensory_qc_samples').select('*'),
         supabase.from('sensory_qc_tests').select('*'),
+        supabase.from('sensory_spikes').select('*').order('created_at'),
       ]);
       if (s.error) throw s.error;
       setSkus(s.data || []);
       setBatches((b.data || []).sort((a, b2) => Number(b2.batch_number) - Number(a.batch_number)));
       setRetention(r.data || []);
-      setSessions(se.data || []);
+      // Tastings of spiked samples are kept apart: they never count towards a batch's results.
+      setSessions((se.data || []).filter(t => !t.spike_id));
+      setSpikeTastings((se.data || []).filter(t => t.spike_id));
+      setSpikes(sk.data || []);
       setPanels(p.data || []);
       setPanelBatches(pb.data || []);
       setBriteChecks(bc.data || []);
@@ -293,6 +299,7 @@ function useSupabaseData(session) {
       overall: sess.overall, off_flavors: sess.offFlavors, notes: sess.notes,
       retention_checkpoint_id: sess.retentionCheckpointId || null,
       tasting_type: sess.tastingType || 'ttt',
+      spike_id: sess.spikeId || null,
     });
     if (error) throw error;
     if (sess.retentionCheckpointId) {
@@ -315,6 +322,20 @@ function useSupabaseData(session) {
     }
     await loadAll();
     triggerCompletionCheck();
+  };
+
+  const addSpike = async ({ sessionId, baseBatchId, offFlavor, label, notes }) => {
+    const { error } = await supabase.from('sensory_spikes').insert({
+      sensory_session_id: sessionId, base_batch_id: baseBatchId, off_flavor: offFlavor, label, notes: notes || '', created_by: session.user.id,
+    });
+    if (error) throw error;
+    await loadAll();
+  };
+
+  const deleteSpike = async (spikeId) => {
+    const { error } = await supabase.from('sensory_spikes').delete().eq('id', spikeId);
+    if (error) throw error;
+    await loadAll();
   };
 
   const deleteSession = async (sessionId) => {
@@ -439,10 +460,10 @@ function useSupabaseData(session) {
   };
 
   return {
-    skus, batches, retention, sessions, panels, panelBatches, briteChecks, profiles, profileName,
+    skus, batches, retention, sessions, spikes, spikeTastings, panels, panelBatches, briteChecks, profiles, profileName,
     sensorySessions, sensorySessionPanels, sensorySessionParticipants, qcLocations, qcSamples, qcTests,
     loading, initialLoadDone, error, reload: loadAll,
-    addSku, updateSku, addBatch, addSession, updateSession, deleteSession, createPanel, deletePanel, reorderPanelBatch, importBatches, addBriteCheck,
+    addSku, updateSku, addBatch, addSession, updateSession, deleteSession, addSpike, deleteSpike, createPanel, deletePanel, reorderPanelBatch, importBatches, addBriteCheck,
     createSensorySession, deleteSensorySession, updateSessionParticipants, finishSensorySession, updateProfileRole,
     addQcSample, logQcResult, addQcLocation, updateQcLocation, deleteQcSample,
   };
@@ -628,7 +649,9 @@ function TraitGlossaryModal({ onClose }) {
   );
 }
 
-function TastingForm({ store, currentProfile, onDone, presetBatchId, presetTastingType, activePanelId, editSession }) {
+function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike, presetTastingType, activePanelId, editSession }) {
+  // A spiked sample: scored like any other, but the taster only sees the lead's label for it.
+  const spike = editSession ? (editSession.spike_id ? store.spikes.find(k => k.id === editSession.spike_id) || { label: 'Sample' } : null) : presetSpike || null;
   const [batchId, setBatchId] = useState(editSession ? editSession.batch_id : (presetBatchId || (store.batches[0] ? store.batches[0].id : '')));
   useEffect(() => { if (presetBatchId && !editSession) setBatchId(presetBatchId); }, [presetBatchId]);
   const [tastingType, setTastingType] = useState(editSession ? editSession.tasting_type : (presetTastingType || 'ttt'));
@@ -678,7 +701,8 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetTasti
       const payload = {
         batchId, date: editSession ? editSession.date : todayISO(), scores, overall, offFlavors, notes,
         retentionCheckpointId: tastingType === 'retention' ? (retentionCheckpointId || null) : null,
-        tastingType,
+        tastingType: spike ? 'ttt' : tastingType,
+        spikeId: spike ? spike.id : null,
       };
       if (editSession) {
         await store.updateSession(editSession.id, payload);
@@ -733,6 +757,9 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetTasti
           <p style={{ margin: '0 0 20px', color: 'var(--text-muted)', fontSize: 13 }}>Tasting as <strong style={{ color: 'var(--text)' }}>{currentProfile.name}</strong></p>
           {justAdvanced && <p style={{ margin: '0 0 16px', padding: '8px 12px', background: 'rgba(122,157,122,0.16)', color: 'var(--good)', borderRadius: 6, fontSize: 12.5 }}>{justAdvanced}</p>}
 
+          {spike ? (
+            <Field label="Sample"><p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{spike.label}</p></Field>
+          ) : (<>
           <Field label="Tasting type">
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" onClick={() => setTastingType('ttt')} style={{
@@ -759,7 +786,9 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetTasti
             </select>
           </Field>
 
-          {tastingType === 'retention' && dueCheckpoints.length > 0 && (
+          </>)}
+
+          {!spike && tastingType === 'retention' && dueCheckpoints.length > 0 && (
             <Field label="Retention checkpoint">
               <select style={inputStyle} value={retentionCheckpointId} onChange={e => setRetentionCheckpointId(e.target.value)}>
                 <option value="">Not a scheduled checkpoint</option>
@@ -898,8 +927,13 @@ function computeSessionProgress(sess, store) {
       if (store.sessions.some(s => s.batch_id === be.batchId && s.taster_id === uid && s.tasting_type === be.panelType)) done++;
     });
   });
+  const spikes = store.spikes.filter(k => k.sensory_session_id === sess.id);
+  spikes.forEach(k => participantIds.forEach(uid => {
+    total++;
+    if (store.spikeTastings.some(t => t.spike_id === k.id && t.taster_id === uid)) done++;
+  }));
 
-  return { panelsInfo, participantIds, batchEntries, total, done };
+  return { panelsInfo, participantIds, batchEntries, spikes, total, done };
 }
 
 function SessionBuilder({ store }) {
@@ -1113,6 +1147,101 @@ function SessionResultsModal({ sess, store, onClose }) {
   );
 }
 
+// Did a taster pick up a spike? Hit: they named the spiked off-flavour. Partial: they called
+// something off (another off-flavour, or flag / fail) but not that one. Miss: passed it clean.
+function spikeOutcome(spike, tasting) {
+  if (!tasting) return null;
+  const offs = tasting.off_flavors || [];
+  if (offs.some(o => o.flavor === spike.off_flavor)) return 'hit';
+  if (offs.length || tasting.overall !== 'pass') return 'partial';
+  return 'miss';
+}
+const SPIKE_OUTCOME = { hit: ['good', 'Picked it'], partial: ['warn', 'Something off'], miss: ['bad', 'Missed'] };
+
+// Where each spike sits among a session's samples, so it doesn't always come last.
+function placeSpikes(entries, spikes) {
+  const out = [...entries];
+  spikes.forEach(k => {
+    const h = [...k.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+    out.splice(h % (out.length + 1), 0, { spike: k });
+  });
+  return out;
+}
+
+function SpikePanel({ sess, store, progress }) {
+  const [adding, setAdding] = useState(false);
+  const [baseBatchId, setBaseBatchId] = useState('');
+  const [offFlavor, setOffFlavor] = useState(OFF_FLAVORS[0]);
+  const [label, setLabel] = useState('');
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const packaged = store.batches.filter(b => b.package_date);
+  const batchName = (id) => {
+    const b = store.batches.find(x => x.id === id);
+    const k = b ? store.skus.find(x => x.id === b.sku_id) : null;
+    return b ? `${b.batch_number} — ${k ? k.name : ''}` : '—';
+  };
+  const pickBatch = (id) => { setBaseBatchId(id); if (!label.trim() || packaged.some(b => batchName(b.id) === label)) setLabel(id ? batchName(id) : ''); };
+  const save = async () => {
+    setBusy(true);
+    try {
+      await store.addSpike({ sessionId: sess.id, baseBatchId, offFlavor, label: label.trim(), notes });
+      setAdding(false); setBaseBatchId(''); setLabel(''); setNotes('');
+    } catch (e) { alert(e.message || 'Could not add — try again.'); } finally { setBusy(false); }
+  };
+  const remove = async (k) => {
+    if (!window.confirm(`Remove the spiked "${k.label}"? Any tastings of it are deleted too.`)) return;
+    try { await store.deleteSpike(k.id); } catch (e) { alert(e.message || 'Could not remove — try again.'); }
+  };
+  return (
+    <div style={{ background: 'var(--surface-2)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: progress.spikes.length || adding ? 8 : 0 }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Spiked samples <span style={{ fontWeight: 400, textTransform: 'none' }}>· only leads see this</span></p>
+        {!adding && sess.status !== 'complete' && <Button variant="ghost" onClick={() => setAdding(true)} style={{ fontSize: 11, padding: '3px 8px' }}><Plus size={12} /> Add spike</Button>}
+      </div>
+      {adding && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, marginBottom: 10 }}>
+          <Field label="Base beer">
+            <select style={inputStyle} value={baseBatchId} onChange={e => pickBatch(e.target.value)}>
+              <option value="">Pick a batch…</option>
+              {packaged.map(b => <option key={b.id} value={b.id}>{batchName(b.id)}</option>)}
+            </select>
+          </Field>
+          <Field label="Spiked with">
+            <select style={inputStyle} value={offFlavor} onChange={e => setOffFlavor(e.target.value)}>
+              {OFF_FLAVORS.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </Field>
+          <Field label="Tasters see it as">
+            <input style={inputStyle} value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. 431 — Drift, or Sample X" />
+          </Field>
+          <Field label="Dose / notes">
+            <input style={inputStyle} value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. 2x threshold" />
+          </Field>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
+            <Button onClick={save} disabled={busy || !baseBatchId || !label.trim()} style={{ fontSize: 12, padding: '6px 10px' }}>{busy ? 'Saving…' : 'Add'}</Button>
+            <Button variant="ghost" onClick={() => setAdding(false)} style={{ fontSize: 12, padding: '6px 10px' }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+      {progress.spikes.map(k => (
+        <div key={k.id} style={{ borderTop: '1px solid var(--line)', padding: '8px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 13 }}><strong>{k.label}</strong> <span style={{ color: 'var(--text-muted)' }}>· {batchName(k.base_batch_id)} spiked with {k.off_flavor}{k.notes ? ` (${k.notes})` : ''}</span></span>
+            <Button variant="ghost" onClick={() => remove(k)} style={{ fontSize: 11, padding: '3px 8px' }}><X size={12} /></Button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+            {progress.participantIds.map(uid => {
+              const o = spikeOutcome(k, store.spikeTastings.find(t => t.spike_id === k.id && t.taster_id === uid));
+              return <Pill key={uid} tone={o ? SPIKE_OUTCOME[o][0] : 'neutral'}>{store.profileName(uid)}: {o ? SPIKE_OUTCOME[o][1] : 'not tasted'}</Pill>;
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SessionCard({ sess, store, isLead, currentProfile, onLogTasting, onEditTasting }) {
   const progress = computeSessionProgress(sess, store);
   const [expanded, setExpanded] = useState(!isLead);
@@ -1211,10 +1340,23 @@ function SessionCard({ sess, store, isLead, currentProfile, onLogTasting, onEdit
           </p>
         )
       )}
+      {isLead && (expanded || sess.status === 'complete' || progress.spikes.length > 0) && <SpikePanel sess={sess} store={store} progress={progress} />}
 
       {sess.status !== 'complete' && expanded && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {progress.batchEntries.map(be => {
+          {placeSpikes(progress.batchEntries, isLead ? [] : progress.spikes).map(be => {
+            if (be.spike) {
+              const k = be.spike;
+              const mine = store.spikeTastings.find(t => t.spike_id === k.id && t.taster_id === currentProfile.id);
+              return (
+                <div key={k.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6 }}>
+                  <span style={{ fontSize: 13.5 }}>{k.label} <Pill tone="neutral">TTT</Pill></span>
+                  {mine ? <Button variant="ghost" onClick={() => onEditTasting(mine)} style={{ fontSize: 12, padding: '6px 10px' }}>✓ Tasted — edit</Button> : (
+                    <Button variant="ghost" onClick={() => onLogTasting(k.base_batch_id, 'ttt', null, k)} style={{ fontSize: 12, padding: '6px 10px' }}>Taste now <ChevronRight size={13} /></Button>
+                  )}
+                </div>
+              );
+            }
             const batch = store.batches.find(b => b.id === be.batchId);
             const sku = batch ? store.skus.find(s => s.id === batch.sku_id) : null;
             const myTasting = store.sessions.find(s => s.batch_id === be.batchId && s.taster_id === currentProfile.id && s.tasting_type === be.panelType);
@@ -2985,6 +3127,41 @@ function TasterCalibration({ store }) {
   );
 }
 
+// Spiked samples per taster: how often they named the spiked off-flavour, by off-flavour.
+function SpikeDetection({ store }) {
+  const rows = useMemo(() => {
+    const by = {};
+    store.spikeTastings.forEach(t => {
+      const k = store.spikes.find(x => x.id === t.spike_id);
+      if (!k) return;
+      const r = by[t.taster_id] || (by[t.taster_id] = { tasterId: t.taster_id, n: 0, hit: 0, partial: 0, missed: {} });
+      const o = spikeOutcome(k, t);
+      r.n++;
+      if (o === 'hit') r.hit++;
+      else { if (o === 'partial') r.partial++; r.missed[k.off_flavor] = (r.missed[k.off_flavor] || 0) + 1; }
+    });
+    return Object.values(by).sort((a, b) => b.hit / b.n - a.hit / a.n);
+  }, [store.spikeTastings, store.spikes]);
+  if (!rows.length) return null;
+  return (
+    <Card style={{ marginBottom: 20 }}>
+      <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Spike detection</p>
+      <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-faint)' }}>Spiked samples each taster has scored, and how often they named the off-flavour that was added.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {rows.map(r => (
+          <div key={r.tasterId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 16, alignItems: 'center', borderBottom: '1px solid var(--line)', paddingBottom: 8 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600 }}>{store.profileName(r.tasterId)}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              {Object.keys(r.missed).length ? `missed: ${Object.entries(r.missed).map(([f, n]) => n > 1 ? `${f} ×${n}` : f).join(', ')}` : 'none missed'}
+            </span>
+            <Pill tone={r.hit / r.n >= 0.75 ? 'good' : r.hit / r.n >= 0.5 ? 'warn' : 'bad'}>{r.hit}/{r.n} picked{r.partial ? ` · ${r.partial} something off` : ''}</Pill>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function Dashboard({ store, onEditSession }) {
   const today = todayISO();
   const overdue = store.retention.filter(r => !r.assessed && r.due_date < today);
@@ -3027,6 +3204,7 @@ function Dashboard({ store, onEditSession }) {
       </div>
       <SkuHealthScoreboard store={store} />
       <TasterCalibration store={store} />
+      <SpikeDetection store={store} />
       <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <Card>
           <p style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Recent submissions</p>
@@ -3089,6 +3267,7 @@ export default function SensoryApp({ mode = 'sensory' }) {
   const [profileError, setProfileError] = useState(null);
   const [tab, setTab] = useState(mode === 'qc' ? 'qc' : 'sessions');
   const [presetBatchId, setPresetBatchId] = useState(null);
+  const [presetSpike, setPresetSpike] = useState(null);
   const [presetTastingType, setPresetTastingType] = useState(null);
   const [activePanelId, setActivePanelId] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -3212,7 +3391,7 @@ export default function SensoryApp({ mode = 'sensory' }) {
           </button>
           <div className={`mobile-dropdown-list${mobileNavOpen ? ' open' : ''}`}>
             {tabs.map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setPresetBatchId(null); setPresetTastingType(null); setActivePanelId(null); setEditingSession(null); setMobileNavOpen(false); }} style={{
+              <button key={t.id} onClick={() => { setTab(t.id); setPresetBatchId(null); setPresetSpike(null); setPresetTastingType(null); setActivePanelId(null); setEditingSession(null); setMobileNavOpen(false); }} style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4,
                 borderRadius: 7, border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13.5, fontWeight: 600,
                 background: tab === t.id ? 'var(--surface-2)' : 'transparent',
@@ -3224,10 +3403,10 @@ export default function SensoryApp({ mode = 'sensory' }) {
         </nav>
 
         <main className="sn-main" style={{ flex: 1, padding: '28px 32px', maxWidth: 1180 }}>
-          {tab === 'sessions' && <SessionsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId) => { setPresetBatchId(bid); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setEditingSession(s); setTab('submit'); }} />}
-          {tab === 'panels' && <PanelsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId) => { setPresetBatchId(bid); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setEditingSession(s); setTab('submit'); }} />}
-          {tab === 'submit' && <TastingForm store={store} currentProfile={profile} onDone={() => { setEditingSession(null); setActivePanelId(null); setTab(editingSession && isLead ? 'dashboard' : 'sessions'); }} presetBatchId={presetBatchId} presetTastingType={presetTastingType} activePanelId={editingSession ? null : activePanelId} editSession={editingSession} />}
-          {tab === 'retention' && isLead && <RetentionQueue store={store} onLogTasting={(bid, type) => { setPresetBatchId(bid); setPresetTastingType(type || null); setActivePanelId(null); setTab('submit'); }} />}
+          {tab === 'sessions' && <SessionsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId, spike) => { setPresetBatchId(bid); setPresetSpike(spike || null); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setEditingSession(s); setTab('submit'); }} />}
+          {tab === 'panels' && <PanelsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId, spike) => { setPresetBatchId(bid); setPresetSpike(spike || null); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setEditingSession(s); setTab('submit'); }} />}
+          {tab === 'submit' && <TastingForm store={store} currentProfile={profile} onDone={() => { setEditingSession(null); setActivePanelId(null); setPresetSpike(null); setTab(editingSession && isLead ? 'dashboard' : 'sessions'); }} presetBatchId={presetBatchId} presetSpike={editingSession ? null : presetSpike} presetTastingType={presetTastingType} activePanelId={editingSession ? null : activePanelId} editSession={editingSession} />}
+          {tab === 'retention' && isLead && <RetentionQueue store={store} onLogTasting={(bid, type) => { setPresetBatchId(bid); setPresetSpike(null); setPresetTastingType(type || null); setActivePanelId(null); setTab('submit'); }} />}
           {tab === 'qc' && isLead && <QcView store={store} />}
           {tab === 'incubating' && isLead && <IncubatingView store={store} />}
           {tab === 'qcDashboard' && isLead && <QcDashboard store={store} />}
