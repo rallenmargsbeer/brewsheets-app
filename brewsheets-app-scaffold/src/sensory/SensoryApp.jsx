@@ -1064,6 +1064,10 @@ function SessionResultsModal({ sess, store, onClose }) {
     );
   }, [progress, store.sessions]);
 
+  // While the session is open, show the batches tasted so far and list the rest.
+  const hasTastings = (be) => relevantTastings.some(t => t.batch_id === be.batchId && t.tasting_type === be.panelType);
+  const tasted = progress.batchEntries.filter(hasTastings);
+  const untasted = progress.batchEntries.filter(be => !hasTastings(be));
   const passCount = relevantTastings.filter(t => t.overall === 'pass').length;
   const flagCount = relevantTastings.filter(t => t.overall === 'flag').length;
   const failCount = relevantTastings.filter(t => t.overall === 'fail').length;
@@ -1112,7 +1116,13 @@ function SessionResultsModal({ sess, store, onClose }) {
             </Card>
           )}
 
-          {progress.batchEntries.map(be => (
+          {sess.status !== 'complete' && untasted.length > 0 && (
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-muted)' }}>Results so far: the session is still open. Not tasted yet: {untasted.map(be => {
+              const b = store.batches.find(x => x.id === be.batchId);
+              return `${b ? b.batch_number : '?'} (${be.panelType === 'retention' ? 'retention' : 'TTT'})`;
+            }).join(', ')}.</p>
+          )}
+          {tasted.map(be => (
             <SessionResultBatch key={`${be.batchId}-${be.panelType}`} be={be} store={store} relevantTastings={relevantTastings} />
           ))}
         </div>
@@ -1280,9 +1290,10 @@ function SessionCard({ sess, store, isLead, currentProfile, onLogTasting, onEdit
         <div style={{ display: 'flex', gap: 8 }}>
           {sess.status === 'complete' ? (
             <Button variant="ghost" onClick={() => setShowResults(true)} style={{ fontSize: 12, padding: '6px 10px' }}>View results</Button>
-          ) : (
+          ) : (<>
+            {isLead && progress.done > 0 && <Button variant="ghost" onClick={() => setShowResults(true)} style={{ fontSize: 12, padding: '6px 10px' }}>Results so far</Button>}
             <Button variant="ghost" onClick={() => setExpanded(v => !v)} style={{ fontSize: 12, padding: '6px 10px' }}>{expanded ? 'Hide' : 'View'}</Button>
-          )}
+          </>)}
           {isLead && sess.status !== 'complete' && <Button variant="ghost" onClick={handleFinish} disabled={finishing} style={{ fontSize: 12, padding: '6px 10px' }}>{finishing ? 'Finishing…' : 'Finish session'}</Button>}
           {isLead && <Button variant="danger" onClick={handleDelete} style={{ fontSize: 12, padding: '6px 10px' }}><X size={13} /> Delete</Button>}
         </div>
