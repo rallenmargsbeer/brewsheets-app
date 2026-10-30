@@ -664,7 +664,6 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
   const [retentionCheckpointId, setRetentionCheckpointId] = useState(editSession ? (editSession.retention_checkpoint_id || '') : '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [justAdvanced, setJustAdvanced] = useState('');
   const [showGlossary, setShowGlossary] = useState(false);
 
   const batch = store.batches.find(b => b.id === batchId);
@@ -675,16 +674,6 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
     prev.some(x => x.flavor === f) ? prev.filter(x => x.flavor !== f) : [...prev, { flavor: f, intensity: 3 }]);
   const setOffIntensity = (f, intensity) => setOffFlavors(prev => prev.map(x => x.flavor === f ? { ...x, intensity } : x));
   const setTraitScore = (section, id, v) => setScores(s => ({ ...s, [section]: { ...s[section], [id]: v } }));
-
-  const findNextInPanel = (justSubmittedBatchId) => {
-    if (!activePanelId) return null;
-    const doneBatchIds = new Set(
-      store.sessions.filter(s => s.taster_id === currentProfile.id && s.tasting_type === tastingType).map(s => s.batch_id)
-    );
-    doneBatchIds.add(justSubmittedBatchId);
-    const panelBatchIds = store.panelBatches.filter(pb => pb.panel_id === activePanelId).sort((a, b) => a.sort_order - b.sort_order).map(pb => pb.batch_id);
-    return panelBatchIds.find(bid => !doneBatchIds.has(bid)) || null;
-  };
 
   const hasAnyScoreChanged = () => {
     const touched = (section) => Object.values(scores[section] || {}).some(v => v !== 1);
@@ -710,24 +699,10 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
         return;
       }
 
-      const submittedBatchId = batchId;
       await store.addSession(payload);
-
-      const next = findNextInPanel(submittedBatchId);
-      if (next) {
-        const submittedBatch = store.batches.find(b => b.id === submittedBatchId);
-        setJustAdvanced(`Saved ${submittedBatch ? submittedBatch.batch_number : 'that one'} — now tasting the next beer in this panel.`);
-        setBatchId(next);
-        setScores(defaultAllScores());
-        setActiveSection('aroma');
-        setOverall('pass');
-        setOffFlavors([]);
-        setNotes('');
-        setRetentionCheckpointId('');
-      } else {
-        window.alert('Tasting submitted — thanks!');
-        onDone();
-      }
+      // From a panel: straight back to it (the beer shows as tasted there). Otherwise confirm.
+      if (!activePanelId) window.alert('Tasting submitted — thanks!');
+      onDone();
     } catch (e) {
       setError(e.message || 'Could not submit — try again.');
     } finally {
@@ -755,7 +730,6 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
         <Card>
           <h3 style={{ margin: '0 0 4px', fontFamily: 'var(--font-display)', fontSize: 20 }}>{editSession ? 'Edit tasting' : 'Log a tasting'}</h3>
           <p style={{ margin: '0 0 20px', color: 'var(--text-muted)', fontSize: 13 }}>Tasting as <strong style={{ color: 'var(--text)' }}>{currentProfile.name}</strong></p>
-          {justAdvanced && <p style={{ margin: '0 0 16px', padding: '8px 12px', background: 'rgba(122,157,122,0.16)', color: 'var(--good)', borderRadius: 6, fontSize: 12.5 }}>{justAdvanced}</p>}
 
           {spike ? (
             <Field label="Sample"><p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{spike.label}</p></Field>
@@ -3266,6 +3240,7 @@ export default function SensoryApp({ mode = 'sensory' }) {
   const [profile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState(null);
   const [tab, setTab] = useState(mode === 'qc' ? 'qc' : 'sessions');
+  const [returnTab, setReturnTab] = useState('sessions'); // where a tasting goes back to when it's saved
   const [presetBatchId, setPresetBatchId] = useState(null);
   const [presetSpike, setPresetSpike] = useState(null);
   const [presetTastingType, setPresetTastingType] = useState(null);
@@ -3391,7 +3366,7 @@ export default function SensoryApp({ mode = 'sensory' }) {
           </button>
           <div className={`mobile-dropdown-list${mobileNavOpen ? ' open' : ''}`}>
             {tabs.map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setPresetBatchId(null); setPresetSpike(null); setPresetTastingType(null); setActivePanelId(null); setEditingSession(null); setMobileNavOpen(false); }} style={{
+              <button key={t.id} onClick={() => { setTab(t.id); setReturnTab('sessions'); setPresetBatchId(null); setPresetSpike(null); setPresetTastingType(null); setActivePanelId(null); setEditingSession(null); setMobileNavOpen(false); }} style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4,
                 borderRadius: 7, border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13.5, fontWeight: 600,
                 background: tab === t.id ? 'var(--surface-2)' : 'transparent',
@@ -3403,10 +3378,10 @@ export default function SensoryApp({ mode = 'sensory' }) {
         </nav>
 
         <main className="sn-main" style={{ flex: 1, padding: '28px 32px', maxWidth: 1180 }}>
-          {tab === 'sessions' && <SessionsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId, spike) => { setPresetBatchId(bid); setPresetSpike(spike || null); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setEditingSession(s); setTab('submit'); }} />}
-          {tab === 'panels' && <PanelsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId, spike) => { setPresetBatchId(bid); setPresetSpike(spike || null); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setEditingSession(s); setTab('submit'); }} />}
-          {tab === 'submit' && <TastingForm store={store} currentProfile={profile} onDone={() => { setEditingSession(null); setActivePanelId(null); setPresetSpike(null); setTab(editingSession && isLead ? 'dashboard' : 'sessions'); }} presetBatchId={presetBatchId} presetSpike={editingSession ? null : presetSpike} presetTastingType={presetTastingType} activePanelId={editingSession ? null : activePanelId} editSession={editingSession} />}
-          {tab === 'retention' && isLead && <RetentionQueue store={store} onLogTasting={(bid, type) => { setPresetBatchId(bid); setPresetSpike(null); setPresetTastingType(type || null); setActivePanelId(null); setTab('submit'); }} />}
+          {tab === 'sessions' && <SessionsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId, spike) => { setReturnTab('sessions'); setPresetBatchId(bid); setPresetSpike(spike || null); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setReturnTab('sessions'); setEditingSession(s); setTab('submit'); }} />}
+          {tab === 'panels' && <PanelsView store={store} isLead={isLead} currentProfile={profile} onLogTasting={(bid, type, panelId, spike) => { setReturnTab('panels'); setPresetBatchId(bid); setPresetSpike(spike || null); setPresetTastingType(type || null); setActivePanelId(panelId || null); setTab('submit'); }} onEditTasting={(s) => { setReturnTab('panels'); setEditingSession(s); setTab('submit'); }} />}
+          {tab === 'submit' && <TastingForm store={store} currentProfile={profile} onDone={() => { setEditingSession(null); setActivePanelId(null); setPresetSpike(null); setTab(returnTab); }} presetBatchId={presetBatchId} presetSpike={editingSession ? null : presetSpike} presetTastingType={presetTastingType} activePanelId={editingSession ? null : activePanelId} editSession={editingSession} />}
+          {tab === 'retention' && isLead && <RetentionQueue store={store} onLogTasting={(bid, type) => { setReturnTab('retention'); setPresetBatchId(bid); setPresetSpike(null); setPresetTastingType(type || null); setActivePanelId(null); setTab('submit'); }} />}
           {tab === 'qc' && isLead && <QcView store={store} />}
           {tab === 'incubating' && isLead && <IncubatingView store={store} />}
           {tab === 'qcDashboard' && isLead && <QcDashboard store={store} />}
@@ -3416,7 +3391,7 @@ export default function SensoryApp({ mode = 'sensory' }) {
           {tab === 'skus' && <SkuProfiles store={store} isLead={isLead} />}
           {tab === 'search' && <SearchView store={store} />}
           {tab === 'trends' && isLead && <TrendsView store={store} />}
-          {tab === 'dashboard' && isLead && <Dashboard store={store} onEditSession={(s) => { setEditingSession(s); setTab('submit'); }} />}
+          {tab === 'dashboard' && isLead && <Dashboard store={store} onEditSession={(s) => { setReturnTab('dashboard'); setEditingSession(s); setTab('submit'); }} />}
           {tab === 'team' && isLead && <TeamManagement store={store} currentProfile={profile} />}
           {appMode === 'qc' && !isLead && <p style={{ color: 'var(--text-muted)' }}>The QC Log is for QA leads. Ask a lead to make you one on the Sensory tab (Team).</p>}
         </main>
