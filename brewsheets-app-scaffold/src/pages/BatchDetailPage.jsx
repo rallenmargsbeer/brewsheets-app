@@ -1449,7 +1449,7 @@ function BatchDetails({ batch, tanks, ingredients, remove, onChanged }) {
       <section className="bd-card">
         <h3>Gravity, ABV, IBU &amp; colour</h3>
         <div className="bd-grid">
-          <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={batch.og_override != null ? 'Overridden by an admin' : (turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day') + (f.dilutionL ? ', after dilution' : '')}>
+          <Fact label="Actual OG" value={fx(f.og, 1, ' °P')} from={batch.og_override != null ? null : (turns > 1 ? 'KO gravity, turns weighted by volume' : 'KO gravity on Brew Day') + (f.dilutionL ? ', after dilution' : '')}>
             {isAdmin && <OgOverride batch={batch} onChanged={onChanged} />}
           </Fact>
           <Fact label="Average KO pH" value={fx(batchKoPh(batch), 2)} from={(() => {
