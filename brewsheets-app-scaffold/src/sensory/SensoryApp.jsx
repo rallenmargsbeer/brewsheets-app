@@ -810,12 +810,13 @@ function TastingForm({ store, currentProfile, onDone, presetBatchId, presetSpike
             {offFlavors.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {offFlavors.map(({ flavor, intensity }) => (
-                  <div key={flavor} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center', background: 'var(--surface-2)', borderRadius: 6, padding: '8px 10px' }}>
+                  <div key={flavor} style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 1fr) minmax(0, max-content)', gap: 10, alignItems: 'center', background: 'var(--surface-2)', borderRadius: 6, padding: '8px 10px' }}>
                     <span style={{ fontSize: 12.5, color: 'var(--bad)' }}>{flavor}</span>
-                    <div style={{ display: 'flex', gap: 4 }}>
+                    {/* Scrolls sideways when the screen is too narrow for all five. */}
+                    <div style={{ display: 'flex', gap: 4, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                       {[1, 2, 3, 4, 5].map(n => (
                         <button key={n} type="button" onClick={() => setOffIntensity(flavor, n)} style={{
-                          width: 24, height: 24, borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                          flex: '0 0 24px', width: 24, height: 24, padding: 0, borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-mono)',
                           border: `1px solid ${intensity === n ? 'var(--bad)' : 'var(--line)'}`,
                           background: intensity === n ? '#fdecea' : 'transparent',
                           color: intensity === n ? 'var(--bad)' : 'var(--text-muted)', fontWeight: intensity === n ? 700 : 400,
@@ -3345,6 +3346,7 @@ export default function SensoryApp({ mode = 'sensory' }) {
           .header-row-stack { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
           .header-row-stack > * { width: 100% !important; }
           .responsive-grid-2 { grid-template-columns: 1fr !important; }
+          .responsive-grid-2 > * { min-width: 0; }
           .modal-card { width: 92vw !important; max-width: 92vw !important; padding: 18px !important; }
           .batch-form-grid { grid-template-columns: 1fr 1fr !important; }
           .dashboard-stats { flex-wrap: wrap !important; }
