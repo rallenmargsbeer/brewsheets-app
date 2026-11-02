@@ -18,8 +18,14 @@ export function useBatchJobs(batch) {
     Promise.all([listScheduleEntries(start, addDays(start, 35)), listCellarTemplates(), listBookings({ fromIso: addDays(start, -30) })])
       .then(([entries, templates, bookings]) => {
         const beers = new Set([...templates.map((t) => t.name), ...bookings.map((b) => b.beer_name), batch.beer_style, batch.recipes?.name].filter(Boolean).map((n) => n.trim().toLowerCase()))
-        const jobs = entries
-          .filter((e) => e.lane === 'tank' && e.tank_id === batch.tank_id && (e.text ?? '').trim() && !beers.has(e.text.trim().toLowerCase()) && e.text.trim().toLowerCase() !== 'brew')
+        const inTank = entries.filter((e) => e.lane === 'tank' && e.tank_id === batch.tank_id && (e.text ?? '').trim())
+        const isBeerCell = (e) => { const t = e.text.trim().toLowerCase(); return t === 'brew' || beers.has(t) }
+        // Stop at the next beer booked into this tank: its jobs aren't this batch's. This batch's own
+        // booking (its cells on the start day) can run over more than one day, so it doesn't count.
+        const own = new Set(inTank.filter((e) => e.entry_date === start && e.booking_id).map((e) => e.booking_id))
+        const next = inTank.filter((e) => e.entry_date > start && isBeerCell(e) && !(e.booking_id && own.has(e.booking_id))).map((e) => e.entry_date).sort()[0]
+        const jobs = inTank
+          .filter((e) => !isBeerCell(e) && (!next || e.entry_date < next))
           .map((e) => ({ date: e.entry_date, task: { id: e.id, slot: e.slot, text: e.text, done: !!e.done } }))
         if (jobs.length) return setRows(jobs.sort((a, b) => a.date.localeCompare(b.date) || slotRank(a.task.slot) - slotRank(b.task.slot)))
         // No schedule jobs: the recipe's cellar template, dated from brew day (day 1).
