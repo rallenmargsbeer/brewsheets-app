@@ -25,6 +25,7 @@ export async function loadIncoming({ days = 120, since = null } = {}) {
     listTanks(),
   ])
   const bookingBeer = Object.fromEntries(bookings.map((b) => [b.id, b.beer_name]))
+  const bookingBrewed = Object.fromEntries(bookings.map((b) => [b.id, b.brew_date]))
   const { beerOf, runs } = assignBeers(entries, { knownBeers: templates.map((t) => t.name), bookingBeer })
   const brightTankIds = tanks.filter((t) => t.tank_type === 'BBT').map((t) => t.id)
 
@@ -41,7 +42,9 @@ export async function loadIncoming({ days = 120, since = null } = {}) {
     const qty = list.reduce((a, e) => a + packCount(e.text), 0)
     // Kegging cells may name a size ("45 x 50L", "20 x 30L"); otherwise they're 50 L kegs.
     const size = Number(/(\d{2})\s*l\b/i.exec(list.map((e) => e.text).join(' '))?.[1] ?? 50)
-    if (beer && qty) out.push({ beer, format: lane.startsWith('canning') ? 'cube' : 'keg', size, date, slot, lane, qty, text: list.map((e) => e.text).join(', ') })
+    // brewed: brew day of the booking the cell belongs to (null when it isn't from a booking).
+    const brewed = list.map((e) => bookingBrewed[e.booking_id]).filter(Boolean).sort()[0] ?? null
+    if (beer && qty) out.push({ beer, format: lane.startsWith('canning') ? 'cube' : 'keg', size, date, slot, lane, qty, brewed, text: list.map((e) => e.text).join(', ') })
   }
   return out.sort((a, b) => a.date.localeCompare(b.date))
 }
