@@ -227,9 +227,11 @@ function ScheduledPack({ batch, packed }) {
     const since = [batch.bbt_transfer_date ?? addDays(todayIso(), -14), addDays(todayIso(), -30)].sort()[1]
     const until = addDays(todayIso(), 21)
     loadIncoming({ since, days: 60 })
-      .then((all) => setRows(all.filter((r) => beerMatch(r.beer) === beerMatch(batch.beer_style) && r.date <= until)))
+      // Not a later brew of the same beer (its booking brewed after this batch).
+      .then((all) => setRows(all.filter((r) => beerMatch(r.beer) === beerMatch(batch.beer_style) && r.date <= until
+        && !(r.brewed && batch.date_brewed && r.brewed > addDays(batch.date_brewed, 3)))))
       .catch(() => setRows([]))
-  }, [batch.id, batch.beer_style, batch.bbt_transfer_date])
+  }, [batch.id, batch.beer_style, batch.bbt_transfer_date, batch.date_brewed])
   if (!rows?.length) return null
   const fmt = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
   const cubes = rows.filter((r) => r.format === 'cube').reduce((a, r) => a + r.qty, 0)
