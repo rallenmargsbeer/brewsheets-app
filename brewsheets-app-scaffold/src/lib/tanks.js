@@ -6,6 +6,9 @@ export function tankLabel(name) {
 
 // Batches in these statuses are still physically sitting in their tank.
 export const IN_TANK_STATUSES = ['planned', 'brewing', 'fermenting', 'chilling', 'conditioning']
+// What the Cellar shows in a tank: a beer moves into the cellar once its brew day is completed
+// (status fermenting), so a brew sheet made ahead doesn't hide the beer still in the tank.
+export const CELLAR_STATUSES = ['fermenting', 'chilling', 'conditioning']
 
 // Statuses are stored lower-case; show them capitalised.
 export const statusLabel = (s) => (s === 'chilling' ? 'On chill' : s ? s[0].toUpperCase() + s.slice(1) : '')

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { listTanks, listIngredients, listBatchesInTanks, upsertBatch, upsertFermentationReading, updateFermentationReading } from '../lib/api'
-import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
+import { tankLabel, statusLabel, CELLAR_STATUSES } from '../lib/tanks'
 import AddToTank from '../components/AddToTank.jsx'
 import TankDay from '../components/TankDay.jsx'
 import { loadDay } from '../lib/dayTasks'
@@ -326,7 +326,7 @@ export default function CellarPage() {
 
   function refresh() {
     setRefreshKey((k) => k + 1)
-    Promise.all([listTanks(), listBatchesInTanks(IN_TANK_STATUSES)])
+    Promise.all([listTanks(), listBatchesInTanks(CELLAR_STATUSES)])
       .then(([t, b]) => {
         setTanks(t)
         setBatches(b)
