@@ -5,7 +5,7 @@ import { supabase } from '../supabaseClient'
 import { listTanks } from './api'
 import { addDays, daysBetween, listScheduleEntries, listCellarTemplates, listBookings, saveScheduleEntry, stepsForTank, BREW_LANES, PACK_LANES } from './schedule'
 import { assignBeers, packBeer } from './beerColours'
-import { IN_TANK_STATUSES } from './tanks'
+import { CELLAR_STATUSES } from './tanks'
 import { packCount } from './incoming'
 
 // Jobs (tank and notes cells) not ticked off roll into the following days until done.
@@ -20,7 +20,7 @@ async function listCellarBatches() {
   const { data, error } = await supabase
     .from('batches')
     .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipes(name, target_fg, cellar_template_id, recipe_fermenter_additions(item_name, timing_notes)), fermentation_readings(reading_date, gravity_plato, created_at, notes), tank_additions(item_name, added_on)')
-    .in('status', IN_TANK_STATUSES)
+    .in('status', CELLAR_STATUSES)
   if (error) throw error
   return data
 }
