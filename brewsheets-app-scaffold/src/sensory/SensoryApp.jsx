@@ -368,9 +368,9 @@ function useSupabaseData(session) {
     await loadAll();
   };
 
-  const addBriteCheck = async ({ batchId, decision, notes }) => {
+  const addBriteCheck = async ({ batchId, productionBatchId, decision, notes }) => {
     const { error } = await supabase.from('sensory_brite_checks').insert({
-      batch_id: batchId, taster_id: session.user.id, date: todayISO(), decision, notes: notes || '',
+      batch_id: batchId || null, production_batch_id: productionBatchId || null, taster_id: session.user.id, date: todayISO(), decision, notes: notes || '',
     });
     if (error) throw error;
     await loadAll();
@@ -2157,20 +2157,26 @@ function TeamManagement({ store, currentProfile }) {
 }
 
 function PackagingSignOffView({ store, currentProfile }) {
-  // Only beer sitting in a brite tank right now (from the production app), not yet packaged.
+  // Every beer sitting in a brite tank right now (from the production app), not yet packaged:
+  // core range ones through their sensory batch, seasonals on the production batch alone.
   const [inBrite, setInBrite] = useState(null);
   useEffect(() => {
-    supabase.from('batches').select('id, batch_number, tanks!inner(tank_type)').eq('tanks.tank_type', 'BBT')
+    supabase.from('batches').select('id, batch_number, beer_style, recipes(name), tanks!inner(name, tank_type)').eq('tanks.tank_type', 'BBT')
       .in('status', ['planned', 'brewing', 'fermenting', 'chilling', 'conditioning'])
-      .then(({ data }) => setInBrite({ ids: new Set((data || []).map(b => b.id)), numbers: new Set((data || []).map(b => String(b.batch_number))) }));
+      .then(({ data }) => setInBrite(data || []));
   }, []);
   const briteBatches = useMemo(() =>
-    store.batches
-      .filter(b => inBrite && (inBrite.ids.has(b.production_batch_id) || inBrite.numbers.has(String(b.batch_number))))
+    (inBrite || [])
+      .map(pb => {
+        const sb = store.batches.find(b => b.production_batch_id === pb.id) || store.batches.find(b => String(b.batch_number) === String(pb.batch_number));
+        const sku = sb ? store.skus.find(k => k.id === sb.sku_id) : null;
+        const checks = store.briteChecks.filter(c => c.production_batch_id === pb.id || (sb && c.batch_id === sb.id));
+        return { key: pb.id, productionBatchId: pb.id, sensoryBatchId: sb ? sb.id : null, batch_number: pb.batch_number, name: sku ? sku.name : (pb.recipes?.name || pb.beer_style || ''), tank: pb.tanks?.name, checks };
+      })
       // Green-lit batches drop off; red or untasted ones stay.
-      .filter(b => [...store.briteChecks].filter(c => c.batch_id === b.id).sort((x, y) => y.created_at.localeCompare(x.created_at))[0]?.decision !== 'green')
+      .filter(it => [...it.checks].sort((x, y) => y.created_at.localeCompare(x.created_at))[0]?.decision !== 'green')
       .sort((a, b) => Number(b.batch_number) - Number(a.batch_number)),
-    [store.batches, store.briteChecks, inBrite]
+    [store.batches, store.skus, store.briteChecks, inBrite]
   );
 
   return (
@@ -2182,8 +2188,8 @@ function PackagingSignOffView({ store, currentProfile }) {
         <p style={{ color: 'var(--text-muted)' }}>Nothing waiting on sign off right now.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {briteBatches.map(b => (
-            <BriteBatchCard key={b.id} batch={b} store={store} currentProfile={currentProfile} />
+          {briteBatches.map(it => (
+            <BriteBatchCard key={it.key} item={it} store={store} currentProfile={currentProfile} />
           ))}
         </div>
       )}
@@ -2218,9 +2224,8 @@ function BriteHistoryCard({ batch, store }) {
   );
 }
 
-function BriteBatchCard({ batch, store, currentProfile }) {
-  const sku = store.skus.find(s => s.id === batch.sku_id);
-  const checks = store.briteChecks.filter(c => c.batch_id === batch.id).sort((a, b) => b.created_at.localeCompare(a.created_at));
+function BriteBatchCard({ item, store, currentProfile }) {
+  const checks = [...item.checks].sort((a, b) => b.created_at.localeCompare(a.created_at));
   const latest = checks[0];
 
   const [logging, setLogging] = useState(false);
@@ -2232,7 +2237,7 @@ function BriteBatchCard({ batch, store, currentProfile }) {
   const submit = async () => {
     setBusy(true); setError('');
     try {
-      await store.addBriteCheck({ batchId: batch.id, decision, notes });
+      await store.addBriteCheck({ batchId: item.sensoryBatchId, productionBatchId: item.productionBatchId, decision, notes });
       setLogging(false); setNotes(''); setDecision('green');
     } catch (e) {
       setError(e.message || 'Could not save — try again.');
@@ -2245,7 +2250,7 @@ function BriteBatchCard({ batch, store, currentProfile }) {
     <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
         <div>
-          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{batch.batch_number} — {sku ? sku.name : 'Unknown SKU'}</p>
+          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{item.batch_number} — {item.name}{item.tank ? <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · {item.tank}</span> : null}</p>
           <p style={{ margin: '2px 0 0', fontSize: 12.5, color: 'var(--text-muted)' }}>{checks.length} check{checks.length !== 1 ? 's' : ''} logged</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
