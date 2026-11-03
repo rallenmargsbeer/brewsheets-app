@@ -579,7 +579,7 @@ function KnockoutAdditions({ items, onSaved }) {
   )
 }
 
-function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, masterIngredients, onSaved, isLastTurn, otherRuns = [], koAdditions = [], batchFermenterItems = null }) {
+function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, kettleFillL = null, turnCount, masterIngredients, onSaved, isLastTurn, otherRuns = [], koAdditions = [], batchFermenterItems = null }) {
   const [buffer] = useBuffer()
   const [form, setForm] = useState(() => seedForm(batchId, runNumber, run))
   const [saving, setSaving] = useState(false)
@@ -771,7 +771,12 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
   // actually went in (falling back to the computed Target Strike Volume above until the brewer
   // records an actual), minus however much sparge has already been added. Counts down as
   // AddSpargeControl tops up sparge_added_l.
-  const totalWaterL = TOTAL_WATER_L[turnVolumeL] ?? null
+  // Other turn sizes: the same 1.36 L of water per litre as the usual sizes. A high-gravity turn
+  // (kettle filled past normal) needs the kettle fill plus about 1 L per kg of grain held back in
+  // the mash (25 HL: about 3,040 L kettle + 362 kg grain = 3,400 L).
+  const hgTurn = Number(kettleFillL) > 0 && Number(turnVolumeL) > 2500
+  const totalWaterL = TOTAL_WATER_L[turnVolumeL]
+    ?? (hgTurn ? Number(kettleFillL) + gristKg : Number(turnVolumeL) > 0 && Number(turnVolumeL) <= 2500 ? Number(turnVolumeL) * 1.36 : null)
   const actualStrikeL = form.mash_water_l !== '' && form.mash_water_l != null ? Number(form.mash_water_l) : null
   const strikeForSparge = actualStrikeL ?? strikeVolumeL
   const spargeAddedL = Number(form.sparge_added_l) || 0
@@ -934,6 +939,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, turnCount, 
                       value={spargeRequiredL != null ? spargeRequiredL.toFixed(0) : null}
                       unit="L"
                     />
+                    {hgTurn && <span style={{ fontSize: '0.8rem', color: 'var(--ink2)' }}>High gravity: total water {Math.round(totalWaterL).toLocaleString()} L = kettle fill {Number(kettleFillL).toLocaleString()} L + about 1 L per kg of grain ({Math.round(gristKg)} kg)</span>}
                     <AddSpargeControl runId={form.id} addedSoFar={spargeAddedL} onSaved={applySaved} />
                   </div>
                   <div style={{ marginTop: '0.5rem' }}>
@@ -1242,7 +1248,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
       <p style={{ color: '#666' }}>
         <BeerDot name={batch.beer_style || batch.recipes?.name} />{batch.recipes?.name} — {batch.recipes?.style}
         {batch.turn_volume_l && batch.turn_quantity
-          ? ` · ${turnCount} turn${turnCount === 1 ? '' : 's'} × ${batch.turn_volume_l}L = ${batch.target_volume_l ?? batch.turn_volume_l * turnCount}L total`
+          ? ` · ${turnCount} turn${turnCount === 1 ? '' : 's'} × ${batch.turn_volume_l}L = ${batch.target_volume_l ?? batch.turn_volume_l * turnCount}L total` + (Number(batch.kettle_fill_l) > 0 && Number(batch.turn_volume_l) > 2500 ? ` (high gravity: kettle to ${Number(batch.kettle_fill_l).toLocaleString()} L, diluted at KO)` : '')
           : ''}
       </p>
 
@@ -1300,6 +1306,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
             run={runsByNumber[n]}
             recipe={batch.recipes}
             turnVolumeL={batch.turn_volume_l}
+            kettleFillL={batch.kettle_fill_l}
             masterIngredients={ingredients}
             onSaved={refresh}
             isLastTurn={n === turnCount}

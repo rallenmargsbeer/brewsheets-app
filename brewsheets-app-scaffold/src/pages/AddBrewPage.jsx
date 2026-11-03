@@ -4,9 +4,10 @@ import { listRecipes, getRecipe, listBatches, listTanks, upsertBatch, initialize
 import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
 import { getBooking, linkBookingToBatch, listScheduleEntries, listBookings } from '../lib/schedule'
 import { beerKey } from '../lib/beerColours'
+import TurnSize, { isHighGravity, DEFAULT_KETTLE_FILL_L } from '../components/TurnSize.jsx'
 import { beerMatch } from '../lib/incoming'
 
-// Fixed brewhouse turn sizes — tell me the values to use if this ever changes.
+// The usual brewhouse turn sizes (any other size can be typed in).
 const TURN_VOLUMES = [
   { label: '10HL', litres: 1000 },
   { label: '15HL', litres: 1500 },
@@ -207,6 +208,7 @@ export default function AddBrewPage() {
   const scheduledRecipes = pickable.filter((r) => today.recipeIds.includes(r.id) || todayKeys.has(beerMatch(beerKey(r.name))))
   const [fullRecipe, setFullRecipe] = useState(null)
   const [turnVolumeL, setTurnVolumeL] = useState(null)
+  const [kettleFillL, setKettleFillL] = useState(null)
   const [turnQuantity, setTurnQuantity] = useState(null)
   const [allocations, setAllocations] = useState({})
   const [bagsDone, setBagsDone] = useState(false)
@@ -227,6 +229,7 @@ export default function AddBrewPage() {
         setBooking(b)
         if (b.recipe_id) setRecipeId(b.recipe_id)
         if (b.turn_volume_l) setTurnVolumeL(Number(b.turn_volume_l))
+        if (b.kettle_fill_l) setKettleFillL(Number(b.kettle_fill_l))
       })
       .catch((e) => setError(e.message))
   }, [bookingId])
@@ -288,6 +291,7 @@ export default function AddBrewPage() {
         tank_id: tankId,
         date_brewed: new Date().toLocaleDateString('en-CA'),
         turn_volume_l: turnVolumeL,
+        kettle_fill_l: isHighGravity(turnVolumeL) ? kettleFillL : null,
         turn_quantity: quantity,
         target_volume_l: turnVolumeL * quantity,
       })
@@ -369,23 +373,20 @@ export default function AddBrewPage() {
       </StepCard>
 
       <StepCard number={2} title="Select Brew Turn Volume" done={turnVolumeL != null} active={!!recipeId && !blocked}>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {TURN_VOLUMES.map((v) => (
-            <button
-              key={v.label}
-              className={turnVolumeL === v.litres ? '' : 'secondary'}
-              disabled={blocked}
-              onClick={() => {
-                setTurnVolumeL(v.litres)
-                setTurnQuantity(null)
-                setAllocations({})
-                setTankId('')
-              }}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
+        <TurnSize
+          sizes={TURN_VOLUMES.map((v) => v.litres)}
+          value={turnVolumeL}
+          disabled={blocked}
+          onChange={(v) => {
+            setTurnVolumeL(v)
+            if (isHighGravity(v) && kettleFillL == null) setKettleFillL(DEFAULT_KETTLE_FILL_L)
+            setTurnQuantity(null)
+            setAllocations({})
+            setTankId('')
+          }}
+          kettleFill={kettleFillL}
+          onKettleFill={setKettleFillL}
+        />
       </StepCard>
 
       <StepCard number={3} title="Select Brew Turn Quantity" done={turnQuantity != null} active={turnVolumeL != null}>

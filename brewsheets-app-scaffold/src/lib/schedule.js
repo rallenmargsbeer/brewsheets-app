@@ -361,7 +361,7 @@ export function defaultTurnSlots(brewDate, n, taken = new Set()) {
   return out
 }
 
-export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, turnQuantity, turnSlots, packSlots, notes, pack }) {
+export async function createBooking({ brewDate, beerName, recipeId, template, tank, brightTank, turnVolumeL, kettleFillL, turnQuantity, turnSlots, packSlots, notes, pack }) {
   const { data: booking, error } = await supabase
     .from('brew_bookings')
     .insert({
@@ -371,6 +371,7 @@ export async function createBooking({ brewDate, beerName, recipeId, template, ta
       cellar_template_id: template?.id ?? null,
       tank_id: tank.id,
       turn_volume_l: turnVolumeL || null,
+      kettle_fill_l: kettleFillL || null,
       turn_quantity: turnQuantity || null,
       notes: notes || null,
       pack_cubes: (Number(pack?.pallets) || 0) * CUBES_PER_PALLET || null,
