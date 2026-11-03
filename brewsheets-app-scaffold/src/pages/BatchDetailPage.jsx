@@ -66,6 +66,8 @@ const MAX_TURNS_PER_TANK = 4
 // equipment losses, not something that depends on the recipe. Ryan supplied these directly;
 // update here if the brewhouse's water balance changes or a new turn size is added.
 const TOTAL_WATER_L = { 1000: 1360, 1500: 2040, 2500: 3400 }
+// High-gravity turns mash this much hotter than the recipe (strike and mash steps, not mash out).
+const HG_MASH_UP = 2
 
 // Metric-to-imperial constants — these two calculators (Mash Efficiency, IBU) are built on
 // brewing-industry formulas that are conventionally expressed in lb/gallon; the app itself
@@ -775,6 +777,8 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, kettleFillL
   // (kettle filled past normal) needs the kettle fill plus about 1 L per kg of grain held back in
   // the mash (25 HL: about 3,040 L kettle + 362 kg grain = 3,400 L).
   const hgTurn = Number(kettleFillL) > 0 && Number(turnVolumeL) > 2500
+  // High gravity mashes hotter (less fermentable wort) to make up for the body the dilution water takes out.
+  const hgTemp = (t) => (t == null || t === '' ? t : hgTurn ? Number(t) + HG_MASH_UP : t)
   const totalWaterL = TOTAL_WATER_L[turnVolumeL]
     ?? (hgTurn ? Number(kettleFillL) + gristKg : Number(turnVolumeL) > 0 && Number(turnVolumeL) <= 2500 ? Number(turnVolumeL) * 1.36 : null)
   const actualStrikeL = form.mash_water_l !== '' && form.mash_water_l != null ? Number(form.mash_water_l) : null
@@ -873,17 +877,18 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, kettleFillL
                       borderRadius: 4,
                     }}
                   >
-                    <TargetValue label="Target Strike Temp" value={recipe?.target_strike_temp} unit="°C" />
+                    <TargetValue label="Target Strike Temp" value={hgTemp(recipe?.target_strike_temp)} unit="°C" />
                     <TargetValue
                       label="Target Strike Volume"
                       value={strikeVolumeL != null ? strikeVolumeL.toFixed(0) : null}
                       unit="L"
                     />
                     <TargetValue label="Target Mash pH" value={recipe?.target_mash_ph} unit="" />
-                    <TargetValue label="Mash Step 1" value={recipe?.mash_step_1_temp} unit="°C" />
-                    <TargetValue label="Mash Step 2" value={recipe?.mash_step_2_temp} unit="°C" />
-                    <TargetValue label="Mash Step 3" value={recipe?.mash_step_3_temp} unit="°C" />
+                    <TargetValue label="Mash Step 1" value={hgTemp(recipe?.mash_step_1_temp)} unit="°C" />
+                    <TargetValue label="Mash Step 2" value={hgTemp(recipe?.mash_step_2_temp)} unit="°C" />
+                    <TargetValue label="Mash Step 3" value={hgTemp(recipe?.mash_step_3_temp)} unit="°C" />
                     <TargetValue label="Mash Out" value={recipe?.mash_out_temp} unit="°C" />
+                    {hgTurn && <span style={{ fontSize: '0.8rem', color: 'var(--ink2)', alignSelf: 'center' }}>High gravity: strike and mash steps {HG_MASH_UP}°C above the recipe, for the body lost to the dilution water.</span>}
                   </div>
                   {fld('strike_temp', 'Strike Temp', 'number', 110)}
                   {fld('mash_water_l', 'Actual Strike Volume (L)', 'number', 140)}
