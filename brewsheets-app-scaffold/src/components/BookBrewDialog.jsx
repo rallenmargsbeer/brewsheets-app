@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { tankLabel } from '../lib/tanks'
 import { addDays, todayIso, stepsForTank, planSteps, suggestBrightTank, btFreeAfter, emptyingDays, listScheduleEntries, saveScheduleEntry, createBooking, packTexts, defaultTurnSlots, TURN_SLOTS, MAX_TURNS_PER_DAY, BREW_LANES, LANE_LABEL, isWeekend, nextWorkday, addWorkdays, saveBeerColour, freePackLane, freePackSlots, createMixBooking } from '../lib/schedule'
 import { beerStyle, savedBeerStyle, looseKey } from '../lib/beerColours'
+import TurnSize, { isHighGravity, DEFAULT_KETTLE_FILL_L } from './TurnSize.jsx'
 import { LITRES_PER_PALLET, CANS_PER_PALLET, CUBES_PER_PALLET } from '../lib/packaging'
 import { loadForecast, forecastIndex, suggestPackSplit, profileOf, YIELD } from '../lib/forecast'
 import { listStock, stockByBeer } from '../lib/stock'
@@ -18,6 +19,8 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
   const [brewDate, setBrewDate] = useState(initial?.date ?? todayIso())
   const [tankId, setTankId] = useState(initial?.tankId ?? '')
   const [turnVolume, setTurnVolume] = useState(2500)
+  const [kettleFill, setKettleFill] = useState(null)
+  const pickTurnVolume = (v) => { setTurnVolume(v); if (isHighGravity(v) && kettleFill == null) setKettleFill(DEFAULT_KETTLE_FILL_L) }
   const [turns, setTurns] = useState(4)
   // Brewed (brewhouse, then an FV) or mixed straight into a bright tank (Megsy).
   const [mode, setMode] = useState(initial?.mix || (initial?.beer && !profileOf(initial.beer).brewhouse) ? 'mix' : 'brew')
@@ -196,7 +199,7 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
       for (const [id, t] of Object.entries(moves)) await saveScheduleEntry({ id, entry_date: t.date, slot: t.slot, lane: t.lane })
       const b = isMix
         ? await createMixBooking({ date: brewDate, beerName: beerName.trim(), brightTank: mixTank, litres: batchL, pack, packSlots, notes })
-        : await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, turnQuantity: turns, turnSlots, packSlots, notes, pack })
+        : await createBooking({ brewDate, beerName: beerName.trim(), recipeId, template, tank, brightTank, turnVolumeL: turnVolume, kettleFillL: isHighGravity(turnVolume) ? kettleFill : null, turnQuantity: turns, turnSlots, packSlots, notes, pack })
       onBooked(b)
     } catch (e) {
       setError(e.message)
@@ -302,16 +305,15 @@ export default function BookBrewDialog({ tanks, brightTanks = [], recipes, templ
           <div>
             <div>Turns</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: 2 }}>
-              {TURN_SIZES.map((v) => (
-                <button key={v} className={turnVolume === v ? '' : 'secondary'} onClick={() => setTurnVolume(v)}>{v / 100}HL</button>
-              ))}
-              <span style={{ width: 8 }} />
               {[1, 2, 3, 4].map((n) => (
                 <button key={n} className={turns === n ? '' : 'secondary'} onClick={() => setTurns(n)}>{n}</button>
               ))}
             </div>
+            <div style={{ marginTop: 6 }}>
+              <TurnSize sizes={TURN_SIZES} value={turnVolume} onChange={pickTurnVolume} kettleFill={kettleFill} onKettleFill={setKettleFill} />
+            </div>
             <div style={{ color: tooBig ? 'crimson' : 'var(--ink2)', fontSize: '0.85rem', marginTop: 4 }}>
-              {(turnVolume * turns).toLocaleString()} L{tooBig ? ` is more than ${tankLabel(tank.name)} holds` : ''}
+              {((turnVolume || 0) * turns).toLocaleString()} L{tooBig ? ` is more than ${tankLabel(tank.name)} holds` : ''}
             </div>
           </div>
           <div>
