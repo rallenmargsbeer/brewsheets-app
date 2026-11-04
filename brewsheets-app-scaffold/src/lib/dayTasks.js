@@ -7,6 +7,7 @@ import { addDays, daysBetween, listScheduleEntries, listCellarTemplates, listBoo
 import { assignBeers, packBeer } from './beerColours'
 import { CELLAR_STATUSES } from './tanks'
 import { packCount } from './incoming'
+import { cellarSteps, COVERED_JOB } from './cellarSteps'
 
 // Jobs (tank and notes cells) not ticked off roll into the following days until done.
 // Only from when the app started tracking jobs: older schedule cells were never ticked.
@@ -19,7 +20,7 @@ const bySlot = (a, b) => slotRank(a.slot) - slotRank(b.slot)
 async function listCellarBatches() {
   const { data, error } = await supabase
     .from('batches')
-    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, recipes(name, target_fg, cellar_template_id, recipe_fermenter_additions(item_name, timing_notes)), fermentation_readings(reading_date, gravity_plato, created_at, notes), tank_additions(item_name, added_on)')
+    .select('id, batch_number, beer_style, status, date_brewed, bbt_transfer_date, tank_id, og_override, recipes(name, target_og, target_fg, cellar_template_id, recipe_fermenter_additions(item_name, timing_notes)), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(reading_date, gravity_plato, temp_panel, created_at, notes), tank_additions(item_name, added_on), cellar_actions(action, done_on, result, created_at)')
     .in('status', CELLAR_STATUSES)
   if (error) throw error
   return data
@@ -69,10 +70,18 @@ export async function loadDay(date) {
     ...today.filter((e) => ['notes', 'casual', 'deliveries'].includes(e.lane)).map((e) => ({ ...task(e), lane: e.lane })).sort(bySlot),
   ]
 
-  // Tanks: scheduled tasks, else the template's step for this day of the brew, plus gravity.
+  // Tanks with a beer in them: what the beer needs next (cellarSteps, from its readings, additions
+  // and steps done), plus any of today's schedule cells for the tank those don't cover. Empty
+  // tanks: the schedule's cells, as before.
   const templateById = Object.fromEntries(templates.map((t) => [t.id, t]))
   const tankDays = tanks.filter((t) => t.is_active !== false).map((t) => {
     const batch = batches.find((b) => b.tank_id === t.id) ?? null
+    if (batch && t.tank_type !== 'BBT') {
+      const jobs = entries.filter((e) => e.lane === 'tank' && e.tank_id === t.id)
+      const steps = cellarSteps({ batch, tank: t, date, template: templateById[batch.recipes?.cellar_template_id], jobs, actions: batch.cellar_actions ?? [] })
+      const scheduled = today.filter((e) => e.lane === 'tank' && e.tank_id === t.id && isJob(e) && !COVERED_JOB.test(e.text ?? '')).map(task).sort(bySlot)
+      return { tank: t, batch, beer: batch.beer_style, scheduled, fromTemplate: [], steps, advice: [] }
+    }
     const todays = today.filter((e) => e.lane === 'tank' && e.tank_id === t.id).map(task).sort(bySlot)
     const scheduled = [...carried.filter((e) => e.lane === 'tank' && e.tank_id === t.id).map(task), ...todays]
     let fromTemplate = []

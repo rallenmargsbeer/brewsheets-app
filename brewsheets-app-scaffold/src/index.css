@@ -881,3 +881,12 @@ button.dt-cup.on { border-color: var(--accent); background: var(--accent-soft); 
 .ferm-graphs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 1rem; }
 .ferm-graph { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 0.9rem; }
 .ferm-graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.day-step { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; padding: 0.35rem 0.5rem; border-radius: 6px; margin: 0.15rem 0; border-left: 3px solid var(--line); background: var(--hl); }
+.day-step.go { border-left-color: #1b6e2e; }
+.day-step.soon { border-left-color: var(--accent); }
+.day-step.warn { border-left-color: #c4521f; background: #fdf1ea; }
+.day-step.info { border-left-color: var(--muted); }
+.day-step-main { display: flex; flex-direction: column; gap: 1px; }
+.day-step-why { font-size: 0.82rem; color: var(--ink2); }
+.day-step-act { display: flex; gap: 0.3rem; align-items: center; flex-shrink: 0; }
+.secondary-link { font-size: 0.8rem; }

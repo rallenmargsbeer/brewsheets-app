@@ -31,7 +31,7 @@ export default function TodayPage() {
   const tanks = day ? day.tanks
     .filter((d) => d.tank.tank_type !== 'BBT')
     .map((d) => ({ ...d, scheduled: d.scheduled.filter(notBrew), fromTemplate: d.fromTemplate.filter(notBrew) }))
-    .filter((d) => d.scheduled.length || d.fromTemplate.length || d.advice.length) : []
+    .filter((d) => d.scheduled.length || d.fromTemplate.length || d.advice.length || d.steps?.length) : []
   const fvs = tanks.sort(byName)
   const empty = day && !day.brewhouse.length && !tanks.length && !day.packaging.length && !day.other.length
 
@@ -42,7 +42,7 @@ export default function TodayPage() {
         <BeerChip beer={d.beer} />
         {d.batch && <Link to={`/batches/${d.batch.id}`} className="day-batch">#{d.batch.batch_number}</Link>}
       </div>
-      <TankDay day={d} editor={editor} />
+      <TankDay day={d} editor={editor} onChanged={load} />
     </div>
   ))
 
@@ -57,7 +57,7 @@ export default function TodayPage() {
           {date !== todayIso() && <button className="secondary" onClick={() => setDate(todayIso())}>Today</button>}
         </div>
       </div>
-      <p style={{ color: 'var(--ink2)', marginTop: 4 }}>{fmtDay(date)} · from the <Link to="/schedule">schedule</Link>{' · tick tasks off as they’re done'}</p>
+      <p style={{ color: 'var(--ink2)', marginTop: 4 }}>{fmtDay(date)} · from the <Link to="/schedule">schedule</Link>{' · fermenters show what each beer needs next, from its readings and what’s been done'}</p>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {!day && !error && <p>Loading…</p>}
       {empty && <p className="stock-muted">Nothing on the schedule for this day.</p>}
