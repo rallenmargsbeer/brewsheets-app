@@ -101,7 +101,7 @@ export function batchFigures(batch, sessions = []) {
 }
 
 // Estimated IBU and SRM for the batch from what actually went in on Brew Day. IBU is worked
-// out per turn (its own hops, post-boil gravity and volume), blended by volume and thinned by
+// out per turn (its own hops, KO gravity and volume), blended by volume and thinned by
 // dilution water; SRM uses all turns' grist over the final volume.
 export function batchIbuSrm(batch, ingredients) {
   const alpha = byName(ingredients, 'alpha_acid_pct')
@@ -114,7 +114,7 @@ export function batchIbuSrm(batch, ingredients) {
     const hops = items
       .filter((i) => i.section === 'kettle' || i.section === 'whirlpool')
       .map((i) => ({ grams: qty(i), alphaPct: alpha.get(i.item_name), minutes: i.time_min }))
-    const ibu = tinsethIbu(hops, r.postboil_gravity, n(r.postboil_volume_l))
+    const ibu = tinsethIbu(hops, n(r.whirlpool_gravity) ?? r.postboil_gravity, n(r.ko_flowmeter_l) ?? n(r.postboil_volume_l))
     const vol = n(r.ko_flowmeter_l) ?? n(r.postboil_volume_l)
     if (ibu != null && vol) { ibuSum += ibu * vol; ibuVol += vol }
   }

@@ -794,11 +794,11 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, kettleFillL
   const potentialPpgByName = new Map(masterIngredients.map((i) => [i.name, i.potential_ppg]).filter(([, ppg]) => ppg != null))
   const mashEfficiencyPct = calcMashEfficiency(gristItems, potentialPpgByName, form.preboil_gravity, form.preboil_volume_l)
 
-  // IBU (Tinseth estimate): kettle + whirlpool hops, using post-boil gravity/volume as the
-  // batch reference point. Alpha Acid % is looked up live from the Ingredients master list,
+  // IBU (Tinseth estimate): kettle + whirlpool hops, using the KO gravity and flowmeter volume
+  // (post-boil figures from older turns if that's all there is) as the batch reference point. Alpha Acid % is looked up live from the Ingredients master list,
   // same as Potential PPG above — it's an ingredient property, not a recipe-line one.
   const alphaAcidByName = new Map(masterIngredients.map((i) => [i.name, i.alpha_acid_pct]).filter(([, aa]) => aa != null))
-  const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], alphaAcidByName, form.postboil_gravity, form.postboil_volume_l)
+  const estimatedIBU = calcIBU([...kettleItems, ...whirlpoolItems], alphaAcidByName, form.whirlpool_gravity || form.postboil_gravity, form.ko_flowmeter_l || form.postboil_volume_l)
 
   // Batches without a recipe (split / one-off) get a fully editable brew sheet.
   const customSheet = { runId: form.id ?? run?.id, batchId, full: !recipe || /no recipe/i.test(recipe.name ?? '') }
@@ -1006,8 +1006,6 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, kettleFillL
                   </div>
                   {fld('preboil_volume_l', 'Pre-Boil Vol (L)', 'number', 130)}
                   {fld('preboil_gravity', 'Pre-Boil Grav. (actual)', 'number', 130)}
-                  {fld('postboil_volume_l', 'Post-Boil Vol (L)', 'number', 130)}
-                  {fld('postboil_gravity', 'Post-Boil Grav.', 'number', 120)}
                   <IngredientList title="Kettle" section="kettle" items={kettleItems} ingredients={masterIngredients} onSaved={onSaved} />
                   <IngredientList title="Water (Kettle)" section="water" stage="kettle" items={kettleWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
                   {/* Shown during the boil too, so they can be weighed out ready for knockout. */}
@@ -1092,7 +1090,7 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, kettleFillL
                       : s.key === 'lauter'
                       ? ['first_runnings_gravity', 'last_runnings_gravity']
                       : s.key === 'boil'
-                      ? ['preboil_volume_l', 'preboil_gravity', 'postboil_volume_l', 'postboil_gravity']
+                      ? ['preboil_volume_l', 'preboil_gravity']
                       : ['ko_flowmeter_l', 'whirlpool_gravity', 'whirlpool_ph', ...(isLastTurn ? ['correction_l'] : [])]
                   )
                 }
