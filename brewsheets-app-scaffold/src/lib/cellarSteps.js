@@ -5,7 +5,9 @@
 //  - free rise to 20°C once about half attenuated (gravity halfway from OG to target FG)
 //  - "Day 3-4" dry hops (e.g. Riverdog #1) on those days
 //  - terminal dry hop and close & spund within 1°P of target FG (beers without a dry hop just spund)
-//  - VDK check once at FG and stable on two days' readings, then chill if the VDK is negative
+//  - VDK check once gravity is stable (a reading the same as, or higher than, the day before's;
+//    target FG doesn't come into it), then chill if the VDK is negative
+//  - Biofine the day after chill
 //  - after chill, the recipe's cellar template steps (dump hops, 10 psi, filter ...), dated from the
 //    day it was actually chilled
 import { supabase } from '../supabaseClient'
@@ -14,8 +16,6 @@ import { addDays, daysBetween, stepsForTank } from './schedule'
 
 const FREE_RISE_TEMP = 19.5 // a reading this warm or more means it's been free risen
 const DRY_HOP_WITHIN = 1 // °P of target FG
-const AT_FG = 0.2 // °P above target FG still counts as at FG
-const STABLE = 0.1 // °P between readings counts as stable
 
 const n = (v) => (v == null || v === '' ? null : Number(v))
 const fmtP = (g) => `${Number(g).toFixed(1)} °P`
@@ -91,17 +91,20 @@ export function cellarSteps(ctx) {
       if (!done && day >= from) out.push({ key: 'dry_hop_early', text: 'Dry hop #1', why: `Day ${day}: the recipe's day ${from}${to !== from ? `-${to}` : ''} dry hop. Ingredients on the Cellar tab.`, level: day > to ? 'warn' : 'soon' })
     }
 
-    // Terminal dry hop and close & spund within 1°P of FG (or just spund).
-    const nearFg = g != null && fg != null && g <= fg + DRY_HOP_WITHIN
-    if (nearFg && terminal.length && !termDone)
-      out.push({ key: 'dry_hop', text: spunded ? 'Dry hop' : 'Dry hop + close & spund', why: `Within 1°P of target FG: ${fmtP(g)}, target ${fmtP(fg)}. Ingredients on the Cellar tab.`, level: 'soon', also: spunded ? null : 'spund' })
-    else if (nearFg && !spunded && (termDone || !terminal.length))
-      out.push({ key: 'spund', text: 'Close & spund', why: `Within 1°P of target FG: ${fmtP(g)}, target ${fmtP(fg)}.`, level: 'soon' })
-
-    // At FG and stable on two days' readings: VDK, then chill when negative.
-    const atFg = g != null && fg != null && g <= fg + AT_FG
+    // Stable: today's reading is the same as, or higher than, the previous day's.
     const prevDay = last ? [...grav].reverse().find((r) => r.reading_date < last.reading_date) : null
-    const stable = atFg && prevDay && Math.abs(n(prevDay.gravity_plato) - g) <= STABLE
+    const stable = !!prevDay && g >= n(prevDay.gravity_plato)
+    const stableWhy = stable ? `Stable: ${fmtP(prevDay.gravity_plato)} on ${fmtD(prevDay.reading_date)}, ${fmtP(g)} on ${fmtD(last.reading_date)}.` : ''
+
+    // Terminal dry hop and close & spund within 1°P of FG (or once it's stable, if it finished
+    // higher); beers without a dry hop just spund.
+    const nearFg = g != null && fg != null && g <= fg + DRY_HOP_WITHIN
+    const hopWhy = nearFg ? `Within 1°P of target FG: ${fmtP(g)}, target ${fmtP(fg)}.` : stableWhy
+    if ((nearFg || stable) && terminal.length && !termDone)
+      out.push({ key: 'dry_hop', text: spunded ? 'Dry hop' : 'Dry hop + close & spund', why: `${hopWhy} Ingredients on the Cellar tab.`, level: 'soon', also: spunded ? null : 'spund' })
+    else if ((nearFg || stable) && !spunded && (termDone || !terminal.length))
+      out.push({ key: 'spund', text: 'Close & spund', why: hopWhy, level: 'soon' })
+
     const vdks = [...actionsDone(ctx, 'vdk')].sort((a, b) => a.done_on.localeCompare(b.done_on) || a.created_at.localeCompare(b.created_at))
     const vdkJob = jobsDone(ctx, /vdk|diacetyl/i).length > 0
     const lastVdk = vdks[vdks.length - 1]
@@ -109,14 +112,7 @@ export function cellarSteps(ctx) {
     if (stable && termDone) {
       if (vdkPass) out.push({ key: 'chill', text: 'Chill', why: `VDK negative${lastVdk ? ` (${fmtD(lastVdk.done_on)})` : ''}.`, level: 'go' })
       else if (lastVdk?.result === 'fail') out.push({ key: 'vdk', text: 'Recheck VDK', why: `Failed on ${fmtD(lastVdk.done_on)}. Recheck before chilling.`, level: 'warn', vdk: true })
-      else out.push({ key: 'vdk', text: 'VDK check', why: `At FG and stable: ${fmtP(prevDay.gravity_plato)} on ${fmtD(prevDay.reading_date)}, ${fmtP(g)} on ${fmtD(last.reading_date)}.`, level: 'go', vdk: true })
-    } else if (!atFg && fg != null && last) {
-      // Stuck above FG: every reading over the last two days within 0.3 °P.
-      const since = addDays(last.reading_date, -2)
-      const window = grav.filter((r) => r.reading_date >= since)
-      const vals = window.map((r) => n(r.gravity_plato))
-      if (window.length >= 2 && window[0].reading_date <= since && Math.max(...vals) - Math.min(...vals) <= 0.3)
-        out.push({ key: 'stuck', text: 'Gravity not moving', why: `${fmtP(g)}, around there since ${fmtD(window[0].reading_date)}; target ${fmtP(fg)}. Check temperature, consider rousing.`, level: 'warn', info: true })
+      else out.push({ key: 'vdk', text: 'VDK check', why: stableWhy, level: 'go', vdk: true })
     }
     return out
   }
@@ -125,7 +121,7 @@ export function cellarSteps(ctx) {
   const steps = template ? stepsForTank(template, tank) : []
   const chillStep = steps.find((s) => /chill|crash/i.test(s.task))
   const after = chillStep ? steps.filter((s) => Number(s.day) > Number(chillStep.day) || (Number(s.day) === Number(chillStep.day) && s.slot === 'PM' && chillStep.slot === 'AM')).filter((s) => !/can|keg/i.test(s.task) || /dump/i.test(s.task)) : []
-  for (const s of after) {
+  for (const s of after.filter((x) => !/biofine/i.test(x.task))) {
     const key = `tpl:${s.task.trim().toLowerCase()}`
     const re = new RegExp(`^\\s*${s.task.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i')
     const done = actionsDone(ctx, key).length > 0 || ctx.jobs.some((e) => e.done && re.test(e.text ?? '') && (!chillDate || e.entry_date >= chillDate))
@@ -135,9 +131,10 @@ export function cellarSteps(ctx) {
     const filter = /filter|transfer/i.test(s.task)
     out.push({ key, text: s.task, why: dueOn ? `${Number(s.day) - Number(chillStep.day)} day${Number(s.day) - Number(chillStep.day) === 1 ? '' : 's'} after chill (${fmtD(chillDate)}).${filter ? ' Transfer from the Cellar tab.' : ''}` : 'After chill.', level: dueOn && dueOn < date ? 'warn' : 'soon', link: filter ? 'cellar' : null, noDone: filter })
   }
-  // Biofine goes in the FV before transfer.
-  if ((batch.tank_additions ?? []).some((a) => /biofine/i.test(a.item_name ?? '') && !a.added_on))
-    out.push({ key: 'biofine', text: 'Biofine before transfer', why: 'Amount on the Cellar tab.', level: 'soon', link: 'cellar', noDone: true })
+  // Biofine the day after chill (it's ticked off when marked added on the Cellar tab).
+  const bioDue = chillDate ? addDays(chillDate, 1) : null
+  if ((batch.tank_additions ?? []).some((a) => /biofine/i.test(a.item_name ?? '') && !a.added_on) && (!bioDue || bioDue <= date))
+    out.push({ key: 'biofine', text: 'Biofine', why: `${bioDue ? `Day after chill (${fmtD(chillDate)}). ` : ''}Amount on the Cellar tab.`, level: bioDue && bioDue < date ? 'warn' : 'soon', link: 'cellar', noDone: true })
   return out
 }
 

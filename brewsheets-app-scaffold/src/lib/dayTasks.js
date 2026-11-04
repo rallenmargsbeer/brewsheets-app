@@ -142,27 +142,26 @@ export function gravityAdvice(batch, date, { chilled = false, dryHopped = false 
     .filter((r) => r.gravity_plato != null && r.reading_date <= date)
     .sort((a, b) => a.reading_date.localeCompare(b.reading_date) || String(a.created_at).localeCompare(String(b.created_at)))
   const fg = batch.recipes?.target_fg != null ? Number(batch.recipes.target_fg) : null
-  const fmt = (g) => `${Number(g).toFixed(1)} °P`
+  const fmtP = (g) => `${Number(g).toFixed(1)} °P`
   const out = []
   const last = readings[readings.length - 1]
   if (!last) return [{ level: 'info', text: 'No gravity reading yet: take one.' }]
-  if (last.reading_date < date) out.push({ level: 'info', text: `Take today's gravity reading (last ${fmt(last.gravity_plato)} on ${last.reading_date.slice(5)}).` })
+  if (last.reading_date < date) out.push({ level: 'info', text: `Take today's gravity reading (last ${fmtP(last.gravity_plato)} on ${last.reading_date.slice(5)}).` })
   const g = Number(last.gravity_plato)
-  // The latest reading at least a day before the last one, to see if it's still moving.
+  // Stable: the latest reading is the same as, or higher than, the previous day's (target FG doesn't
+  // come into it).
   const prev = [...readings].reverse().find((r) => r.reading_date < last.reading_date)
-  const stable = prev && Math.abs(Number(prev.gravity_plato) - g) <= 0.1
+  const stable = prev && g >= Number(prev.gravity_plato)
   const dh = pendingDryHops(batch, dryHopped)
   const hopsDone = dryHopped || (plannedDryHops(batch).length > 0 && !dh.length)
-  if (fg != null && g <= fg + 0.2) {
+  if (stable) {
     out.push(dh.length
-      ? { level: 'soon', label: 'Dry hop due', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: dry hop before VDK / diacetyl and chilling. Refer to the Cellar tab for ingredients to add.` }
-      : { level: 'go', text: `At target FG (${fmt(g)}, target ${fmt(fg)})${stable ? ' and stable' : ''}: check VDK / diacetyl, then chill.` })
-  } else if (stable) {
-    out.push(fg != null
-      ? { level: 'warn', text: `Gravity hasn't moved since ${prev.reading_date.slice(5)} (${fmt(g)}, target ${fmt(fg)}): check temperature, consider rousing.` }
-      : { level: 'go', text: `Gravity stable at ${fmt(g)}: likely terminal, check VDK / diacetyl.` })
-  } else if (fg != null && g <= fg + 1.5) {
-    out.push({ level: 'soon', text: `Nearing terminal (${fmt(g)}, target ${fmt(fg)})${hopsDone ? '.' : ': get dry hops / spunding ready.'}` })
+      ? { level: 'soon', label: 'Dry hop due', text: `Gravity stable (${fmtP(prev.gravity_plato)} then ${fmtP(g)}): dry hop before the VDK check. Refer to the Cellar tab for ingredients to add.` }
+      : { level: 'go', text: `Gravity stable (${fmtP(prev.gravity_plato)} then ${fmtP(g)}): VDK check, then chill if it's negative.` })
+  } else if (fg != null && g <= fg + 1) {
+    out.push(dh.length
+      ? { level: 'soon', label: 'Dry hop due', text: `Within 1 °P of target FG (${fmtP(g)}, target ${fmtP(fg)}): dry hop and close & spund. Refer to the Cellar tab for ingredients to add.` }
+      : { level: 'soon', text: `Within 1 °P of target FG (${fmtP(g)}, target ${fmtP(fg)})${hopsDone ? '' : ': close & spund'}.` })
   }
   return out
 }
