@@ -3,7 +3,7 @@
 // and gravity-based suggestions for beer that's fermenting.
 import { supabase } from '../supabaseClient'
 import { listTanks } from './api'
-import { addDays, daysBetween, listScheduleEntries, listCellarTemplates, listBookings, saveScheduleEntry, stepsForTank, BREW_LANES, PACK_LANES } from './schedule'
+import { addDays, listScheduleEntries, listCellarTemplates, listBookings, saveScheduleEntry, BREW_LANES, PACK_LANES } from './schedule'
 import { assignBeers, packBeer } from './beerColours'
 import { CELLAR_STATUSES } from './tanks'
 import { packCount } from './incoming'
@@ -82,17 +82,19 @@ export async function loadDay(date) {
       const scheduled = today.filter((e) => e.lane === 'tank' && e.tank_id === t.id && isJob(e) && !COVERED_JOB.test(e.text ?? '')).map(task).sort(bySlot)
       return { tank: t, batch, beer: batch.beer_style, scheduled, fromTemplate: [], steps, advice: [] }
     }
+    // Fermenter with no beer in it (no batch): no cellar jobs, since there's nothing to do them to.
+    // A brew booked for it that's due but has no brew sheet is flagged as not brewed. Other cells
+    // for the day (cleaning and so on) still show. Bright tanks: their schedule cells as before.
+    if (t.tank_type !== 'BBT') {
+      const scheduled = today.filter((e) => e.lane === 'tank' && e.tank_id === t.id && isJob(e) && !COVERED_JOB.test(e.text ?? '')).map(task).sort(bySlot)
+      const unbrewed = bookings.filter((b) => b.tank_id === t.id && !b.batch_id && b.brew_date && b.brew_date <= date && b.brew_date >= addDays(date, -21))
+      const advice = unbrewed.map((b) => ({ level: 'warn', text: `${b.beer_name} was booked to brew on ${b.brew_date.slice(8)}/${b.brew_date.slice(5, 7)} but hasn't been brewed (no brew sheet). Rebook it or remove it from the schedule.` }))
+      return { tank: t, batch: null, beer: null, scheduled, fromTemplate: [], steps: [], advice }
+    }
     const todays = today.filter((e) => e.lane === 'tank' && e.tank_id === t.id).map(task).sort(bySlot)
     const scheduled = [...carried.filter((e) => e.lane === 'tank' && e.tank_id === t.id).map(task), ...todays]
-    let fromTemplate = []
-    if (!todays.length && batch?.recipes?.cellar_template_id && t.tank_type !== 'BBT' && batch.date_brewed) {
-      const day = daysBetween(batch.date_brewed, date) + 1 // brew day is day 1
-      const tpl = templateById[batch.recipes.cellar_template_id]
-      fromTemplate = stepsForTank(tpl, t).filter((s) => Number(s.day) === day).map((s) => ({ slot: s.slot, text: s.task, template: tpl.name, day })).sort(bySlot)
-    }
-    // The beer in the tank: the batch, or the schedule's run for this half-day.
     const beer = batch?.beer_style ?? scheduled.find((s) => s.beer)?.beer ?? null
-    return { tank: t, batch, beer, scheduled, fromTemplate, advice: batch ? [...gravityAdvice(batch, date, jobState(batch, entries.filter((e) => e.lane === 'tank' && e.tank_id === t.id), date)), ...biofineAdvice(batch, t)] : [] }
+    return { tank: t, batch, beer, scheduled, fromTemplate: [], advice: [] }
   })
   return { date, brewhouse, packaging, other, tanks: tankDays }
 }
@@ -128,14 +130,6 @@ export const jobState = (batch, jobs, date) => ({ chilled: isChilled(batch, jobs
 
 // Suggestions from the gravity readings of a fermenting batch (°P). Target FG from the recipe.
 // Once it's been chilled (chill job ticked off) there's nothing more: no readings after chill.
-// Biofine goes into the FV before transfer: once the beer is on chill (or conditioning in the FV)
-// and the planned Biofine isn't ticked off, remind the cellar.
-function biofineAdvice(batch, tank) {
-  if (tank.tank_type === 'BBT' || !['chilling', 'conditioning'].includes(batch.status)) return []
-  const due = (batch.tank_additions ?? []).some((a) => /biofine/i.test(a.item_name ?? '') && !a.added_on)
-  return due ? [{ level: 'soon', label: 'Biofine due', text: 'Add Biofine before transfer to the BBT. Refer to the Cellar tab for the amount.' }] : []
-}
-
 export function gravityAdvice(batch, date, { chilled = false, dryHopped = false } = {}) {
   if (batch.status !== 'fermenting' || chilled) return []
   const readings = (batch.fermentation_readings ?? [])
