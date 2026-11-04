@@ -26,14 +26,14 @@ export default function TodayPage() {
   useEffect(() => { listBeerColours().then(setBeerColours).catch(() => {}) }, [])
   useEffect(() => { setDay(null); setError(null); load() }, [date])
 
-  // Fermenters only (no bright tanks), and without the "Brew" job: that's in Brewhouse already.
+  // Fermenters only (no bright tanks), and without the "Brew" job (brewing has its own Brew Day page).
   const notBrew = (t) => !/^\s*brew(\s*day)?\s*$/i.test(t.text ?? '')
   const tanks = day ? day.tanks
     .filter((d) => d.tank.tank_type !== 'BBT')
     .map((d) => ({ ...d, scheduled: d.scheduled.filter(notBrew), fromTemplate: d.fromTemplate.filter(notBrew) }))
     .filter((d) => d.scheduled.length || d.fromTemplate.length || d.advice.length || d.steps?.length) : []
   const fvs = tanks.sort(byName)
-  const empty = day && !day.brewhouse.length && !tanks.length && !day.packaging.length && !day.other.length
+  const empty = day && !tanks.length && !day.packaging.length && !day.other.length
 
   const tankRows = (list) => list.map((d) => (
     <div key={d.tank.id} className="day-row">
@@ -61,18 +61,6 @@ export default function TodayPage() {
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {!day && !error && <p>Loading…</p>}
       {empty && <p className="stock-muted">Nothing on the schedule for this day.</p>}
-
-      {day && day.brewhouse.length > 0 && (
-        <section className="day-card">
-          <h2>Brewhouse</h2>
-          {day.brewhouse.map((t) => (
-            <div key={t.id} className="day-row">
-              <div className="day-tank"><strong>{LANE_LABEL[t.lane]}</strong><BeerChip beer={t.beer} /></div>
-              <TaskLine task={t} editor={editor} />
-            </div>
-          ))}
-        </section>
-      )}
 
       {fvs.length > 0 && <section className="day-card"><h2>Fermenters</h2>{tankRows(fvs)}</section>}
 
