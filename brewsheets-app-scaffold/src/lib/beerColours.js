@@ -17,6 +17,7 @@ export const beerKey = (name) => {
 const FALLBACK = ['#e0bfe8', '#a9d8e2', '#f4b8b8', '#cbdc93', '#a9c8f0', '#f5b5d8', '#d6c7a2', '#b3e2ae', '#c3b8ec', '#f0cf86']
 let saved = new Map() // beerKey -> { bg, fg }
 let loose = new Map() // looseKey -> { bg, fg }, so "Pale Ale" finds "Pale"
+let byColour = new Map() // bg (lower case) -> beer names with that colour
 
 // Stock and recipes name some beers longer than the schedule does.
 const LOOSE_ALIASES = { paleale: 'pale', redipa: 'red', inthepines: 'itp', margsdraught: 'draught', driftxpa: 'drift' }
@@ -29,6 +30,17 @@ export const looseKey = (name) => {
 export function setBeerColours(rows) {
   saved = new Map(rows.map((r) => [beerKey(r.beer_name), { bg: r.bg, fg: r.fg }]))
   loose = new Map(rows.map((r) => [looseKey(r.beer_name), { bg: r.bg, fg: r.fg }]))
+  byColour = new Map()
+  for (const r of rows) if (r.bg) byColour.set(r.bg.toLowerCase(), [...(byColour.get(r.bg.toLowerCase()) ?? []), r.beer_name])
+}
+
+// The beer a cell's colour stands for: the one beer with that colour, or the shortest of several
+// that are all the same beer ("ITP" and "ITP trial"). Null when it's shared by different beers.
+export function beerForColour(bg) {
+  const names = bg ? byColour.get(String(bg).toLowerCase()) : null
+  if (!names?.length) return null
+  const short = [...names].sort((a, b) => a.length - b.length)[0]
+  return names.every((n) => looseKey(n).startsWith(looseKey(short))) ? short : null
 }
 
 export function hasSavedColours(name) {
@@ -145,6 +157,9 @@ export function packBeer(cellEntries, date, slot, { entries, beerOf, runs, brigh
   // A cell from a booking is that booking's beer.
   const booked = cellEntries.map((e) => beerOf.get(e.id)).find(Boolean)
   if (booked) return booked
+  // A cell coloured in a beer's colour is that beer.
+  const coloured = cellEntries.map((e) => beerForColour(e.cell_bg)).find(Boolean)
+  if (coloured) return coloured
   const packJobs = entries.filter((e) => e.lane === 'tank' && e.entry_date === date && /can|keg|packag/i.test(e.text) && beerOf.get(e.id))
   const job = packJobs.find((e) => e.slot === slot) ?? packJobs[0]
   if (job) return beerOf.get(job.id)

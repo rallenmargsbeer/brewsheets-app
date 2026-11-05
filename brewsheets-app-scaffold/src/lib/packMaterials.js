@@ -3,8 +3,8 @@
 // read-only copy). Beer lines (Finished Beer) are left out: only packaging materials count.
 import { supabase } from '../supabaseClient'
 import { listTanks } from './api'
-import { addDays, listScheduleEntries, listCellarTemplates, listBookings, PACK_LANES } from './schedule'
-import { assignBeers, packBeer, looseKey } from './beerColours'
+import { addDays, listScheduleEntries, listCellarTemplates, listBookings, listBeerColours, PACK_LANES } from './schedule'
+import { assignBeers, packBeer, looseKey, setBeerColours } from './beerColours'
 import { CUBES_PER_PALLET } from './packaging'
 
 // Product names that differ from the schedule's: the Draught is "Margs Draught" in Unleashed,
@@ -43,6 +43,7 @@ export async function packagingMaterials(fromIso, toIso) {
     listBookings({ fromIso: addDays(fromIso, -120) }),
     listTanks(),
     supabase.from('unl_dataset').select('data, updated_at').eq('key', 'pack_boms').maybeSingle(),
+    listBeerColours().then(setBeerColours).catch(() => {}),
   ])
   if (boms.error) throw boms.error
   const bookingBeer = Object.fromEntries(bookings.map((b) => [b.id, b.beer_name]))

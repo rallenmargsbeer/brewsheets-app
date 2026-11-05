@@ -3,8 +3,8 @@
 // and gravity-based suggestions for beer that's fermenting.
 import { supabase } from '../supabaseClient'
 import { listTanks } from './api'
-import { addDays, listScheduleEntries, listCellarTemplates, listBookings, saveScheduleEntry, BREW_LANES, PACK_LANES } from './schedule'
-import { assignBeers, packBeer } from './beerColours'
+import { addDays, listScheduleEntries, listCellarTemplates, listBookings, saveScheduleEntry, listBeerColours, BREW_LANES, PACK_LANES } from './schedule'
+import { assignBeers, packBeer, setBeerColours } from './beerColours'
 import { CELLAR_STATUSES } from './tanks'
 import { packCount } from './incoming'
 import { cellarSteps, COVERED_JOB } from './cellarSteps'
@@ -34,6 +34,7 @@ export async function loadDay(date) {
     listBookings({ fromIso: addDays(from, -30) }),
     listTanks(),
     listCellarBatches(),
+    listBeerColours().then(setBeerColours).catch(() => {}),
   ])
   const bookingBeer = Object.fromEntries(bookings.map((b) => [b.id, b.beer_name]))
   const { beerOf, runs } = assignBeers(entries, { knownBeers: templates.map((t) => t.name), bookingBeer })
