@@ -890,3 +890,9 @@ button.dt-cup.on { border-color: var(--accent); background: var(--accent-soft); 
 .day-step-why { font-size: 0.82rem; color: var(--ink2); }
 .day-step-act { display: flex; gap: 0.3rem; align-items: center; flex-shrink: 0; }
 .secondary-link { font-size: 0.8rem; }
+
+/* Phones and portrait iPads: every table scrolls sideways in its own box instead of being cut off
+   at the screen (or card) edge. */
+@media (max-width: 820px) {
+  table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
