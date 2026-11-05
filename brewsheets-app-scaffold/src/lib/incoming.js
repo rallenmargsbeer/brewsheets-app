@@ -1,8 +1,8 @@
 // Packaging coming up on the schedule, for projecting stock: each canning / kegging cell from
 // today on, with the beer it's for (worked out the same way the schedule colours it).
 import { listTanks } from './api'
-import { addDays, todayIso, listScheduleEntries, listCellarTemplates, listBookings } from './schedule'
-import { assignBeers, packBeer } from './beerColours'
+import { addDays, todayIso, listScheduleEntries, listCellarTemplates, listBookings, listBeerColours } from './schedule'
+import { assignBeers, packBeer, setBeerColours } from './beerColours'
 
 // "2 pallets (432 cubes)" -> 432, "660" -> 660, "45 x 50L" -> 45, "40 PET" -> 40.
 export function packCount(text) {
@@ -23,6 +23,8 @@ export async function loadIncoming({ days = 120, since = null } = {}) {
     listCellarTemplates(),
     listBookings({ fromIso: addDays(from, -30), toIso: to }),
     listTanks(),
+    // Cell colours stand for beers (packBeer): load them first.
+    listBeerColours().then(setBeerColours).catch(() => {}),
   ])
   const bookingBeer = Object.fromEntries(bookings.map((b) => [b.id, b.beer_name]))
   const bookingBrewed = Object.fromEntries(bookings.map((b) => [b.id, b.brew_date]))
