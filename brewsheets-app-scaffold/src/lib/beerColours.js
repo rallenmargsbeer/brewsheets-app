@@ -142,6 +142,9 @@ export function stayAt(runs, tankId, date, slot) {
 export function packBeer(cellEntries, date, slot, { entries, beerOf, runs, brightTankIds }) {
   const set = cellEntries.find((e) => e.beer_name)?.beer_name
   if (set) return set
+  // A cell from a booking is that booking's beer.
+  const booked = cellEntries.map((e) => beerOf.get(e.id)).find(Boolean)
+  if (booked) return booked
   const packJobs = entries.filter((e) => e.lane === 'tank' && e.entry_date === date && /can|keg|packag/i.test(e.text) && beerOf.get(e.id))
   const job = packJobs.find((e) => e.slot === slot) ?? packJobs[0]
   if (job) return beerOf.get(job.id)

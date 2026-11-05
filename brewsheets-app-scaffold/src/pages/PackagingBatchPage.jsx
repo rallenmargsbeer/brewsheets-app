@@ -17,7 +17,7 @@ import AbvFlag from '../components/AbvFlag.jsx'
 import { abvCheck, dawLitres, dawAim, bbtLitres } from '../lib/batchFigures'
 import { useAutoSave, SaveStatus } from '../lib/useAutoSave.jsx'
 import { useAuth } from '../auth.jsx'
-import { loadIncoming, beerMatch } from '../lib/incoming'
+import { loadIncoming, sameBeer } from '../lib/incoming'
 import { addDays, todayIso } from '../lib/schedule'
 
 const today = () => new Date().toLocaleDateString('en-CA') // yyyy-mm-dd, local time
@@ -228,7 +228,7 @@ function ScheduledPack({ batch, packed }) {
     const until = addDays(todayIso(), 21)
     loadIncoming({ since, days: 60 })
       // Not a later brew of the same beer (its booking brewed after this batch).
-      .then((all) => setRows(all.filter((r) => beerMatch(r.beer) === beerMatch(batch.beer_style) && r.date <= until
+      .then((all) => setRows(all.filter((r) => sameBeer(r.beer, batch.beer_style) && r.date <= until
         && !(r.brewed && batch.date_brewed && r.brewed > addDays(batch.date_brewed, 3)))))
       .catch(() => setRows([]))
   }, [batch.id, batch.beer_style, batch.bbt_transfer_date, batch.date_brewed])

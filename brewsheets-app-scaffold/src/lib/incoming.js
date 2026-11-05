@@ -56,6 +56,12 @@ export const beerMatch = (name) => {
   return SAME[k] ?? k
 }
 
+// The same beer, allowing a longer schedule name ("Golden States Cali IPA" for "Golden States").
+export const sameBeer = (a, b) => {
+  const x = beerMatch(a), y = beerMatch(b)
+  return !!x && !!y && (x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x))))
+}
+
 // Weeks until stock runs out: it falls by `weekly` a week (or by `weekly(date)` a day, for a
 // forecast that changes month to month) and rises on each packaging day.
 // Returns null with no demand, or `maxWeeks` when it lasts that long.
