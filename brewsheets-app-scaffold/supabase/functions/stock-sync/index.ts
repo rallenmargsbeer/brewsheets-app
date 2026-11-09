@@ -21,7 +21,7 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
 
-  // ---- who is calling? the scheduled job (shared secret) or a signed-in report viewer / schedule editor
+  // ---- who is calling? the scheduled job (shared secret) or any signed-in, active app user
   let trigger = 'manual'
   let requestedBy: string | null = null
   const cron = req.headers.get('x-cron-secret')
@@ -34,11 +34,12 @@ Deno.serve(async (req: Request) => {
     const { data: u } = await admin.auth.getUser(token)
     const email = u?.user?.email?.toLowerCase()
     if (!email) return json({ error: 'sign in required' }, 401)
-    const [{ data: v }, { data: e }] = await Promise.all([
+    const [{ data: v }, { data: e }, { data: me }] = await Promise.all([
       admin.from('report_viewers').select('email').ilike('email', email).maybeSingle(),
       admin.from('schedule_editors').select('email').ilike('email', email).maybeSingle(),
+      admin.from('app_users').select('status').eq('id', u!.user!.id).maybeSingle(),
     ])
-    if (!v && !e) return json({ error: 'not allowed to refresh stock' }, 403)
+    if (!v && !e && me?.status !== 'active') return json({ error: 'not allowed to refresh stock' }, 403)
     requestedBy = email
   }
 
