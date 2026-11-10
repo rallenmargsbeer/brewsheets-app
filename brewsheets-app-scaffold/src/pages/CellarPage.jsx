@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { listTanks, listIngredients, listBatchesInTanks, upsertBatch, upsertFermentationReading, updateFermentationReading } from '../lib/api'
+import { listTanks, listIngredients, listBatchesInTanks, listBarrelled, upsertBatch, upsertFermentationReading, updateFermentationReading } from '../lib/api'
 import { tankLabel, statusLabel, CELLAR_STATUSES } from '../lib/tanks'
 import AddToTank from '../components/AddToTank.jsx'
 import TankDay from '../components/TankDay.jsx'
@@ -149,9 +149,14 @@ function DawNote({ check: c, batch, litres }) {
   return <p className="daw-note">Make about <b>{Math.ceil(dawLitres(ko, check.abv, check.target) / 10) * 10} L of DAW</b>: enough to bring up to {Math.round(ko).toLocaleString()} L (the knockout volume) from {check.abv.toFixed(2)}% to {aim}% (target {check.target}% + 0.2%). The exact amount shows once the filtered litres are entered.</p>
 }
 
+// Out of the fermenter: to an empty BBT, or (from a fermenter) into barrels. Barrelled beer comes
+// back through here to a BBT.
 function TransferForm({ batch, bbts, onSaved }) {
   const [bbtId, setBbtId] = useState('')
   const [litres, setLitres] = useState('')
+  const [barrels, setBarrels] = useState('')
+  const fromBarrels = batch.status === 'barrelled'
+  const toBarrels = bbtId === 'barrels'
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -161,6 +166,13 @@ function TransferForm({ batch, bbts, onSaved }) {
     if (check.ok === false && check.diff < 0 && !window.confirm(`ABV ${check.abv.toFixed(2)}% is under the excise range (${check.target}% ± 0.2%), and DAW can't raise it. Transfer to filter anyway?`)) return
     setSaving(true)
     setError(null)
+    if (toBarrels) {
+      try {
+        await upsertBatch({ id: batch.id, tank_id: null, status: 'barrelled', barrel_date: today(), barrel_l: litres === '' ? null : Number(litres), barrel_count: barrels === '' ? null : Number(barrels) })
+        onSaved(`Into barrels: ${barrels} barrel${Number(barrels) === 1 ? '' : 's'}${litres ? `, ${Number(litres).toLocaleString()} L` : ''}. The fermenter is free.`)
+      } catch (e) { setError(e.message); setSaving(false) }
+      return
+    }
     try {
       await upsertBatch({
         id: batch.id,
@@ -177,7 +189,7 @@ function TransferForm({ batch, bbts, onSaved }) {
     }
   }
 
-  if (bbts.length === 0) return <><AbvFlag check={check} compact /><p style={{ color: 'var(--ink2)', margin: 0 }}>No empty BBT right now.</p></>
+  if (bbts.length === 0 && fromBarrels) return <><AbvFlag check={check} compact /><p style={{ color: 'var(--ink2)', margin: 0 }}>No empty BBT right now.</p></>
   return (
     <div>
       <AbvFlag check={check} compact />
@@ -187,13 +199,22 @@ function TransferForm({ batch, bbts, onSaved }) {
             {tankLabel(t.name)}
           </button>
         ))}
+        {!fromBarrels && <button className={toBarrels ? '' : 'secondary'} onClick={() => setBbtId('barrels')}>Barrels</button>}
       </div>
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: '0.5rem', maxWidth: 200 }}>
-        Litres to BBT<input type="number" inputMode="numeric" value={litres} onChange={(e) => setLitres(e.target.value)} />
-      </label>
-      <DawNote check={check} batch={batch} litres={litres} />
+      {bbts.length === 0 && !fromBarrels && <p style={{ color: 'var(--ink2)', margin: '0.4rem 0 0' }}>No empty BBT right now.</p>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+        {toBarrels && (
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 140 }}>
+            Barrels<input type="number" inputMode="numeric" min="1" value={barrels} onChange={(e) => setBarrels(e.target.value)} />
+          </label>
+        )}
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 200 }}>
+          {toBarrels ? 'Litres into barrels' : fromBarrels ? 'Litres from barrels to BBT' : 'Litres to BBT'}<input type="number" inputMode="numeric" value={litres} onChange={(e) => setLitres(e.target.value)} />
+        </label>
+      </div>
+      {!toBarrels && <DawNote check={check} batch={batch} litres={litres} />}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      <button onClick={save} disabled={!bbtId || saving} style={{ marginTop: '0.5rem' }}>{saving ? '…' : 'Transfer'}</button>
+      <button onClick={save} disabled={!bbtId || saving || (toBarrels && !(Number(barrels) > 0))} style={{ marginTop: '0.5rem' }}>{saving ? '…' : toBarrels ? 'Into barrels' : 'Transfer'}</button>
     </div>
   )
 }
@@ -260,7 +281,7 @@ function TankPanel({ tank, batch, day, editor, emptyBbts, ingredients, onClose, 
 
             {tank.tank_type !== 'BBT' && (
               <div style={section}>
-                <h4 style={{ margin: '0 0 0.5rem' }}>Transfer to BBT</h4>
+                <h4 style={{ margin: '0 0 0.5rem' }}>Transfer to BBT or barrels</h4>
                 <TransferForm batch={batch} bbts={emptyBbts} onSaved={(t) => { onClose(); done(t) }} />
               </div>
             )}
@@ -273,6 +294,38 @@ function TankPanel({ tank, batch, day, editor, emptyBbts, ingredients, onClose, 
 
 // Natural order so FV2 sorts before FV10 and "BT 1" before "BT 2".
 const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })
+
+// Beer ageing in barrels (out of the fermenter, not yet in a BBT), with the move back to a BBT.
+function BarrelSection({ batches, emptyBbts, onChanged }) {
+  const [open, setOpen] = useState(null)
+  const [msg, setMsg] = useState(null)
+  if (!batches.length && !msg) return null
+  const fmt = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
+  return (
+    <>
+      <h3 style={{ marginTop: '1.5rem' }}>In barrels</h3>
+      {msg && <p style={{ color: '#1a7a1a', margin: '0 0 0.5rem' }}>{msg}</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        {batches.map((b) => (
+          <div key={b.id} className="stock-card" style={{ padding: '0.7rem 0.9rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'baseline' }}>
+              <div>
+                <BeerDot name={b.beer_style} /> <Link to={`/batches/${b.id}`}><strong>{b.beer_style} #{b.batch_number}</strong></Link>
+                <span className="stock-muted"> · {b.barrel_count ?? '?'} barrel{b.barrel_count === 1 ? '' : 's'}{b.barrel_l ? ` · ${Number(b.barrel_l).toLocaleString()} L` : ''} · in since {fmt(b.barrel_date)} ({daysSince(b.barrel_date)} days)</span>
+              </div>
+              <button className="secondary" onClick={() => setOpen(open === b.id ? null : b.id)}>{open === b.id ? 'Cancel' : 'Transfer to BBT'}</button>
+            </div>
+            {open === b.id && (
+              <div style={{ marginTop: '0.6rem' }}>
+                <TransferForm batch={b} bbts={emptyBbts} onSaved={(t) => { setOpen(null); setMsg(t); onChanged() }} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
 
 // Every actively fermenting beer's gravity chart at once, oldest brew first.
 function FermentationGraphs({ batches, tanks }) {
@@ -319,6 +372,7 @@ export default function CellarPage() {
   const [days, setDays] = useState(null)
   const [editor, setEditor] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [barrelled, setBarrelled] = useState([])
   useEffect(() => { isScheduleEditor().then(setEditor) }, [])
   useEffect(() => {
     listIngredients().then(setIngredients).catch((e) => setError(e.message))
@@ -326,10 +380,11 @@ export default function CellarPage() {
 
   function refresh() {
     setRefreshKey((k) => k + 1)
-    Promise.all([listTanks(), listBatchesInTanks(CELLAR_STATUSES)])
-      .then(([t, b]) => {
+    Promise.all([listTanks(), listBatchesInTanks(CELLAR_STATUSES), listBarrelled()])
+      .then(([t, b, br]) => {
         setTanks(t)
         setBatches(b)
+        setBarrelled(br)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -374,6 +429,7 @@ export default function CellarPage() {
               </div>
             </>
           )}
+          <BarrelSection batches={barrelled} emptyBbts={bbts.filter((t) => !batchIn(t))} onChanged={refresh} />
           <YeastBank refreshKey={refreshKey} />
         </>
       )}

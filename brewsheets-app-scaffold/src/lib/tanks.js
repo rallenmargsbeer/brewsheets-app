@@ -11,4 +11,4 @@ export const IN_TANK_STATUSES = ['planned', 'brewing', 'fermenting', 'chilling',
 export const CELLAR_STATUSES = ['fermenting', 'chilling', 'conditioning']
 
 // Statuses are stored lower-case; show them capitalised.
-export const statusLabel = (s) => (s === 'chilling' ? 'On chill' : s ? s[0].toUpperCase() + s.slice(1) : '')
+export const statusLabel = (s) => (s === 'chilling' ? 'On chill' : s === 'barrelled' ? 'In barrels' : s ? s[0].toUpperCase() + s.slice(1) : '')
