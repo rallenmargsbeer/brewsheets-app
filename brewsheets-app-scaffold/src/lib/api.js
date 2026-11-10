@@ -240,6 +240,17 @@ export async function listBatchesInTanks(statuses) {
   return data
 }
 
+// Batches out of the fermenter and ageing in barrels (no tank), oldest first.
+export async function listBarrelled() {
+  const { data, error } = await supabase
+    .from('batches')
+    .select('id, batch_number, beer_style, status, date_brewed, barrel_date, barrel_l, barrel_count, fv_to_bbt_l, daw_added_l, og_override, target_abv, recipes(target_abv, target_fg, is_rtd), batch_blend_items(planned_qty, actual_qty, abv_pct), brew_runs(whirlpool_gravity, ko_flowmeter_l, correction_l), fermentation_readings(gravity_plato, reading_date, created_at)')
+    .eq('status', 'barrelled')
+    .order('barrel_date')
+  if (error) throw error
+  return data
+}
+
 export async function getBatch(id) {
   const { data, error } = await supabase
     .from('batches')
