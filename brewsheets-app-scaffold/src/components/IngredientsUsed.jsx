@@ -2,21 +2,30 @@ import { useState } from 'react'
 
 const SECTION_ORDER = ['grist', 'water', 'kettle', 'whirlpool', 'fermenter']
 
-// Brew-sheet quantities are stored in grams; convert to the Unleashed product's unit
-// where that's a weight. Litre / ml / EA products can't be converted from grams.
-function toUnleashed(grams, baseUnit) {
-  const u = (baseUnit ?? '').toLowerCase()
+// Brew-sheet quantities are stored in grams (ml for liquids, 1:1); convert to the Unleashed
+// product's unit. Malt and hops with no unit set in Unleashed are Kg (their stock is held in
+// Kg). EA products and anything else unknown can't be converted.
+function unleashedUnit(ing) {
+  const u = (ing?.base_unit ?? '').trim().toLowerCase()
+  if (u) return u
+  return /^(malt|hops?)$/i.test((ing?.unleashed_group ?? '').trim()) ? 'kg' : ''
+}
+function toUnleashed(grams, ing) {
+  const u = unleashedUnit(ing)
   if (u === 'kg') return { qty: grams / 1000, unit: 'Kg' }
   if (u === 'g') return { qty: grams, unit: 'g' }
+  if (u === 'ml') return { qty: grams, unit: 'ml' }
+  if (u === 'l' || u === 'litre' || u === 'litres' || u === 'liter') return { qty: grams / 1000, unit: 'Litre' }
   return null
 }
 
 // Same display units as the brew sheet: kg for malt and hops, g for salts and other small additions.
 // kg or g following the Unleashed product's unit; otherwise kg for malt and hops,
 // g for salts and other small additions (same as the brew sheet).
-const showQty = (grams, sections, baseUnit) => {
-  const u = (baseUnit ?? '').toLowerCase()
-  const kg = u === 'kg' || (u !== 'g' && sections.some((s) => ['grist', 'kettle', 'whirlpool'].includes(s)))
+const showQty = (grams, sections, unit) => {
+  if (unit === 'ml') return `${fmt(grams, 1)} ml`
+  if (['l', 'litre', 'litres', 'liter'].includes(unit)) return `${fmt(grams / 1000)} L`
+  const kg = unit === 'kg' || (unit !== 'g' && sections.some((s) => ['grist', 'kettle', 'whirlpool'].includes(s)))
   return kg ? `${fmt(grams / 1000)} kg` : `${fmt(grams, 1)} g`
 }
 
@@ -35,7 +44,9 @@ export default function IngredientsUsed({ batch, ingredients }) {
       const row = totals.get(it.item_name) ?? { name: it.item_name, sections: [], planned: 0, actual: 0 }
       if (!row.sections.includes(it.section)) row.sections.push(it.section)
       row.planned += Number(it.planned_qty) || 0
-      row.actual += Number(it.actual_qty ?? it.planned_qty) || 0
+      // The sheet starts each actual at the planned amount, so a blank actual means it was
+      // cleared (none went in), not "as planned".
+      row.actual += Number(it.actual_qty) || 0
       totals.set(it.item_name, row)
     }
   }
@@ -51,12 +62,14 @@ export default function IngredientsUsed({ batch, ingredients }) {
   const rows = [...totals.values()]
     .map((r) => {
       const ing = byName.get(r.name)
-      return { ...r, code: ing?.unleashed_code ?? null, unleashed: toUnleashed(r.actual, ing?.base_unit), baseUnit: ing?.base_unit ?? null }
+      return { ...r, code: ing?.unleashed_code ?? null, unleashed: toUnleashed(r.actual, ing), baseUnit: ing?.base_unit ?? null, unit: unleashedUnit(ing) }
     })
     .sort((a, b) => SECTION_ORDER.indexOf(a.sections[0]) - SECTION_ORDER.indexOf(b.sections[0]) || a.name.localeCompare(b.name))
 
   async function copy() {
-    const lines = rows.map((r) => [r.code ?? '', r.name, r.unleashed ? fmt(r.unleashed.qty) : `${fmt(r.actual, 1)} g`, r.unleashed?.unit ?? r.baseUnit ?? ''].join('\t'))
+    // Plain numbers (no thousands separators) so they paste cleanly. A line whose unit can't be
+    // worked out gets no quantity rather than a gram figure that could be read as Kg or EA.
+    const lines = rows.map((r) => [r.code ?? '', r.name, r.unleashed ? String(+r.unleashed.qty.toFixed(3)) : '', r.unleashed?.unit ?? `CHECK UNIT (${fmt(r.actual, 1)} g on the brew sheet)`].join('\t'))
     try {
       await navigator.clipboard.writeText(['Code\tIngredient\tQty\tUnit', ...lines].join('\n'))
       setCopied(true)
@@ -98,8 +111,8 @@ export default function IngredientsUsed({ batch, ingredients }) {
                       {r.name}
                       {!r.code && <span style={{ color: 'crimson', fontSize: '0.8rem' }}> · not in Unleashed</span>}
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: changed ? 700 : 400, color: changed ? '#d9561f' : undefined }} title={changed ? `Planned ${showQty(r.planned, r.sections, r.baseUnit)}` : undefined}>
-                      {showQty(r.actual, r.sections, r.baseUnit)}
+                    <td style={{ textAlign: 'right', fontWeight: changed ? 700 : 400, color: changed ? '#d9561f' : undefined }} title={changed ? `Planned ${showQty(r.planned, r.sections, r.unit)}` : undefined}>
+                      {showQty(r.actual, r.sections, r.unit)}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       {r.unleashed ? (
