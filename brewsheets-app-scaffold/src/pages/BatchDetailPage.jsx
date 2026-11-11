@@ -1294,6 +1294,9 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
             + Add another turn ({turnCount}/{MAX_TURNS_PER_TANK} used)
           </button>
         )}
+        {runsByNumber[activeTurn] && (
+          <button className="secondary" onClick={() => setSplitTurn(activeTurn)}>Split turn {activeTurn}…</button>
+        )}
       </div>
       {turnCount >= MAX_TURNS_PER_TANK && (
         <p style={{ color: '#666', fontSize: '0.85rem', marginTop: '-0.5rem' }}>
