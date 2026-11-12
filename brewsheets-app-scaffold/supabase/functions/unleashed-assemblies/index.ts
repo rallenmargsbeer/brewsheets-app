@@ -14,7 +14,11 @@ Deno.serve(async (req: Request) => {
   const id = Deno.env.get('UNLEASHED_API_ID'), key = Deno.env.get('UNLEASHED_API_KEY')
   if (!id || !key) return json({ error: 'Unleashed credentials not set' }, 500)
   try {
-    const all = await getAll('Assemblies', {}, id, key)
+    // Optional Unleashed query filters (e.g. { assemblyStatus: 'Forecasted' }), still GET only.
+    const body = await req.json().catch(() => ({}))
+    const params: Record<string, string> = {}
+    for (const [k, v] of Object.entries(body?.params ?? {})) if (/^[a-zA-Z]+$/.test(k)) params[k] = String(v)
+    const all = await getAll('Assemblies', params, id, key)
     const statuses: Record<string, number> = {}
     for (const a of all) statuses[a.AssemblyStatus ?? 'none'] = (statuses[a.AssemblyStatus ?? 'none'] ?? 0) + 1
     const open = all.filter((a: any) => !/^(completed|deleted)$/i.test(a.AssemblyStatus ?? '')).map((a: any) => ({
@@ -26,6 +30,8 @@ Deno.serve(async (req: Request) => {
       description: a.Product?.ProductDescription,
       qty: a.Quantity,
       comments: a.Comments ?? null,
+      // Every other header field, so custom statuses (e.g. FORECASTED-FB) are kept.
+      extra: Object.fromEntries(Object.entries(a).filter(([k, v]) => k !== 'AssemblyLines' && v != null)),
       lines: (a.AssemblyLines || []).map((l: any) => ({
         code: l.Product?.ProductCode,
         description: l.Product?.ProductDescription,
@@ -34,7 +40,8 @@ Deno.serve(async (req: Request) => {
       })),
     }))
     const at = new Date().toISOString()
-    const { error } = await admin.from('unl_dataset').upsert({ key: 'assemblies', data: { at, statuses, open }, updated_at: at })
+    const dkey = body?.key && /^[a-zA-Z_]+$/.test(body.key) ? body.key : 'assemblies'
+    const { error } = await admin.from('unl_dataset').upsert({ key: dkey, data: { at, params, statuses, open }, updated_at: at })
     if (error) throw error
     return json({ ok: true, total: all.length, open: open.length, statuses })
   } catch (e) {
