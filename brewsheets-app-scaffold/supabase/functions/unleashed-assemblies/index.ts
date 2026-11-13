@@ -21,7 +21,13 @@ Deno.serve(async (req: Request) => {
     const all = await getAll('Assemblies', params, id, key)
     const statuses: Record<string, number> = {}
     for (const a of all) statuses[a.AssemblyStatus ?? 'none'] = (statuses[a.AssemblyStatus ?? 'none'] ?? 0) + 1
-    const open = all.filter((a: any) => !/^(completed|deleted)$/i.test(a.AssemblyStatus ?? '')).map((a: any) => ({
+    // Normally only assemblies not yet completed; body.match (text) also takes any status whose
+    // product code or description contains it.
+    const match = typeof body?.match === 'string' && body.match.trim() ? body.match.trim().toLowerCase() : null
+    const keep = (a: any) => match
+      ? `${a.Product?.ProductCode ?? ''} ${a.Product?.ProductDescription ?? ''}`.toLowerCase().includes(match)
+      : !/^(completed|deleted)$/i.test(a.AssemblyStatus ?? '')
+    const open = all.filter(keep).map((a: any) => ({
       number: a.AssemblyNumber,
       status: a.AssemblyStatus,
       date: a.AssemblyDate ?? null,
