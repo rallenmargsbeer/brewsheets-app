@@ -1,5 +1,5 @@
 // Assemblies from Unleashed that aren't completed yet. READ-ONLY toward Unleashed (GET only).
-// Saved to unl_dataset 'assemblies' with their lines, plus a count of every status seen.
+// Saved to unl_dataset 'open_assemblies' (not 'assemblies', which the Board Report owns) with their lines, plus a count of every status seen.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { getAll } from './unleashed.ts'
 
@@ -46,7 +46,9 @@ Deno.serve(async (req: Request) => {
       })),
     }))
     const at = new Date().toISOString()
-    const dkey = body?.key && /^[a-zA-Z_]+$/.test(body.key) ? body.key : 'assemblies'
+    // Never one of the Board Report's keys (unleashed-sync owns those).
+    const RESERVED = ['products', 'assemblies', 'fbBatches', 'beerRange', 'parked', 'eff', 'meta']
+    const dkey = body?.key && /^[a-zA-Z_]+$/.test(body.key) && !RESERVED.includes(body.key) ? body.key : 'open_assemblies'
     const { error } = await admin.from('unl_dataset').upsert({ key: dkey, data: { at, params, statuses, open }, updated_at: at })
     if (error) throw error
     return json({ ok: true, total: all.length, open: open.length, statuses })
