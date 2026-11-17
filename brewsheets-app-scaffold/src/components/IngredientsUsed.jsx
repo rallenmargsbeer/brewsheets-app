@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getParent } from '../lib/splitBeer'
 
 const SECTION_ORDER = ['grist', 'water', 'kettle', 'whirlpool', 'fermenter']
 
@@ -35,6 +36,12 @@ const fmt = (n, dp = 3) => (n == null ? '—' : Number(n.toFixed(dp)).toLocaleSt
 // Unleashed assembly can be built from real usage (substitutions and shortages included).
 export default function IngredientsUsed({ batch, ingredients }) {
   const [copied, setCopied] = useState(false)
+  // A beer split off another batch: in Unleashed it's assembled from litres of the parent's FB.
+  const [parent, setParent] = useState(null)
+  useEffect(() => { if (batch.parent_batch_id) getParent(batch.parent_batch_id).then(setParent).catch(() => {}) }, [batch.parent_batch_id])
+  const fromParent = batch.parent_batch_id && Number(batch.split_l) > 0
+    ? { name: `Beer from #${parent?.batch_number ?? '…'} ${parent?.beer_style ?? ''}`.trim(), litres: Number(batch.split_l) }
+    : null
   const byName = new Map(ingredients.map((i) => [i.name, i]))
 
   const totals = new Map()
@@ -69,7 +76,7 @@ export default function IngredientsUsed({ batch, ingredients }) {
   async function copy() {
     // Plain numbers (no thousands separators) so they paste cleanly. A line whose unit can't be
     // worked out gets no quantity rather than a gram figure that could be read as Kg or EA.
-    const lines = rows.map((r) => [r.code ?? '', r.name, r.unleashed ? String(+r.unleashed.qty.toFixed(3)) : '', r.unleashed?.unit ?? `CHECK UNIT (${fmt(r.actual, 1)} g on the brew sheet)`].join('\t'))
+    const lines = (fromParent ? [['', `${fromParent.name} (use its FB product)`, String(fromParent.litres), 'L'].join('\t')] : []).concat(rows.map((r) => [r.code ?? '', r.name, r.unleashed ? String(+r.unleashed.qty.toFixed(3)) : '', r.unleashed?.unit ?? `CHECK UNIT (${fmt(r.actual, 1)} g on the brew sheet)`].join('\t')))
     try {
       await navigator.clipboard.writeText(['Code\tIngredient\tQty\tUnit', ...lines].join('\n'))
       setCopied(true)
@@ -83,13 +90,18 @@ export default function IngredientsUsed({ batch, ingredients }) {
     <div style={{ marginBottom: '2rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
         <h2 style={{ margin: 0 }}>Ingredients used</h2>
-        {rows.length > 0 && (
+        {(rows.length > 0 || fromParent) && (
           <button className="secondary" onClick={copy}>{copied ? '✓ Copied' : 'Copy for Unleashed'}</button>
         )}
       </div>
       <p style={{ color: 'var(--ink2)', marginTop: '0.25rem' }}>
         Actual amounts from every turn on the brew sheet, totalled per ingredient. Use these to build the assembly in Unleashed.
       </p>
+      {fromParent && (
+        <p>
+          <strong>{fromParent.name}: {fromParent.litres.toLocaleString()} L.</strong> This beer was split off #{parent?.batch_number ?? '…'}: in Unleashed, assemble #{parent?.batch_number ?? '…'} for its full volume, then build this beer from {fromParent.litres.toLocaleString()} L of its FB product plus the additions below.
+        </p>
+      )}
       {rows.length === 0 ? (
         <p style={{ color: 'var(--ink2)' }}>No brew-sheet ingredients recorded for this batch.</p>
       ) : (
