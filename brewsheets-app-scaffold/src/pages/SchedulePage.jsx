@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { listTanks, listRecipes } from '../lib/api'
 import { useAuth } from '../auth.jsx'
 import BrewListPanel from '../components/BrewListPanel.jsx'
-import { tankLabel } from '../lib/tanks'
+import { tankLabel, statusLabel } from '../lib/tanks'
+import { findPackBatch } from '../lib/packBatch'
 import {
   todayIso,
   addDays,
@@ -104,6 +105,13 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
   const [btId, setBtId] = useState('')
   const chosenBt = btId ? brightTanks.find((t) => t.id === btId) : suggestedBt
 
+  // A packaging cell for a beer that's already brewed: show its batch.
+  const [packBatch, setPackBatch] = useState(null)
+  useEffect(() => {
+    if (!isPack || (!entries.length && !beer)) return
+    findPackBatch({ bookingId, beer: packBeerName || beer, date: cell.date }).then(setPackBatch).catch(() => setPackBatch(null))
+  }, [isPack, bookingId, beer, packBeerName, cell.date])
+
   useEffect(() => {
     if (bookingId) getBooking(bookingId).then(async (b) => {
       // Show (and move from) the brew day its cells are actually on.
@@ -157,6 +165,19 @@ function CellEditor({ cell, column, entries, beer, beerChoices = [], brightTanks
           <h3 style={{ margin: 0 }}>{column.label} · {fmtDay(cell.date)} {cell.slot}</h3>
           <button className="secondary" onClick={onClose} aria-label="Close">✕</button>
         </div>
+
+        {isPack && packBatch && (
+          <div className="sc-warn" style={{ background: 'var(--pale, #f4f1ea)', color: 'inherit', marginTop: '0.6rem', padding: '0.5rem 0.6rem', borderRadius: 6 }}>
+            <strong>#{packBatch.batch_number} {packBatch.beer_style}</strong>
+            {' · '}brewed {fmtDay(packBatch.date_brewed)}
+            {' · '}{packBatch.status === 'packaged' ? `packaged ${fmtDay(packBatch.package_date)}` : packBatch.status === 'barrelled' ? 'in barrels' : `${statusLabel(packBatch.status)}${packBatch.tanks?.name ? ` in ${tankLabel(packBatch.tanks.name)}` : ''}`}
+            {Number(packBatch.fv_to_bbt_l) > 0 && ` · ${Number(packBatch.fv_to_bbt_l).toLocaleString()} L to BBT`}
+            <div style={{ marginTop: 4, display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+              <Link to={`/batches/${packBatch.id}`}>Batch sheet</Link>
+              <Link to={`/packaging/${packBatch.id}`}>Packaging</Link>
+            </div>
+          </div>
+        )}
 
         {rows.map((r, i) => (
           <div key={r.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.6rem' }}>
