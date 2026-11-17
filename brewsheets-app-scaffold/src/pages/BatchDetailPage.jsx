@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { tankLabel, statusLabel } from '../lib/tanks'
 import FermentationSection from '../components/FermentationSection.jsx'
 import IngredientPicker from '../components/IngredientPicker.jsx'
 import IngredientsUsed from '../components/IngredientsUsed.jsx'
+import { getParent, listSplits } from '../lib/splitBeer'
 import SplitTurnDialog from '../components/SplitTurnDialog.jsx'
 import {
   getBatch,
@@ -1126,6 +1127,26 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, kettleFillL
   )
 }
 
+// "Split from #433" on a beer split off another batch, and "Split off: #442 (1,000 L)" on its parent.
+function SplitLinks({ batch }) {
+  const [parent, setParent] = useState(null)
+  const [splits, setSplits] = useState([])
+  useEffect(() => {
+    if (batch.parent_batch_id) getParent(batch.parent_batch_id).then(setParent).catch(() => {})
+    else setParent(null)
+    listSplits(batch.id).then(setSplits).catch(() => {})
+  }, [batch.id, batch.parent_batch_id])
+  if (!parent && !splits.length) return null
+  const fmtD = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '')
+  return (
+    <p style={{ color: 'var(--ink2)', marginTop: '-0.5rem' }}>
+      {parent && <>Split from <Link to={`/batches/${parent.id}`}>#{parent.batch_number} {parent.beer_style}</Link>: {Number(batch.split_l).toLocaleString()} L on {fmtD(batch.split_date)}.</>}
+      {parent && splits.length > 0 && ' '}
+      {splits.length > 0 && <>Split off: {splits.map((c, i) => <span key={c.id}>{i ? ', ' : ''}<Link to={`/batches/${c.id}`}>#{c.batch_number} {c.beer_style}</Link> ({Number(c.split_l).toLocaleString()} L, {fmtD(c.split_date)})</span>)}.</>}
+    </p>
+  )
+}
+
 export default function BatchDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -1186,7 +1207,10 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
   const [searchParams, setSearchParams] = useSearchParams()
   // RTD blends have a blend sheet instead of brew turns and fermentation.
   const rtd = !!batch.recipes?.is_rtd
-  const views = rtd ? [['blend', 'Blend'], ['details', 'Batch Details']] : [['fermentation', 'Fermentation'], ['brewday', 'Brew Day'], ['details', 'Batch Details']]
+  // A beer split off another batch was never brewed itself: no Brew Day tab.
+  const views = rtd ? [['blend', 'Blend'], ['details', 'Batch Details']]
+    : batch.parent_batch_id ? [['fermentation', 'Fermentation'], ['details', 'Batch Details']]
+    : [['fermentation', 'Fermentation'], ['brewday', 'Brew Day'], ['details', 'Batch Details']]
   const view = views.some(([k]) => k === searchParams.get('view')) ? searchParams.get('view') : views[0][0]
   const brewDay = view === 'brewday'
 
@@ -1238,6 +1262,7 @@ function BatchDetailContent({ batch, tanks, ingredients, remove, refresh }) {
           ? ` · ${turnCount} turn${turnCount === 1 ? '' : 's'} × ${batch.turn_volume_l}L = ${batch.target_volume_l ?? batch.turn_volume_l * turnCount}L total` + (Number(batch.kettle_fill_l) > 0 && Number(batch.turn_volume_l) > 2500 ? ` (high gravity: kettle to ${Number(batch.kettle_fill_l).toLocaleString()} L, diluted at KO)` : '')
           : ''}
       </p>
+      <SplitLinks batch={batch} />
 
       <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '2px solid var(--line)', marginBottom: '1rem' }}>
         {views.map(([key, label]) => (

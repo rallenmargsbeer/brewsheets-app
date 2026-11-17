@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { listTanks, listIngredients, listBatchesInTanks, listBarrelled, upsertBatch, upsertFermentationReading, updateFermentationReading } from '../lib/api'
+import { listTanks, listIngredients, listBatchesInTanks, listBarrelled, upsertBatch, upsertFermentationReading, updateFermentationReading, listRecipes } from '../lib/api'
+import { splitBeer, listSplits, litresNow } from '../lib/splitBeer'
 import { tankLabel, statusLabel, CELLAR_STATUSES } from '../lib/tanks'
 import AddToTank from '../components/AddToTank.jsx'
 import TankDay from '../components/TankDay.jsx'
@@ -219,7 +220,73 @@ function TransferForm({ batch, bbts, onSaved }) {
   )
 }
 
-function TankPanel({ tank, batch, day, editor, emptyBbts, ingredients, onClose, onChanged }) {
+// Split part of this beer off into a new beer (its own batch, the next number) in another FV, a
+// BBT or barrels, e.g. to add different ingredients. Additions still to go in are shared by volume.
+function SplitForm({ batch, fvs, bbts, onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [recipes, setRecipes] = useState([])
+  const [splits, setSplits] = useState([])
+  const [tankL, setTankL] = useState('')
+  const [litres, setLitres] = useState('')
+  const [name, setName] = useState('')
+  const [recipeId, setRecipeId] = useState('')
+  const [dest, setDest] = useState('')
+  const [barrels, setBarrels] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  useEffect(() => {
+    if (!open) return
+    listRecipes().then((r) => setRecipes(r.filter((x) => x.is_active !== false && !x.is_rtd))).catch(() => {})
+    listSplits(batch.id).then((s) => { setSplits(s); const now = litresNow(batch, s); if (now) setTankL(String(Math.round(now))) }).catch(() => {})
+  }, [open, batch.id])
+
+  if (!open) return <button className="secondary" onClick={() => setOpen(true)}>Split off a new beer…</button>
+  const tank = [...fvs, ...bbts].find((t) => t.id === dest)
+  async function save() {
+    setSaving(true); setError(null)
+    try {
+      const child = await splitBeer({
+        parent: batch, litres, tankLitres: tankL, beerName: name, recipeId: recipeId || null,
+        dest: dest === 'barrels' ? { kind: 'barrels', count: barrels } : { kind: 'tank', tank },
+      })
+      onSaved(`Split ${Number(litres).toLocaleString()} L off to #${child.batch_number} ${child.beer_style}${dest === 'barrels' ? ' in barrels' : ` in ${tankLabel(tank.name)}`}. Its additions are on its Cellar tab.`)
+    } catch (e) { setError(e.message); setSaving(false) }
+  }
+  const lbl = { display: 'flex', flexDirection: 'column', gap: 2 }
+  return (
+    <div>
+      {splits.length > 0 && <p style={{ color: 'var(--ink2)', margin: '0 0 0.4rem' }}>Already split off: {splits.map((s) => `#${s.batch_number} ${s.beer_style} (${Number(s.split_l).toLocaleString()} L)`).join(', ')}</p>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <label style={{ ...lbl, maxWidth: 160 }}>Litres in the tank now<input type="number" inputMode="numeric" value={tankL} onChange={(e) => setTankL(e.target.value)} /></label>
+        <label style={{ ...lbl, maxWidth: 160 }}>Litres to split off<input type="number" inputMode="numeric" value={litres} onChange={(e) => setLitres(e.target.value)} /></label>
+      </div>
+      <label style={{ ...lbl, marginTop: '0.5rem' }}>New beer's name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Raspberry Kolsch" /></label>
+      <label style={{ ...lbl, marginTop: '0.5rem' }}>Recipe
+        <select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
+          <option value="">Same as #{batch.batch_number} (its remaining additions are shared)</option>
+          {recipes.filter((r) => r.id !== batch.recipe_id).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+      </label>
+      <div style={{ marginTop: '0.5rem' }}>Into</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {[...fvs, ...bbts].map((t) => <button key={t.id} className={dest === t.id ? '' : 'secondary'} onClick={() => setDest(t.id)}>{tankLabel(t.name)}</button>)}
+        <button className={dest === 'barrels' ? '' : 'secondary'} onClick={() => setDest('barrels')}>Barrels</button>
+      </div>
+      {fvs.length + bbts.length === 0 && <p style={{ color: 'var(--ink2)', margin: '0.4rem 0 0' }}>No empty tank right now; barrels only.</p>}
+      {dest === 'barrels' && <label style={{ ...lbl, maxWidth: 140, marginTop: '0.5rem' }}>Barrels<input type="number" inputMode="numeric" min="1" value={barrels} onChange={(e) => setBarrels(e.target.value)} /></label>}
+      <p style={{ color: 'var(--ink2)', fontSize: '0.85rem', margin: '0.5rem 0 0' }}>
+        The new beer gets the next batch number, this beer's OG, readings and cellar steps so far, and {recipeId ? "its recipe's additions" : 'its share of the additions still to go in'}. Add its extra ingredients from its own tank. This beer keeps {tankL && Number(litres) > 0 ? `${Math.max(0, Number(tankL) - Number(litres)).toLocaleString()} L and ` : ''}its share of the additions.
+      </p>
+      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+        <button onClick={save} disabled={saving || !dest || !(Number(litres) > 0) || !name.trim() || (dest === 'barrels' && !(Number(barrels) > 0))}>{saving ? '…' : 'Split off'}</button>
+        <button className="secondary" onClick={() => setOpen(false)} disabled={saving}>Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+function TankPanel({ tank, batch, day, editor, emptyBbts, emptyFvs = [], ingredients, onClose, onChanged }) {
   const [msg, setMsg] = useState(null)
 
   function done(text) {
@@ -276,6 +343,13 @@ function TankPanel({ tank, batch, day, editor, emptyBbts, ingredients, onClose, 
               <div style={section}>
                 <h4 style={{ margin: '0 0 0.5rem' }}>Harvest yeast</h4>
                 <HarvestForm batch={batch} ingredients={ingredients} onSaved={done} />
+              </div>
+            )}
+
+            {tank.tank_type !== 'BBT' && ['fermenting', 'chilling', 'conditioning'].includes(batch.status) && (
+              <div style={section}>
+                <h4 style={{ margin: '0 0 0.5rem' }}>Split off a new beer</h4>
+                <SplitForm batch={batch} fvs={emptyFvs.filter((t) => t.id !== tank.id)} bbts={emptyBbts} onSaved={(t) => { onClose(); done(t) }} />
               </div>
             )}
 
@@ -442,6 +516,7 @@ export default function CellarPage() {
           day={days?.[openTank.id]}
           editor={editor}
           emptyBbts={bbts.filter((t) => !batchIn(t))}
+          emptyFvs={fvs.filter((t) => !batchIn(t))}
           onClose={() => setOpenTankId(null)}
           onChanged={refresh}
         />
