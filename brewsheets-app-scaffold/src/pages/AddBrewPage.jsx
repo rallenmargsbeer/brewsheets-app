@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { listRecipes, getRecipe, listBatches, listTanks, upsertBatch, initializeBrewRuns, listIngredients, missingIngredients } from '../lib/api'
-import { tankLabel, IN_TANK_STATUSES } from '../lib/tanks'
-import { getBooking, linkBookingToBatch, listScheduleEntries, listBookings } from '../lib/schedule'
+import { tankLabel, statusLabel, IN_TANK_STATUSES } from '../lib/tanks'
+import { getBooking, linkBookingToBatch, listScheduleEntries, listBookings, moveBookingToTank } from '../lib/schedule'
 import { beerKey } from '../lib/beerColours'
 import TurnSize, { isHighGravity, DEFAULT_KETTLE_FILL_L } from '../components/TurnSize.jsx'
 import { beerMatch } from '../lib/incoming'
@@ -276,7 +276,12 @@ export default function AddBrewPage() {
       ? baggedGristItems.filter((item) => needsBagReview(item, turnVolumeL, turnQuantity))
       : []
 
+  // A beer still in a tank (statuses can lag, so it's a warning, not a block).
+  const occupantOf = (id) => batches.find((b) => b.tank_id === id && IN_TANK_STATUSES.includes(b.status))
+
   async function createBrew(quantity, bagAllocations) {
+    const occ = occupantOf(tankId)
+    if (occ && !window.confirm(`${tankLabel(tanks.find((t) => t.id === tankId)?.name)} still has #${occ.batch_number} ${occ.beer_style ?? ''} in it (${statusLabel(occ.status)}). Brew into it anyway?`)) return
     setCreating(true)
     setError(null)
     try {
@@ -299,6 +304,8 @@ export default function AddBrewPage() {
       // Started without picking the booking: today's unstarted booking for this tank is this brew.
       const own = booking ?? (await listBookings({ unbrewedOnly: true, fromIso: batch.date_brewed, toIso: batch.date_brewed }).catch(() => [])).find((b) => b.tank_id === tankId)
       if (own) await linkBookingToBatch(own.id, batch.id)
+      // Brewed into a different FV than booked: its schedule cells follow it to that tank.
+      if (own?.tank_id && own.tank_id !== tankId) await moveBookingToTank(own, own.brew_date, tankId).catch(() => {})
       navigate(`/batches/${batch.id}?view=brewday`)
     } catch (e) {
       setError(e.message)
@@ -313,7 +320,8 @@ export default function AddBrewPage() {
   // answer for them.
   function pickTurnQuantity(quantity) {
     setTurnQuantity(quantity)
-    setTankId(booking?.tank_id ?? '')
+    // The booked tank, unless a beer is still in it: then it has to be picked (and confirmed).
+    setTankId(booking?.tank_id && !occupantOf(booking.tank_id) ? booking.tank_id : '')
     const seeded = Object.fromEntries(
       baggedGristItems.map((item) => [item.id, evenBagSplit(bagsNeededFor(item, turnVolumeL, quantity), quantity)])
     )
