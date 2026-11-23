@@ -79,6 +79,8 @@ Results land in `unl_dataset` (key → JSON):
 - **Barrels:** status `barrelled` (no tank); in from an FV or a BBT, back out to a BBT.
 - Today / cellar rules live in `src/lib/cellarSteps.js` (stable = a reading the same as or higher than
   the day before; Biofine the day after chill).
+- Starting a brew: the booked FV isn't pre-selected if a beer is still in it (pick and confirm), and a
+  brew started in a different FV than booked moves its booking's FV cells on the schedule to that tank.
 - Packaging cells on the Schedule work out their beer from the booking, then cell colour; double-click
   shows the brewed batch.
 
