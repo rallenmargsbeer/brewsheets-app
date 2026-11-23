@@ -152,8 +152,9 @@ function DawNote({ check: c, batch, litres }) {
 
 // Out of the fermenter: to an empty BBT, or (from a fermenter) into barrels. Barrelled beer comes
 // back through here to a BBT.
-function TransferForm({ batch, bbts, onSaved }) {
-  const [bbtId, setBbtId] = useState('')
+// fromBbt: beer already in a bright tank, so the only move is into barrels.
+function TransferForm({ batch, bbts, onSaved, fromBbt = false }) {
+  const [bbtId, setBbtId] = useState(fromBbt ? 'barrels' : '')
   const [litres, setLitres] = useState('')
   const [barrels, setBarrels] = useState('')
   const fromBarrels = batch.status === 'barrelled'
@@ -164,13 +165,13 @@ function TransferForm({ batch, bbts, onSaved }) {
   const check = abvCheck(batch)
   async function save() {
     // Over target is fixed with DAW; under target can't be, so confirm first.
-    if (check.ok === false && check.diff < 0 && !window.confirm(`ABV ${check.abv.toFixed(2)}% is under the excise range (${check.target}% ± 0.2%), and DAW can't raise it. Transfer to filter anyway?`)) return
+    if (!fromBbt && check.ok === false && check.diff < 0 && !window.confirm(`ABV ${check.abv.toFixed(2)}% is under the excise range (${check.target}% ± 0.2%), and DAW can't raise it. Transfer to filter anyway?`)) return
     setSaving(true)
     setError(null)
     if (toBarrels) {
       try {
         await upsertBatch({ id: batch.id, tank_id: null, status: 'barrelled', barrel_date: today(), barrel_l: litres === '' ? null : Number(litres), barrel_count: barrels === '' ? null : Number(barrels) })
-        onSaved(`Into barrels: ${barrels} barrel${Number(barrels) === 1 ? '' : 's'}${litres ? `, ${Number(litres).toLocaleString()} L` : ''}. The fermenter is free.`)
+        onSaved(`Into barrels: ${barrels} barrel${Number(barrels) === 1 ? '' : 's'}${litres ? `, ${Number(litres).toLocaleString()} L` : ''}. The ${fromBbt ? 'bright tank' : 'fermenter'} is free.`)
       } catch (e) { setError(e.message); setSaving(false) }
       return
     }
@@ -202,7 +203,7 @@ function TransferForm({ batch, bbts, onSaved }) {
         ))}
         {!fromBarrels && <button className={toBarrels ? '' : 'secondary'} onClick={() => setBbtId('barrels')}>Barrels</button>}
       </div>
-      {bbts.length === 0 && !fromBarrels && <p style={{ color: 'var(--ink2)', margin: '0.4rem 0 0' }}>No empty BBT right now.</p>}
+      {bbts.length === 0 && !fromBarrels && !fromBbt && <p style={{ color: 'var(--ink2)', margin: '0.4rem 0 0' }}>No empty BBT right now.</p>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
         {toBarrels && (
           <label style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 140 }}>
@@ -343,6 +344,13 @@ function TankPanel({ tank, batch, day, editor, emptyBbts, emptyFvs = [], ingredi
               <div style={section}>
                 <h4 style={{ margin: '0 0 0.5rem' }}>Harvest yeast</h4>
                 <HarvestForm batch={batch} ingredients={ingredients} onSaved={done} />
+              </div>
+            )}
+
+            {tank.tank_type === 'BBT' && batch.status === 'conditioning' && (
+              <div style={section}>
+                <h4 style={{ margin: '0 0 0.5rem' }}>Transfer to barrels</h4>
+                <TransferForm batch={batch} bbts={[]} fromBbt onSaved={(t) => { onClose(); done(t) }} />
               </div>
             )}
 
