@@ -1682,23 +1682,24 @@ function KoPhPrompt({ runNumber, turnCount, otherRuns, volumeL, turnVolumeL, ph,
   const toCome = Math.max(1, turnCount - done.length) // this turn and any after it
   const plan = remainingTurnsPh(done, toCome * (turnVolumeL || volumeL || 0), batchTarget)
   const turnTarget = plan ? Math.round(plan.need * 100) / 100 : batchTarget
-  const ml = ph && ph > turnTarget ? lacticMl(volumeL, ph, turnTarget, perHl) : null
+  // Acid only when the KO pH is above the recipe's range; then bring it to the target (kept
+  // inside the range).
+  const inRange = ph && (lo == null || ph >= lo - 1e-9) && (hi == null || ph <= hi + 1e-9)
+  const acidTo = Math.min(hi ?? Infinity, Math.max(lo ?? -Infinity, turnTarget))
+  const ml = ph && !inRange && hi != null && ph > hi ? lacticMl(volumeL, ph, acidTo, perHl) : null
   return (
     <div className="acid-box">
       <div className="dil-title">KO pH</div>
-      {done.length > 0 && plan?.donePh != null ? (
-        <p>
-          Turn{done.length > 1 ? 's' : ''} {done.map((d) => d.run).join(', ')} knocked out at <strong>{plan.donePh.toFixed(2)}</strong> ({Math.round(plan.doneL).toLocaleString()} L).
-          For the batch to finish at {batchTarget.toFixed(2)}, {toCome > 1 ? `turns ${runNumber} to ${turnCount}` : `turn ${runNumber}`} should knock out at <strong>{turnTarget.toFixed(2)}</strong>.
-          {(lo != null && turnTarget < lo) || (hi != null && turnTarget > hi) ? <span className="dil-warn"> That's outside the recipe's {lo ?? '?'} to {hi ?? '?'} range for a single turn; consider landing this turn at the edge of the range instead.</span> : null}
-        </p>
-      ) : (
-        <p>Aim for <strong>{turnTarget.toFixed(2)}</strong> (middle of the recipe's {lo ?? '?'} to {hi ?? '?'}).</p>
-      )}
+      <p>
+        Recipe range {lo ?? '?'} to {hi ?? '?'}. Acid is only needed if the KO pH is above it.
+        {done.length > 0 && plan?.donePh != null ? <> Turn{done.length > 1 ? 's' : ''} {done.map((d) => d.run).join(', ')} knocked out at {plan.donePh.toFixed(2)}.</> : null}
+      </p>
       {ph ? (
-        ph <= turnTarget
-          ? <p className="acid-hint ok">KO pH {ph} is at or under {turnTarget.toFixed(2)}: no acid needed.</p>
-          : <p className="acid-hint">Add about <strong>{ml != null ? Math.round(ml) : '?'} mL</strong> lactic acid (88%) to bring this turn from {ph} to {turnTarget.toFixed(2)}{volumeL ? ` (${Math.round(volumeL).toLocaleString()} L)` : ''}.<ConfirmAcid ml={ml} fromPh={ph} toPh={Number(turnTarget.toFixed(2))} onConfirm={onConfirm} /></p>
+        inRange
+          ? <p className="acid-hint ok">KO pH {ph} is within the recipe's {lo ?? '?'} to {hi ?? '?'}: no acid needed.</p>
+          : hi != null && ph > hi
+            ? <p className="acid-hint">KO pH {ph} is above the recipe's {lo ?? '?'} to {hi}. Add about <strong>{ml != null ? Math.round(ml) : '?'} mL</strong> lactic acid (88%) to bring this turn to {acidTo.toFixed(2)}{volumeL ? ` (${Math.round(volumeL).toLocaleString()} L)` : ''}.<ConfirmAcid ml={ml} fromPh={ph} toPh={Number(acidTo.toFixed(2))} onConfirm={onConfirm} /></p>
+            : <p className="acid-hint"><span className="dil-warn">KO pH {ph} is under the recipe's {lo} to {hi ?? '?'}. Acid won't help; note it for the head brewer.</span></p>
       ) : (
         <p className="stock-muted" style={{ fontSize: '0.85rem' }}>Enter the KO pH to see how much lactic acid to add.</p>
       )}
