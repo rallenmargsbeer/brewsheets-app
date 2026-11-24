@@ -61,6 +61,7 @@ function TankTile({ tank, batch, day, onClick }) {
 
 // Latest gravity and the ABV it gives (green within excise range of target, red outside).
 function TileReading({ batch }) {
+  if (batch.status === 'brewing') return <span className="tile-reading muted">Being brewed into this tank</span>
   const fg = actualFg(batch)
   if (!fg) return <span className="tile-reading muted">No gravity yet</span>
   const c = abvCheck(batch)
@@ -361,7 +362,7 @@ function TankPanel({ tank, batch, day, editor, emptyBbts, emptyFvs = [], ingredi
               </div>
             )}
 
-            {tank.tank_type !== 'BBT' && (
+            {tank.tank_type !== 'BBT' && batch.status !== 'brewing' && (
               <div style={section}>
                 <h4 style={{ margin: '0 0 0.5rem' }}>Transfer to BBT or barrels</h4>
                 <TransferForm batch={batch} bbts={emptyBbts} onSaved={(t) => { onClose(); done(t) }} />
@@ -462,7 +463,7 @@ export default function CellarPage() {
 
   function refresh() {
     setRefreshKey((k) => k + 1)
-    Promise.all([listTanks(), listBatchesInTanks(CELLAR_STATUSES), listBarrelled()])
+    Promise.all([listTanks(), listBatchesInTanks(['brewing', ...CELLAR_STATUSES]), listBarrelled()])
       .then(([t, b, br]) => {
         setTanks(t)
         setBatches(b)
