@@ -81,6 +81,9 @@ Results land in `unl_dataset` (key → JSON):
   the day before; Biofine the day after chill).
 - Starting a brew: the booked FV isn't pre-selected if a beer is still in it (pick and confirm), and a
   brew started in a different FV than booked moves its booking's FV cells on the schedule to that tank.
+- **Label energy statement** (recipe page, "Energy information (label)"): same maths as FSANZ's alcohol
+  energy calculator (`src/lib/energyLabel.js`: ABV × 0.791 ÷ SG, Schedule 11 factors, 3 dp steps, 3 sig figs).
+  Inputs saved in `recipes.energy_label`.
 - Packaging cells on the Schedule work out their beer from the booking, then cell colour; double-click
   shows the brewed batch.
 
