@@ -15,6 +15,7 @@ import {
   listIngredients,
 } from '../lib/api'
 import IngredientPicker from '../components/IngredientPicker.jsx'
+import EnergyLabel from '../components/EnergyLabel.jsx'
 import { listCellarTemplates } from '../lib/schedule'
 
 const emptyRecipe = {
@@ -536,6 +537,10 @@ export default function RecipeEditPage() {
 
       </>
       )}
+
+      <Section title="Energy information (label)" subtitle="The energy statement the label needs (kJ per serving and per 100 mL, standard drinks per serving), calculated the same way as FSANZ's alcohol energy calculator. Saved with the recipe.">
+        <EnergyLabel recipe={recipe} value={recipe.energy_label} onChange={(v) => updateField('energy_label', v)} />
+      </Section>
 
       <Section title="Notes">
         <textarea
