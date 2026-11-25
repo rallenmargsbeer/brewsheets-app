@@ -897,3 +897,4 @@ button.dt-cup.on { border-color: var(--accent); background: var(--accent-soft); 
 @media (max-width: 820px) {
   table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
+.pk-par { margin: 0.25rem 0 0.5rem; padding: 0.4rem 0.6rem; background: var(--pale, #f4f1ea); border-radius: 6px; display: flex; flex-direction: column; gap: 4px; }

@@ -1,3 +1,4 @@
+import SmallKegSuggestion from '../components/SmallKegSuggestion.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
@@ -193,6 +194,7 @@ function SessionCard({ number, session, batch, onChanged, startOpen }) {
             <h4>Packed</h4>
             <span className="pk-chip">{t.kegs} kegs · {t.cubes} cubes ({(t.cubes * CANS_PER_CUBE).toLocaleString()} cans)</span>
           </div>
+          <SmallKegSuggestion beer={batch.beer_style} onUse={(size, n) => { setS((x) => ({ ...x, [`kegs_${size}`]: n })); saveNow(`kegs_${size}`, n) }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
             {KEG_SIZES.map((size) => (
               <label key={size} style={field}>{size} L kegs<input type="number" inputMode="numeric" min="0" value={s[`kegs_${size}`] ?? 0} {...typed(`kegs_${size}`)} /></label>
