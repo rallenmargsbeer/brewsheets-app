@@ -94,7 +94,9 @@ export default function UnleashedPage() {
     setBusy(null)
   }
 
-  const list = rows?.filter((r) => show === 'all' || !r.done) ?? []
+  const list = (rows?.filter((r) => show === 'all' || (show === 'done' ? !!r.done : !r.done)) ?? [])
+    // To do: oldest first (work through it in order). Done and All: newest first.
+    .slice().sort((a, b) => (show === 'todo' ? 0 : (b.date ?? '').localeCompare(a.date ?? '')))
   const todo = rows?.filter((r) => !r.done).length ?? 0
   return (
     <div className="pm-page">
@@ -104,6 +106,7 @@ export default function UnleashedPage() {
       </p>
       <div className="stock-controls">
         <button className={show === 'todo' ? '' : 'secondary'} onClick={() => setShow('todo')}>To do{rows ? ` (${todo})` : ''}</button>
+        <button className={show === 'done' ? '' : 'secondary'} onClick={() => setShow('done')}>Done</button>
         <button className={show === 'all' ? '' : 'secondary'} onClick={() => setShow('all')}>All</button>
       </div>
       {error && <p style={{ color: '#b00020' }}>{error}</p>}
@@ -111,10 +114,15 @@ export default function UnleashedPage() {
       {rows && (
         <section className="stock-card">
           <table className="stock-table pm-table unl-table">
-            <thead><tr><th>Date</th><th>Batch</th><th>What</th><th className="pm-num">Litres</th><th>Unleashed product</th><th></th></tr></thead>
+            <thead><tr><th></th><th>Date</th><th>Batch</th><th>What</th><th className="pm-num">Litres</th><th>Unleashed product</th><th></th></tr></thead>
             <tbody>
               {list.map((r) => (
                 <tr key={r.key} className={r.done ? 'unl-done' : ''}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {r.done
+                      ? <><button className="secondary" disabled={busy === r.key} onClick={() => mark(r, false)} title="Move back to To do">↶ Undo</button> <span className="stock-muted">✓ {doneOn(r.done)}</span></>
+                      : <button disabled={busy === r.key || r.litres == null || (r.kind === 'pack' && !r.items.length)} onClick={() => mark(r, true)}>Mark done</button>}
+                  </td>
                   <td>{fmt(r.date)}</td>
                   <td>
                     <BeerDot name={r.batch.beer_style} />{r.batch.beer_style}{' '}
@@ -131,14 +139,9 @@ export default function UnleashedPage() {
                       ? (r.products[0] ?? <span className="stock-muted">No match</span>)
                       : r.items.map((i) => <div key={i.label}>{i.code ?? <span className="stock-muted">No match for {i.label}</span>}</div>)}
                   </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    {r.done
-                      ? <>✓ Done {doneOn(r.done)} <button className="secondary" disabled={busy === r.key} onClick={() => mark(r, false)}>Undo</button></>
-                      : <button disabled={busy === r.key || r.litres == null || (r.kind === 'pack' && !r.items.length)} onClick={() => mark(r, true)}>Mark done</button>}
-                  </td>
                 </tr>
               ))}
-              {!list.length && <tr><td colSpan={6} className="stock-muted">{show === 'todo' ? 'All done. Nothing waiting to go into Unleashed.' : 'No transfers or pack-offs recorded yet.'}</td></tr>}
+              {!list.length && <tr><td colSpan={7} className="stock-muted">{show === 'todo' ? 'All done. Nothing waiting to go into Unleashed.' : show === 'done' ? 'Nothing marked done yet.' : 'No transfers or pack-offs recorded yet.'}</td></tr>}
             </tbody>
           </table>
         </section>
