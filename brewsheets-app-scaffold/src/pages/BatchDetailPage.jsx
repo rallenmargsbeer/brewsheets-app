@@ -993,8 +993,6 @@ function TurnStepper({ batchId, runNumber, run, recipe, turnVolumeL, kettleFillL
                   {fld('preboil_gravity', 'Pre-Boil Grav. (actual)', 'number', 130)}
                   <IngredientList title="Kettle" section="kettle" items={kettleItems} ingredients={masterIngredients} onSaved={onSaved} />
                   <IngredientList title="Water (Kettle)" section="water" stage="kettle" items={kettleWaterItems} ingredients={masterIngredients} onSaved={onSaved} />
-                  {/* Shown during the boil too, so they can be weighed out ready for knockout. */}
-                  <IngredientList title="Whirlpool Additions (at knockout)" items={whirlpoolItems} ingredients={masterIngredients} onSaved={onSaved} />
                 </>
               )}
 
