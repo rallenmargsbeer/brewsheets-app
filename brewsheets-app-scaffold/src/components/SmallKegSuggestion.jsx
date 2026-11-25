@@ -41,7 +41,7 @@ export default function SmallKegSuggestion({ beer, onUse }) {
     <div className="pk-par">
       {mine.map((p) => {
         const have = stock[p.code.toLowerCase()] ?? 0
-        const need = Math.max(0, (Number(p.par) || 0) - Math.max(0, have)) // negative stock in Unleashed counts as none
+        const need = Math.max(0, (Number(p.par) || 0) - have) // negative stock = sold but not yet packed, so it's filled too
         return (
           <div key={p.code} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
             <span>
