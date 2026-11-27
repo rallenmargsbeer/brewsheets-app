@@ -162,6 +162,18 @@ function TransferForm({ batch, bbts, onSaved, fromBbt = false }) {
   const toBarrels = bbtId === 'barrels'
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  // From a bright tank: what's in it, so part of it can go to barrels as its own (split) batch.
+  const [inTank, setInTank] = useState('')
+  const [splitName, setSplitName] = useState(`${batch.beer_style ?? ''} (barrel)`.trim())
+  useEffect(() => {
+    if (!fromBbt) return
+    listSplits(batch.id).then((sp) => {
+      const start = (Number(batch.fv_to_bbt_l) || 0) + (Number(batch.daw_added_l) || 0)
+      const now = start - sp.reduce((a, x) => a + (Number(x.split_l) || 0), 0)
+      if (now > 0) setInTank(String(Math.round(now)))
+    }).catch(() => {})
+  }, [fromBbt, batch.id])
+  const partial = fromBbt && Number(litres) > 0 && Number(inTank) > Number(litres)
 
   const check = abvCheck(batch)
   async function save() {
@@ -169,6 +181,14 @@ function TransferForm({ batch, bbts, onSaved, fromBbt = false }) {
     if (!fromBbt && check.ok === false && check.diff < 0 && !window.confirm(`ABV ${check.abv.toFixed(2)}% is under the excise range (${check.target}% ± 0.2%), and DAW can't raise it. Transfer to filter anyway?`)) return
     setSaving(true)
     setError(null)
+    if (toBarrels && partial) {
+      // Only part of the bright tank: the barrelled beer becomes its own batch, the rest stays.
+      try {
+        const child = await splitBeer({ parent: batch, litres, tankLitres: inTank, beerName: splitName, recipeId: null, dest: { kind: 'barrels', count: barrels } })
+        onSaved(`${Number(litres).toLocaleString()} L into ${barrels} barrel${Number(barrels) === 1 ? '' : 's'} as #${child.batch_number} ${child.beer_style}. #${batch.batch_number} stays in the tank.`)
+      } catch (e) { setError(e.message); setSaving(false) }
+      return
+    }
     if (toBarrels) {
       try {
         await upsertBatch({ id: batch.id, tank_id: null, status: 'barrelled', barrel_date: today(), barrel_l: litres === '' ? null : Number(litres), barrel_count: barrels === '' ? null : Number(barrels) })
@@ -214,10 +234,21 @@ function TransferForm({ batch, bbts, onSaved, fromBbt = false }) {
         <label style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 200 }}>
           {toBarrels ? 'Litres into barrels' : fromBarrels ? 'Litres from barrels to BBT' : 'Litres to BBT'}<input type="number" inputMode="numeric" value={litres} onChange={(e) => setLitres(e.target.value)} />
         </label>
+        {fromBbt && (
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 160 }}>
+            Litres in the tank now<input type="number" inputMode="numeric" value={inTank} onChange={(e) => setInTank(e.target.value)} />
+          </label>
+        )}
       </div>
+      {partial && (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: '0.5rem' }}>
+          Only part of the tank: the barrelled beer becomes its own batch (next number), linked to #{batch.batch_number}. Its name
+          <input value={splitName} onChange={(e) => setSplitName(e.target.value)} />
+        </label>
+      )}
       {!toBarrels && <DawNote check={check} batch={batch} litres={litres} />}
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
-      <button onClick={save} disabled={!bbtId || saving || (toBarrels && !(Number(barrels) > 0))} style={{ marginTop: '0.5rem' }}>{saving ? '…' : toBarrels ? 'Into barrels' : 'Transfer'}</button>
+      <button onClick={save} disabled={!bbtId || saving || (toBarrels && !(Number(barrels) > 0)) || (partial && !splitName.trim())} style={{ marginTop: '0.5rem' }}>{saving ? '…' : partial ? 'Split into barrels' : toBarrels ? 'Into barrels' : 'Transfer'}</button>
     </div>
   )
 }
